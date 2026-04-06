@@ -48,13 +48,13 @@ import {
   ProjectId,
   ThreadId,
   type GitStatusResult,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 import { useQueries } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import {
   type SidebarProjectSortOrder,
   type SidebarThreadSortOrder,
-} from "@t3tools/contracts/settings";
+} from "@matcha/contracts/settings";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
@@ -108,6 +108,7 @@ import {
   SidebarTrigger,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
+import { useWorkspaceTabStore } from "../threadTabStore";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
   getVisibleSidebarThreadIds,
@@ -540,19 +541,14 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
   );
 }
 
-function T3Wordmark() {
+function MatchaWordmark() {
   return (
-    <svg
-      aria-label="T3"
-      className="h-2.5 w-auto shrink-0 text-foreground"
-      viewBox="15.5309 37 94.3941 56.96"
-      xmlns="http://www.w3.org/2000/svg"
+    <span
+      aria-label="Matcha"
+      className="shrink-0 text-sm font-semibold tracking-tight text-foreground"
     >
-      <path
-        d="M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z"
-        fill="currentColor"
-      />
-    </svg>
+      Matcha
+    </span>
   );
 }
 
@@ -684,6 +680,12 @@ export default function Sidebar() {
     (store) => store.getDraftThreadByProjectId,
   );
   const terminalStateByThreadId = useTerminalStateStore((state) => state.terminalStateByThreadId);
+  const tabStateByWorkspaceThreadId = useWorkspaceTabStore(
+    (store) => store.tabStateByWorkspaceThreadId,
+  );
+  const findWorkspaceThreadIdByProviderThreadId = useWorkspaceTabStore(
+    (store) => store.findWorkspaceThreadIdByProviderThreadId,
+  );
   const clearProjectDraftThreadId = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadId,
   );
@@ -698,6 +700,9 @@ export default function Sidebar() {
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
+  const effectiveRouteThreadId = routeThreadId
+    ? (findWorkspaceThreadIdByProviderThreadId(routeThreadId) ?? routeThreadId)
+    : null;
   const keybindings = useServerKeybindings();
   const [addingProject, setAddingProject] = useState(false);
   const [newCwd, setNewCwd] = useState("");
@@ -744,7 +749,34 @@ export default function Sidebar() {
       })),
     [orderedProjects, projectExpandedById],
   );
-  const sidebarThreads = useMemo(() => Object.values(sidebarThreadsById), [sidebarThreadsById]);
+  const hiddenChildProviderThreadIds = useMemo(() => {
+    const ids = new Set<ThreadId>();
+    for (const [workspaceThreadId, tabState] of Object.entries(tabStateByWorkspaceThreadId)) {
+      for (const tab of tabState.tabs) {
+        if (tab.kind === "provider" && tab.threadId && tab.threadId !== workspaceThreadId) {
+          ids.add(tab.threadId);
+        }
+      }
+    }
+    return ids;
+  }, [tabStateByWorkspaceThreadId]);
+  const visibleThreadIdsByProjectId = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(threadIdsByProjectId).map(([projectId, threadIds]) => [
+          projectId,
+          threadIds.filter((threadId) => !hiddenChildProviderThreadIds.has(threadId)),
+        ]),
+      ) as Record<ProjectId, ThreadId[]>,
+    [hiddenChildProviderThreadIds, threadIdsByProjectId],
+  );
+  const sidebarThreads = useMemo(
+    () =>
+      Object.values(sidebarThreadsById).filter(
+        (thread) => !hiddenChildProviderThreadIds.has(thread.id),
+      ),
+    [hiddenChildProviderThreadIds, sidebarThreadsById],
+  );
   const projectCwdById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
@@ -850,7 +882,7 @@ export default function Sidebar() {
   const focusMostRecentThreadForProject = useCallback(
     (projectId: ProjectId) => {
       const latestThread = sortThreadsForSidebar(
-        (threadIdsByProjectId[projectId] ?? [])
+        (visibleThreadIdsByProjectId[projectId] ?? [])
           .map((threadId) => sidebarThreadsById[threadId])
           .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
           .filter((thread) => thread.archivedAt === null),
@@ -863,7 +895,7 @@ export default function Sidebar() {
         params: { threadId: latestThread.id },
       });
     },
-    [appSettings.sidebarThreadSortOrder, navigate, sidebarThreadsById, threadIdsByProjectId],
+    [appSettings.sidebarThreadSortOrder, navigate, sidebarThreadsById, visibleThreadIdsByProjectId],
   );
 
   const addProjectFromPath = useCallback(
@@ -1205,11 +1237,14 @@ export default function Sidebar() {
       setSelectionAnchor(threadId);
       void navigate({
         to: "/$threadId",
-        params: { threadId },
+        params: {
+          threadId: findWorkspaceThreadIdByProviderThreadId(threadId) ?? threadId,
+        },
       });
     },
     [
       clearSelection,
+      findWorkspaceThreadIdByProviderThreadId,
       navigate,
       rangeSelectTo,
       selectedThreadIds.size,
@@ -1226,10 +1261,18 @@ export default function Sidebar() {
       setSelectionAnchor(threadId);
       void navigate({
         to: "/$threadId",
-        params: { threadId },
+        params: {
+          threadId: findWorkspaceThreadIdByProviderThreadId(threadId) ?? threadId,
+        },
       });
     },
-    [clearSelection, navigate, selectedThreadIds.size, setSelectionAnchor],
+    [
+      clearSelection,
+      findWorkspaceThreadIdByProviderThreadId,
+      navigate,
+      selectedThreadIds.size,
+      setSelectionAnchor,
+    ],
   );
 
   const handleProjectContextMenu = useCallback(
@@ -1400,7 +1443,7 @@ export default function Sidebar() {
             },
           });
         const projectThreads = sortThreadsForSidebar(
-          (threadIdsByProjectId[project.id] ?? [])
+          (visibleThreadIdsByProjectId[project.id] ?? [])
             .map((threadId) => sidebarThreadsById[threadId])
             .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
             .filter((thread) => thread.archivedAt === null),
@@ -1409,7 +1452,7 @@ export default function Sidebar() {
         const projectStatus = resolveProjectStatusIndicator(
           projectThreads.map((thread) => resolveProjectThreadStatus(thread)),
         );
-        const activeThreadId = routeThreadId ?? undefined;
+        const activeThreadId = effectiveRouteThreadId ?? undefined;
         const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
         const pinnedCollapsedThread =
           !project.expanded && activeThreadId
@@ -1449,11 +1492,11 @@ export default function Sidebar() {
       }),
     [
       appSettings.sidebarThreadSortOrder,
+      effectiveRouteThreadId,
       expandedThreadListsByProject,
-      routeThreadId,
       sortedProjects,
       sidebarThreadsById,
-      threadIdsByProjectId,
+      visibleThreadIdsByProjectId,
       threadLastVisitedAtById,
     ],
   );
@@ -1515,7 +1558,7 @@ export default function Sidebar() {
       if (traversalDirection !== null) {
         const targetThreadId = resolveAdjacentThreadId({
           threadIds: orderedSidebarThreadIds,
-          currentThreadId: routeThreadId,
+          currentThreadId: effectiveRouteThreadId,
           direction: traversalDirection,
         });
         if (!targetThreadId) {
@@ -1570,8 +1613,8 @@ export default function Sidebar() {
     navigateToThread,
     orderedSidebarThreadIds,
     platform,
+    effectiveRouteThreadId,
     routeTerminalOpen,
-    routeThreadId,
     threadJumpThreadIds,
     updateThreadJumpHintsVisibility,
   ]);
@@ -1719,7 +1762,7 @@ export default function Sidebar() {
                 key={threadId}
                 threadId={threadId}
                 orderedProjectThreadIds={orderedProjectThreadIds}
-                routeThreadId={routeThreadId}
+                routeThreadId={effectiveRouteThreadId}
                 selectedThreadIds={selectedThreadIds}
                 showThreadJumpHints={showThreadJumpHints}
                 jumpLabel={threadJumpLabelById.get(threadId) ?? null}
@@ -1975,10 +2018,7 @@ export default function Sidebar() {
               className="ml-1 flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-md outline-hidden ring-ring transition-colors hover:text-foreground focus-visible:ring-2"
               to="/"
             >
-              <T3Wordmark />
-              <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
-                Code
-              </span>
+              <MatchaWordmark />
               <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
                 {APP_STAGE_LABEL}
               </span>

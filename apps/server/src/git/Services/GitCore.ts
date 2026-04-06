@@ -20,9 +20,9 @@ import type {
   GitRemoveWorktreeInput,
   GitStatusInput,
   GitStatusResult,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 
-import type { GitCommandError } from "@t3tools/contracts";
+import type { GitCommandError } from "@matcha/contracts";
 
 export interface ExecuteGitInput {
   readonly operation: string;

@@ -1,10 +1,6 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
-import {
-  type TerminalEvent,
-  type TerminalSessionSnapshot,
-  type ThreadId,
-} from "@t3tools/contracts";
+import { type TerminalEvent, type TerminalSessionSnapshot, type ThreadId } from "@matcha/contracts";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -726,6 +722,8 @@ interface ThreadTerminalDrawerProps {
   worktreePath?: string | null;
   runtimeEnv?: Record<string, string>;
   visible?: boolean;
+  /** "drawer" (default): resizable bottom panel. "inline": full-height, no resize chrome. */
+  mode?: "drawer" | "inline";
   height: number;
   terminalIds: string[];
   activeTerminalId: string;
@@ -778,6 +776,7 @@ export default function ThreadTerminalDrawer({
   worktreePath,
   runtimeEnv,
   visible = true,
+  mode = "drawer",
   height,
   terminalIds,
   activeTerminalId,
@@ -1027,18 +1026,26 @@ export default function ThreadTerminalDrawer({
     };
   }, [syncHeight]);
 
+  const isInline = mode === "inline";
+
   return (
     <aside
-      className="thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden border-t border-border/80 bg-background"
-      style={{ height: `${drawerHeight}px` }}
+      className={
+        isInline
+          ? "thread-terminal-drawer relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
+          : "thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden border-t border-border/80 bg-background"
+      }
+      style={isInline ? undefined : { height: `${drawerHeight}px` }}
     >
-      <div
-        className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
-        onPointerDown={handleResizePointerDown}
-        onPointerMove={handleResizePointerMove}
-        onPointerUp={handleResizePointerEnd}
-        onPointerCancel={handleResizePointerEnd}
-      />
+      {!isInline && (
+        <div
+          className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerEnd}
+          onPointerCancel={handleResizePointerEnd}
+        />
+      )}
 
       {!hasTerminalSidebar && (
         <div className="pointer-events-none absolute right-2 top-2 z-20">

@@ -39,13 +39,13 @@ import {
   TurnId,
   type UserInputQuestion,
   ClaudeCodeEffort,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 import {
   applyClaudePromptEffortPrefix,
   resolveApiModelId,
   resolveEffort,
   trimOrNull,
-} from "@t3tools/shared/model";
+} from "@matcha/shared/model";
 import {
   Cause,
   DateTime,

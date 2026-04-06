@@ -12,7 +12,7 @@ import type {
   OrchestrationReadModel,
   ProjectId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 import { ServiceMap } from "effect";
 import type { Option } from "effect";
 import type { Effect } from "effect";

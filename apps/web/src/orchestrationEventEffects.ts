@@ -1,4 +1,4 @@
-import type { OrchestrationEvent, ThreadId } from "@t3tools/contracts";
+import type { OrchestrationEvent, ThreadId } from "@matcha/contracts";
 
 export interface OrchestrationBatchEffects {
   clearPromotedDraftThreadIds: ThreadId[];

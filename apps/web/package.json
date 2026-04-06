@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/web",
+  "name": "@matcha/web",
   "version": "0.0.15",
   "private": true,
   "type": "module",
@@ -22,9 +22,9 @@
     "@effect/atom-react": "catalog:",
     "@formkit/auto-animate": "^0.9.0",
     "@lexical/react": "^0.41.0",
+    "@matcha/contracts": "workspace:*",
+    "@matcha/shared": "workspace:*",
     "@pierre/diffs": "^1.1.0-beta.16",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
     "@tanstack/react-pacer": "^0.19.4",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-router": "^1.160.2",

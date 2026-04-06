@@ -15,7 +15,7 @@ import {
   WS_METHODS,
   OrchestrationSessionStatus,
   DEFAULT_SERVER_SETTINGS,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { HttpResponse, http, ws } from "msw";
 import { setupWorker } from "msw/browser";
@@ -34,9 +34,10 @@ import { __resetNativeApiForTests } from "../nativeApi";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
+import { useWorkspaceTabStore } from "../threadTabStore";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
-import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_CLIENT_SETTINGS } from "@matcha/contracts/settings";
 
 const THREAD_ID = "thread-browser-test" as ThreadId;
 const UUID_ROUTE_RE = /^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -120,7 +121,7 @@ function isoAt(offsetSeconds: number): string {
 function createBaseServerConfig(): ServerConfig {
   return {
     cwd: "/repo/project",
-    keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
+    keybindingsConfigPath: "/repo/project/.matcha-keybindings.json",
     keybindings: [],
     issues: [],
     providers: [
@@ -137,7 +138,7 @@ function createBaseServerConfig(): ServerConfig {
     ],
     availableEditors: [],
     observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
+      logsDirectoryPath: "/repo/project/.matcha/logs",
       localTracingEnabled: true,
       otlpTracesEnabled: false,
       otlpMetricsEnabled: false,
@@ -1163,6 +1164,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
     });
+    useWorkspaceTabStore.persist.clearStorage();
+    useWorkspaceTabStore.setState({
+      tabStateByWorkspaceThreadId: {},
+    });
   });
 
   afterEach(() => {
@@ -1442,10 +1447,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
             cwd: "/repo/project",
             worktreePath: null,
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
+              MATCHA_PROJECT_ROOT: "/repo/project",
             },
           });
-          expect(openRequest?.env?.T3CODE_WORKTREE_PATH).toBeUndefined();
+          expect(openRequest?.env?.MATCHA_WORKTREE_PATH).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -1610,7 +1615,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("falls back to the first installed editor when the stored favorite is unavailable", async () => {
-    localStorage.setItem("t3code:last-editor", JSON.stringify("vscodium"));
+    localStorage.setItem("matcha:last-editor", JSON.stringify("vscodium"));
     setDraftThreadWithoutWorktree();
 
     const mounted = await mountChatView({
@@ -1707,7 +1712,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/project",
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
+              MATCHA_PROJECT_ROOT: "/repo/project",
             },
           });
         },
@@ -1783,8 +1788,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/worktrees/feature-draft",
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
-              T3CODE_WORKTREE_PATH: "/repo/worktrees/feature-draft",
+              MATCHA_PROJECT_ROOT: "/repo/project",
+              MATCHA_WORKTREE_PATH: "/repo/worktrees/feature-draft",
             },
           });
         },
@@ -1830,7 +1835,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             pullRequest: {
               number: 1359,
               title: "Add thread archiving and settings navigation",
-              url: "https://github.com/pingdotgg/t3code/pull/1359",
+              url: "https://github.com/pingdotgg/matcha/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
               state: "open",
@@ -1842,7 +1847,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             pullRequest: {
               number: 1359,
               title: "Add thread archiving and settings navigation",
-              url: "https://github.com/pingdotgg/t3code/pull/1359",
+              url: "https://github.com/pingdotgg/matcha/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
               state: "open",
@@ -1992,7 +1997,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               prepareWorktree: {
                 projectCwd: "/repo/project",
                 baseBranch: "main",
-                branch: expect.stringMatching(/^t3code\/[0-9a-f]{8}$/),
+                branch: expect.stringMatching(/^matcha\/[0-9a-f]{8}$/),
               },
               runSetupScript: true,
             },
@@ -2376,7 +2381,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("shows the confirm archive action after clicking the archive button", async () => {
     localStorage.setItem(
-      "t3code:client-settings:v1",
+      "matcha:client-settings:v1",
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
         confirmThreadArchive: true,
@@ -2405,7 +2410,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(confirmButton).toBeInTheDocument();
       await expect.element(confirmButton).toBeVisible();
     } finally {
-      localStorage.removeItem("t3code:client-settings:v1");
+      localStorage.removeItem("matcha:client-settings:v1");
       await mounted.cleanup();
     }
   });
@@ -2454,6 +2459,366 @@ describe("ChatView timeline estimator parity (full app)", () => {
         .element(page.getByText("Send a message to start the conversation."))
         .toBeInTheDocument();
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps a new workspace on the same thread when the first Codex tab sends", async () => {
+    useComposerDraftStore.setState({
+      draftThreadsByThreadId: {
+        [THREAD_ID]: {
+          projectId: PROJECT_ID,
+          createdAt: NOW_ISO,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: "main",
+          worktreePath: null,
+          envMode: "local",
+        },
+      },
+      projectDraftThreadIdByProjectId: {
+        [PROJECT_ID]: THREAD_ID,
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await expect.element(page.getByText("New workspace")).toBeInTheDocument();
+      expect(document.querySelector('[contenteditable="true"]')).toBeNull();
+
+      const addWorkspaceTabButton = await waitForElement(
+        () =>
+          document.querySelector(
+            'button[aria-label="Add workspace tab"]',
+          ) as HTMLButtonElement | null,
+        "Unable to find add-workspace-tab button.",
+      );
+      addWorkspaceTabButton.click();
+
+      const newCodexButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+            (element) => element.textContent?.trim() === "New Codex",
+          ) as HTMLElement | null,
+        "Unable to find New Codex menu item.",
+      );
+      newCodexButton.click();
+
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${THREAD_ID}`,
+        "The first provider tab should stay on the workspace thread id.",
+      );
+
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      await waitForLayout();
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const dispatchRequest = wsRequests.find(
+            (request) => request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand,
+          ) as
+            | {
+                _tag: string;
+                type?: string;
+                threadId?: string;
+              }
+            | undefined;
+          expect(dispatchRequest).toMatchObject({
+            _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+            type: "thread.turn.start",
+            threadId: THREAD_ID,
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("reuses the workspace thread for the first provider tab even with a terminal tab already open", async () => {
+    useComposerDraftStore.setState({
+      draftThreadsByThreadId: {
+        [THREAD_ID]: {
+          projectId: PROJECT_ID,
+          createdAt: NOW_ISO,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: "main",
+          worktreePath: null,
+          envMode: "local",
+        },
+      },
+      projectDraftThreadIdByProjectId: {
+        [PROJECT_ID]: THREAD_ID,
+      },
+    });
+    useWorkspaceTabStore.setState({
+      tabStateByWorkspaceThreadId: {
+        [THREAD_ID]: {
+          tabs: [{ id: "terminal-tab-1", kind: "terminal", label: "Terminal" }],
+          activeTabId: "terminal-tab-1",
+        },
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      const addWorkspaceTabButton = await waitForElement(
+        () =>
+          document.querySelector(
+            'button[aria-label="Add workspace tab"]',
+          ) as HTMLButtonElement | null,
+        "Unable to find add-workspace-tab button.",
+      );
+      addWorkspaceTabButton.click();
+
+      const newCodexButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+            (element) => element.textContent?.trim() === "New Codex",
+          ) as HTMLElement | null,
+        "Unable to find New Codex menu item.",
+      );
+      newCodexButton.click();
+
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${THREAD_ID}`,
+        "The first provider tab should still use the workspace thread id.",
+      );
+
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      await waitForLayout();
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const dispatchRequest = wsRequests.find(
+            (request) => request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand,
+          ) as
+            | {
+                _tag: string;
+                type?: string;
+                threadId?: string;
+              }
+            | undefined;
+          expect(dispatchRequest).toMatchObject({
+            _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+            type: "thread.turn.start",
+            threadId: THREAD_ID,
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("starts a new workspace with a fresh tab set instead of inheriting the previous workspace tabs", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-workspace-tab-isolation-test" as MessageId,
+        targetText: "workspace tab isolation test",
+      }),
+    });
+
+    try {
+      const addWorkspaceTabButton = await waitForElement(
+        () =>
+          document.querySelector(
+            'button[aria-label="Add workspace tab"]',
+          ) as HTMLButtonElement | null,
+        "Unable to find add-workspace-tab button.",
+      );
+      addWorkspaceTabButton.click();
+
+      const newCodexButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+            (element) => element.textContent?.trim() === "New Codex",
+          ) as HTMLElement | null,
+        "Unable to find New Codex menu item.",
+      );
+      newCodexButton.click();
+
+      await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("button")).find(
+            (button) => button.textContent?.trim() === "Codex",
+          ) as HTMLButtonElement | null,
+        "Expected the original workspace to show provider tabs before creating a new workspace.",
+      );
+
+      const newThreadButton = page.getByTestId("new-thread-button");
+      await expect.element(newThreadButton).toBeInTheDocument();
+      await newThreadButton.click();
+
+      await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should change to a fresh workspace thread id.",
+      );
+      await expect.element(page.getByText("New workspace")).toBeInTheDocument();
+
+      expect(
+        Array.from(document.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Codex",
+        ),
+      ).toBe(false);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps the workspace route stable when opening a second provider tab", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-second-provider-tab-test" as MessageId,
+        targetText: "second provider tab test",
+      }),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      const addWorkspaceTabButton = await waitForElement(
+        () =>
+          document.querySelector(
+            'button[aria-label="Add workspace tab"]',
+          ) as HTMLButtonElement | null,
+        "Unable to find add-workspace-tab button.",
+      );
+      addWorkspaceTabButton.click();
+
+      const newClaudeButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+            (element) => element.textContent?.trim() === "New Claude Code",
+          ) as HTMLElement | null,
+        "Unable to find New Claude Code menu item.",
+      );
+      newClaudeButton.click();
+
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${THREAD_ID}`,
+        "Opening a provider tab should keep the current workspace route.",
+      );
+
+      const tabState = useWorkspaceTabStore.getState().tabStateByWorkspaceThreadId[THREAD_ID];
+      expect(tabState).toBeDefined();
+      expect(tabState?.tabs.filter((tab) => tab.kind === "provider")).toHaveLength(2);
+      const activeProviderTab = tabState?.tabs.find((tab) => tab.id === tabState.activeTabId);
+      expect(activeProviderTab).toMatchObject({
+        kind: "provider",
+        provider: "claudeAgent",
+      });
+      expect(activeProviderTab?.threadId).toBeDefined();
+      expect(activeProviderTab?.threadId).not.toBe(THREAD_ID);
+
+      const claudeThreadId = activeProviderTab?.threadId as ThreadId;
+      useComposerDraftStore.getState().setPrompt(claudeThreadId, "Use claude here");
+      await waitForLayout();
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const dispatchRequest = wsRequests
+            .toReversed()
+            .find(
+              (request) =>
+                request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+                request.type === "thread.turn.start",
+            ) as
+            | {
+                _tag: string;
+                type?: string;
+                threadId?: string;
+              }
+            | undefined;
+          expect(dispatchRequest).toMatchObject({
+            _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+            type: "thread.turn.start",
+            threadId: claudeThreadId,
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("clears the conversation UI when the active provider tab is closed", async () => {
+    const targetText = "close active provider tab test";
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-close-active-provider-tab-test" as MessageId,
+        targetText,
+      }),
+    });
+
+    try {
+      await waitForElement(
+        () => document.querySelector('[aria-label="Close Codex tab"]') as HTMLElement | null,
+        "Unable to find the active provider tab close button.",
+      );
+
+      const closeTabButton = document.querySelector(
+        '[aria-label="Close Codex tab"]',
+      ) as HTMLElement | null;
+      closeTabButton?.click();
+
+      await expect.element(page.getByText("New workspace")).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain(targetText);
+      expect(document.querySelector('[contenteditable="true"]')).toBeNull();
     } finally {
       await mounted.cleanup();
     }
@@ -2654,18 +3019,18 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await newThreadButton.click();
 
-      await waitForURL(
+      const nextThreadPath = await waitForURL(
         mounted.router,
-        (path) => path === threadPath,
-        "New-thread should reuse the existing project draft thread.",
+        (path) => UUID_ROUTE_RE.test(path) && path !== threadPath,
+        "New-thread should create a fresh workspace thread.",
       );
-      expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toMatchObject({
+      const nextThreadId = nextThreadPath.slice(1) as ThreadId;
+      expect(useComposerDraftStore.getState().draftsByThreadId[nextThreadId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
-            model: "gpt-5.4",
+            model: "gpt-5.3-codex",
             options: {
-              reasoningEffort: "low",
               fastMode: true,
             },
           },

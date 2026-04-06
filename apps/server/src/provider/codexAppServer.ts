@@ -17,8 +17,8 @@ function readErrorMessage(response: JsonRpcProbeResponse): string | undefined {
 export function buildCodexInitializeParams() {
   return {
     clientInfo: {
-      name: "t3code_desktop",
-      title: "T3 Code Desktop",
+      name: "matcha_desktop",
+      title: "Matcha Desktop",
       version: "0.1.0",
     },
     capabilities: {

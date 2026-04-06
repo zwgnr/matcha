@@ -11,11 +11,11 @@ import {
   RuntimeMode,
   type ServerProvider,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
 import { DeepMutable } from "effect/Types";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+import { normalizeModelSlug } from "@matcha/shared/model";
 import { useMemo } from "react";
 import { getLocalStorageItem } from "./hooks/useLocalStorage";
 import { resolveAppModelSelection } from "./modelSelection";
@@ -29,9 +29,9 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createDebouncedStorage, createMemoryStorage } from "./lib/storage";
 import { getDefaultServerModel } from "./providerModels";
-import { UnifiedSettings } from "@t3tools/contracts/settings";
+import { UnifiedSettings } from "@matcha/contracts/settings";
 
-export const COMPOSER_DRAFT_STORAGE_KEY = "t3code:composer-drafts:v1";
+export const COMPOSER_DRAFT_STORAGE_KEY = "matcha:composer-drafts:v1";
 const COMPOSER_DRAFT_STORAGE_VERSION = 3;
 const DraftThreadEnvModeSchema = Schema.Literals(["local", "worktree"]);
 export type DraftThreadEnvMode = typeof DraftThreadEnvModeSchema.Type;
@@ -189,6 +189,18 @@ interface ComposerDraftStoreState {
   stickyActiveProvider: ProviderKind | null;
   getDraftThreadByProjectId: (projectId: ProjectId) => ProjectDraftThread | null;
   getDraftThread: (threadId: ThreadId) => DraftThreadState | null;
+  upsertDraftThread: (
+    threadId: ThreadId,
+    input: {
+      projectId: ProjectId;
+      branch?: string | null;
+      worktreePath?: string | null;
+      createdAt?: string;
+      envMode?: DraftThreadEnvMode;
+      runtimeMode?: RuntimeMode;
+      interactionMode?: ProviderInteractionMode;
+    },
+  ) => void;
   setProjectDraftThreadId: (
     projectId: ProjectId,
     threadId: ThreadId,
@@ -265,6 +277,55 @@ interface ComposerDraftStoreState {
 export interface EffectiveComposerModelState {
   selectedModel: string;
   modelOptions: ProviderModelOptions | null;
+}
+
+function buildNextDraftThreadState(input: {
+  projectId: ProjectId;
+  existingThread: DraftThreadState | null | undefined;
+  options:
+    | {
+        branch?: string | null;
+        worktreePath?: string | null;
+        createdAt?: string;
+        envMode?: DraftThreadEnvMode;
+        runtimeMode?: RuntimeMode;
+        interactionMode?: ProviderInteractionMode;
+      }
+    | undefined;
+}): DraftThreadState {
+  const { existingThread, options, projectId } = input;
+  const nextWorktreePath =
+    options?.worktreePath === undefined
+      ? (existingThread?.worktreePath ?? null)
+      : (options.worktreePath ?? null);
+  return {
+    projectId,
+    createdAt: options?.createdAt ?? existingThread?.createdAt ?? new Date().toISOString(),
+    runtimeMode: options?.runtimeMode ?? existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+    interactionMode:
+      options?.interactionMode ?? existingThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
+    branch:
+      options?.branch === undefined ? (existingThread?.branch ?? null) : (options.branch ?? null),
+    worktreePath: nextWorktreePath,
+    envMode:
+      options?.envMode ?? (nextWorktreePath ? "worktree" : (existingThread?.envMode ?? "local")),
+  };
+}
+
+function draftThreadStatesEqual(
+  left: DraftThreadState | null | undefined,
+  right: DraftThreadState,
+): boolean {
+  return Boolean(
+    left &&
+    left.projectId === right.projectId &&
+    left.createdAt === right.createdAt &&
+    left.runtimeMode === right.runtimeMode &&
+    left.interactionMode === right.interactionMode &&
+    left.branch === right.branch &&
+    left.worktreePath === right.worktreePath &&
+    left.envMode === right.envMode,
+  );
 }
 
 function providerModelOptionsFromSelection(
@@ -1289,6 +1350,28 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
         }
         return get().draftThreadsByThreadId[threadId] ?? null;
       },
+      upsertDraftThread: (threadId, input) => {
+        if (threadId.length === 0 || input.projectId.length === 0) {
+          return;
+        }
+        set((state) => {
+          const existingThread = state.draftThreadsByThreadId[threadId];
+          const nextDraftThread = buildNextDraftThreadState({
+            projectId: input.projectId,
+            existingThread,
+            options: input,
+          });
+          if (draftThreadStatesEqual(existingThread, nextDraftThread)) {
+            return state;
+          }
+          return {
+            draftThreadsByThreadId: {
+              ...state.draftThreadsByThreadId,
+              [threadId]: nextDraftThread,
+            },
+          };
+        });
+      },
       setProjectDraftThreadId: (projectId, threadId, options) => {
         if (projectId.length === 0 || threadId.length === 0) {
           return;
@@ -1296,38 +1379,13 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
         set((state) => {
           const existingThread = state.draftThreadsByThreadId[threadId];
           const previousThreadIdForProject = state.projectDraftThreadIdByProjectId[projectId];
-          const nextWorktreePath =
-            options?.worktreePath === undefined
-              ? (existingThread?.worktreePath ?? null)
-              : (options.worktreePath ?? null);
-          const nextDraftThread: DraftThreadState = {
+          const nextDraftThread = buildNextDraftThreadState({
             projectId,
-            createdAt: options?.createdAt ?? existingThread?.createdAt ?? new Date().toISOString(),
-            runtimeMode:
-              options?.runtimeMode ?? existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-            interactionMode:
-              options?.interactionMode ??
-              existingThread?.interactionMode ??
-              DEFAULT_INTERACTION_MODE,
-            branch:
-              options?.branch === undefined
-                ? (existingThread?.branch ?? null)
-                : (options.branch ?? null),
-            worktreePath: nextWorktreePath,
-            envMode:
-              options?.envMode ??
-              (nextWorktreePath ? "worktree" : (existingThread?.envMode ?? "local")),
-          };
+            existingThread,
+            options,
+          });
           const hasSameProjectMapping = previousThreadIdForProject === threadId;
-          const hasSameDraftThread =
-            existingThread &&
-            existingThread.projectId === nextDraftThread.projectId &&
-            existingThread.createdAt === nextDraftThread.createdAt &&
-            existingThread.runtimeMode === nextDraftThread.runtimeMode &&
-            existingThread.interactionMode === nextDraftThread.interactionMode &&
-            existingThread.branch === nextDraftThread.branch &&
-            existingThread.worktreePath === nextDraftThread.worktreePath &&
-            existingThread.envMode === nextDraftThread.envMode;
+          const hasSameDraftThread = draftThreadStatesEqual(existingThread, nextDraftThread);
           if (hasSameProjectMapping && hasSameDraftThread) {
             return state;
           }
@@ -1371,32 +1429,12 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           if (nextProjectId.length === 0) {
             return state;
           }
-          const nextWorktreePath =
-            options.worktreePath === undefined
-              ? existing.worktreePath
-              : (options.worktreePath ?? null);
-          const nextDraftThread: DraftThreadState = {
+          const nextDraftThread = buildNextDraftThreadState({
             projectId: nextProjectId,
-            createdAt:
-              options.createdAt === undefined
-                ? existing.createdAt
-                : options.createdAt || existing.createdAt,
-            runtimeMode: options.runtimeMode ?? existing.runtimeMode,
-            interactionMode: options.interactionMode ?? existing.interactionMode,
-            branch: options.branch === undefined ? existing.branch : (options.branch ?? null),
-            worktreePath: nextWorktreePath,
-            envMode:
-              options.envMode ?? (nextWorktreePath ? "worktree" : (existing.envMode ?? "local")),
-          };
-          const isUnchanged =
-            nextDraftThread.projectId === existing.projectId &&
-            nextDraftThread.createdAt === existing.createdAt &&
-            nextDraftThread.runtimeMode === existing.runtimeMode &&
-            nextDraftThread.interactionMode === existing.interactionMode &&
-            nextDraftThread.branch === existing.branch &&
-            nextDraftThread.worktreePath === existing.worktreePath &&
-            nextDraftThread.envMode === existing.envMode;
-          if (isUnchanged) {
+            existingThread: existing,
+            options,
+          });
+          if (draftThreadStatesEqual(existing, nextDraftThread)) {
             return state;
           }
           const nextProjectDraftThreadIdByProjectId: Record<ProjectId, ThreadId> = {

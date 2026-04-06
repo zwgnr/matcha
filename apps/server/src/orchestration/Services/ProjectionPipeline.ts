@@ -6,7 +6,7 @@
  *
  * @module OrchestrationProjectionPipeline
  */
-import type { OrchestrationEvent } from "@t3tools/contracts";
+import type { OrchestrationEvent } from "@matcha/contracts";
 import { ServiceMap } from "effect";
 import type { Effect } from "effect";
 

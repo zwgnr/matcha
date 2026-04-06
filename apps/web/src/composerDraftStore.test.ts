@@ -4,7 +4,7 @@ import {
   ThreadId,
   type ModelSelection,
   type ProviderModelOptions,
-} from "@t3tools/contracts";
+} from "@matcha/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -483,6 +483,32 @@ describe("composerDraftStore project draft thread mapping", () => {
       runtimeMode: "full-access",
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("can register a standalone draft thread without replacing the project draft mapping", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectId, threadId, {
+      branch: "feature/original",
+    });
+
+    store.upsertDraftThread(otherThreadId, {
+      projectId,
+      branch: "feature/secondary",
+      createdAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectId(projectId)?.threadId).toBe(
+      threadId,
+    );
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toMatchObject({
+      projectId,
+      branch: "feature/original",
+    });
+    expect(useComposerDraftStore.getState().getDraftThread(otherThreadId)).toMatchObject({
+      projectId,
+      branch: "feature/secondary",
+      createdAt: "2026-01-02T00:00:00.000Z",
     });
   });
 

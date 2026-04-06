@@ -2,7 +2,7 @@ import {
   readEnvironmentFromLoginShell,
   resolveLoginShell,
   ShellEnvironmentReader,
-} from "@t3tools/shared/shell";
+} from "@matcha/shared/shell";
 
 export function syncShellEnvironment(
   env: NodeJS.ProcessEnv = process.env,
