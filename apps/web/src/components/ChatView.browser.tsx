@@ -3352,4 +3352,24 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await mounted.cleanup();
     }
   });
+
+  it("offers native provider slash commands for unknown slash input", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-native-slash-target" as MessageId,
+        targetText: "native slash thread",
+      }),
+    });
+
+    try {
+      await waitForComposerEditor();
+      await page.getByTestId("composer-editor").fill("/btw");
+
+      const menuItem = await waitForComposerMenuItem("native-slash:codex:btw");
+      expect(menuItem.textContent).toContain("Send /btw");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
 });

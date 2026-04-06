@@ -22,6 +22,7 @@ import {
 } from "@matcha/contracts";
 import { applyClaudePromptEffortPrefix } from "@matcha/shared/model";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@matcha/shared/projectScripts";
+import { isLeadingSlashCommandInput } from "@matcha/shared/slashCommands";
 import { truncate } from "@matcha/shared/String";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -211,6 +212,33 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+const CLAUDE_BUILT_IN_SLASH_COMMANDS = [
+  { command: "/add-dir", description: "Add an additional working directory." },
+  { command: "/agents", description: "Manage Claude subagents." },
+  {
+    command: "/btw",
+    description: "Ask a quick side question without interrupting the main conversation.",
+  },
+  { command: "/bug", description: "Report a bug to Anthropic." },
+  { command: "/clear", description: "Clear the current conversation." },
+  { command: "/compact", description: "Compact the current conversation context." },
+  { command: "/config", description: "Open Claude Code configuration." },
+  { command: "/cost", description: "Show token and cost usage." },
+  { command: "/doctor", description: "Run Claude Code diagnostics." },
+  { command: "/help", description: "Show Claude Code help." },
+  { command: "/init", description: "Initialize Claude Code project files." },
+  { command: "/login", description: "Authenticate Claude Code." },
+  { command: "/logout", description: "Log out of Claude Code." },
+  { command: "/mcp", description: "Inspect MCP server status." },
+  { command: "/memory", description: "Inspect or edit Claude memory files." },
+  { command: "/model", description: "Switch the active Claude model." },
+  { command: "/permissions", description: "Review tool permissions." },
+  { command: "/pr_comments", description: "Load pull request comments into context." },
+  { command: "/review", description: "Review the current changes." },
+  { command: "/status", description: "Show current Claude session status." },
+  { command: "/terminal-setup", description: "Configure terminal integration." },
+  { command: "/vim", description: "Toggle Vim mode." },
+] satisfies ReadonlyArray<{ command: string; description: string }>;
 
 type ThreadPlanCatalogEntry = Pick<Thread, "id" | "proposedPlans">;
 
@@ -295,7 +323,11 @@ function formatOutgoingPrompt(params: {
   text: string;
 }): string {
   const caps = getProviderModelCapabilities(params.models, params.model, params.provider);
-  if (params.effort && caps.promptInjectedEffortLevels.includes(params.effort)) {
+  if (
+    params.effort &&
+    caps.promptInjectedEffortLevels.includes(params.effort) &&
+    !isLeadingSlashCommandInput(params.text)
+  ) {
     return applyClaudePromptEffortPrefix(params.text, params.effort as ClaudeCodeEffort | null);
   }
   return params.text;
@@ -1592,6 +1624,14 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
     }),
   );
   const workspaceEntries = workspaceEntriesQuery.data?.entries ?? EMPTY_PROJECT_ENTRIES;
+  const availableNativeSlashCommands = useMemo(() => {
+    const selectedProviderSlashCommands =
+      providerStatuses.find((provider) => provider.provider === selectedProvider)?.slashCommands ??
+      [];
+    return selectedProvider === "claudeAgent"
+      ? [...CLAUDE_BUILT_IN_SLASH_COMMANDS, ...selectedProviderSlashCommands]
+      : selectedProviderSlashCommands;
+  }, [providerStatuses, selectedProvider]);
   const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
@@ -1630,12 +1670,59 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
         },
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
       const query = composerTrigger.query.trim().toLowerCase();
+      const nativeSlashCommandItems = availableNativeSlashCommands
+        .filter((command) => {
+          if (!query) {
+            return true;
+          }
+          const normalizedCommand = command.command.toLowerCase();
+          return (
+            normalizedCommand.includes(`/${query}`) ||
+            normalizedCommand.slice(1).includes(query) ||
+            command.description?.toLowerCase().includes(query) === true
+          );
+        })
+        .map(
+          (command) =>
+            ({
+              id: `native-slash:${selectedProvider}:${command.command.toLowerCase()}`,
+              type: "native-slash-command",
+              provider: selectedProvider,
+              label: command.command,
+              description:
+                command.description ??
+                (selectedProvider === "claudeAgent"
+                  ? "Native Claude slash command"
+                  : "Native Codex slash command"),
+            }) satisfies Extract<ComposerCommandItem, { type: "native-slash-command" }>,
+        );
+      const sendArbitraryNativeSlashCommand =
+        composerTrigger.query.trim().length > 0 &&
+        nativeSlashCommandItems.every(
+          (item) => item.label.toLowerCase() !== `/${composerTrigger.query.trim().toLowerCase()}`,
+        )
+          ? ({
+              id: `native-slash:${selectedProvider}:${composerTrigger.query.trim().toLowerCase()}`,
+              type: "native-slash-command",
+              provider: selectedProvider,
+              label: `Send /${composerTrigger.query.trim()}`,
+              description:
+                selectedProvider === "claudeAgent"
+                  ? "Send native Claude slash command"
+                  : "Send native Codex slash command",
+            } satisfies Extract<ComposerCommandItem, { type: "native-slash-command" }>)
+          : null;
       if (!query) {
-        return [...slashCommandItems];
+        return [...nativeSlashCommandItems, ...slashCommandItems];
       }
-      return slashCommandItems.filter(
+      const filteredInternalItems = slashCommandItems.filter(
         (item) => item.command.includes(query) || item.label.slice(1).includes(query),
       );
+      return [
+        ...nativeSlashCommandItems,
+        ...(sendArbitraryNativeSlashCommand ? [sendArbitraryNativeSlashCommand] : []),
+        ...filteredInternalItems,
+      ];
     }
 
     return searchableModelOptions
@@ -1654,7 +1741,13 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
         label: name,
         description: `${providerLabel} · ${slug}`,
       }));
-  }, [composerTrigger, searchableModelOptions, workspaceEntries]);
+  }, [
+    composerTrigger,
+    searchableModelOptions,
+    availableNativeSlashCommands,
+    selectedProvider,
+    workspaceEntries,
+  ]);
   const composerMenuOpen = Boolean(composerTrigger);
   const activeComposerMenuItem = useMemo(
     () =>
@@ -3224,6 +3317,8 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
       resetLocalDispatch();
     }
   };
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
 
   const onInterrupt = async () => {
     const api = readNativeApi();
@@ -3826,6 +3921,24 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
         });
+        if (applied) {
+          setComposerHighlightedItemId(null);
+        }
+        return;
+      }
+      if (item.type === "native-slash-command") {
+        const replacement = `${item.label} `;
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+        );
         if (applied) {
           setComposerHighlightedItemId(null);
         }

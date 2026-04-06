@@ -25,6 +25,13 @@ export type ComposerCommandItem =
     }
   | {
       id: string;
+      type: "native-slash-command";
+      provider: ProviderKind;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
       type: "model";
       provider: ProviderKind;
       model: string;
@@ -124,6 +131,9 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         />
       ) : null}
       {props.item.type === "slash-command" ? (
+        <BotIcon className="size-4 text-muted-foreground/80" />
+      ) : null}
+      {props.item.type === "native-slash-command" ? (
         <BotIcon className="size-4 text-muted-foreground/80" />
       ) : null}
       {props.item.type === "model" ? (

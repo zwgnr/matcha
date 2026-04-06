@@ -2,6 +2,7 @@ import type {
   ServerProvider,
   ServerProviderAuth,
   ServerProviderModel,
+  ServerProviderSlashCommand,
   ServerProviderState,
 } from "@matcha/contracts";
 import { Effect, Stream } from "effect";
@@ -129,6 +130,7 @@ export function buildServerProvider(input: {
   enabled: boolean;
   checkedAt: string;
   models: ReadonlyArray<ServerProviderModel>;
+  slashCommands?: ReadonlyArray<ServerProviderSlashCommand>;
   probe: ProviderProbeResult;
 }): ServerProvider {
   return {
@@ -141,6 +143,9 @@ export function buildServerProvider(input: {
     checkedAt: input.checkedAt,
     ...(input.probe.message ? { message: input.probe.message } : {}),
     models: input.models,
+    ...(input.slashCommands && input.slashCommands.length > 0
+      ? { slashCommands: [...input.slashCommands] }
+      : {}),
   };
 }
 

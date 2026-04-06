@@ -56,6 +56,12 @@ export const ServerProviderModel = Schema.Struct({
 });
 export type ServerProviderModel = typeof ServerProviderModel.Type;
 
+export const ServerProviderSlashCommand = Schema.Struct({
+  command: TrimmedNonEmptyString,
+  description: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerProviderSlashCommand = typeof ServerProviderSlashCommand.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
   enabled: Schema.Boolean,
@@ -66,6 +72,7 @@ export const ServerProvider = Schema.Struct({
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),
   models: Schema.Array(ServerProviderModel),
+  slashCommands: Schema.optional(Schema.Array(ServerProviderSlashCommand)),
 });
 export type ServerProvider = typeof ServerProvider.Type;
 

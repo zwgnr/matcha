@@ -46,6 +46,7 @@ import {
   resolveEffort,
   trimOrNull,
 } from "@matcha/shared/model";
+import { isLeadingSlashCommandInput } from "@matcha/shared/slashCommands";
 import {
   Cause,
   DateTime,
@@ -510,6 +511,11 @@ const CLAUDE_SETTING_SOURCES = [
 ] as const satisfies ReadonlyArray<SettingSource>;
 
 function buildPromptText(input: ProviderSendTurnInput): string {
+  const promptText = input.input?.trim() ?? "";
+  if (isLeadingSlashCommandInput(promptText)) {
+    return promptText;
+  }
+
   const rawEffort =
     input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.options?.effort : null;
   const claudeModel =
@@ -521,7 +527,7 @@ function buildPromptText(input: ProviderSendTurnInput): string {
   const trimmedEffort = trimOrNull(rawEffort);
   const promptEffort =
     trimmedEffort && caps.promptInjectedEffortLevels.includes(trimmedEffort) ? trimmedEffort : null;
-  return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
+  return applyClaudePromptEffortPrefix(promptText, promptEffort);
 }
 
 function buildUserMessage(input: {

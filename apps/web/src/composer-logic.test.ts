@@ -60,6 +60,18 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("keeps unknown slash commands in slash-command mode", () => {
+    const text = "/btw";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "btw",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
   it("detects @path trigger in the middle of existing text", () => {
     // User typed @ between "inspect " and "in this sentence"
     const text = "Please inspect @in this sentence";

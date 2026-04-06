@@ -544,6 +544,45 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("does not inject ultrathink ahead of native slash commands", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-sonnet-4-6",
+          options: {
+            effort: "ultrathink",
+          },
+        },
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "/btw",
+        attachments: [],
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-sonnet-4-6",
+          options: {
+            effort: "ultrathink",
+          },
+        },
+      });
+
+      const createInput = harness.getLastCreateQueryInput();
+      const promptText = yield* Effect.promise(() => readFirstPromptText(createInput));
+      assert.equal(promptText, "/btw");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("embeds image attachments in Claude user messages", () => {
     const baseDir = mkdtempSync(path.join(os.tmpdir(), "claude-attachments-"));
     const harness = makeHarness({

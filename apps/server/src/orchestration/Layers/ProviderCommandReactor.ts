@@ -17,6 +17,7 @@ import { makeDrainableWorker } from "@matcha/shared/DrainableWorker";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
+import { resolveCodexSlashCommandInput } from "../../provider/codexCustomPrompts.ts";
 import { ProviderAdapterRequestError, ProviderServiceError } from "../../provider/Errors.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
@@ -370,6 +371,11 @@ const make = Effect.gen(function* () {
     if (!thread) {
       return;
     }
+    const readModel = yield* orchestrationEngine.getReadModel();
+    const effectiveCwd = resolveThreadWorkspaceCwd({
+      thread,
+      projects: readModel.projects,
+    });
     yield* ensureSessionForThread(
       input.threadId,
       input.createdAt,
@@ -378,7 +384,6 @@ const make = Effect.gen(function* () {
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(input.messageText);
     const normalizedAttachments = input.attachments ?? [];
     const activeSession = yield* providerService
       .listSessions()
@@ -400,6 +405,28 @@ const make = Effect.gen(function* () {
             }
           : requestedModelSelection
         : input.modelSelection;
+    const providerForInput =
+      modelForTurn?.provider ?? requestedModelSelection?.provider ?? thread.modelSelection.provider;
+    const providerHomeDir = process.env.HOME ?? process.env.USERPROFILE;
+    const providerInputText =
+      (yield* Effect.tryPromise({
+        try: () =>
+          providerForInput === "codex"
+            ? resolveCodexSlashCommandInput({
+                text: input.messageText,
+                ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+                ...(providerHomeDir ? { homeDir: providerHomeDir } : {}),
+              })
+            : Promise.resolve(input.messageText),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider: providerForInput,
+            method: "thread.turn.start",
+            detail: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      })) ?? input.messageText;
+    const normalizedInput = toNonEmptyProviderInput(providerInputText);
 
     yield* providerService.sendTurn({
       threadId: input.threadId,

@@ -32,6 +32,7 @@ import {
   spawnAndCollect,
   type CommandResult,
 } from "../providerSnapshot";
+import { discoverCodexSlashCommands } from "../slashCommandCatalog";
 import { makeManagedServerProvider } from "../makeManagedServerProvider";
 import {
   formatCodexCliUpgradeMessage,
@@ -340,6 +341,28 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   );
   const checkedAt = new Date().toISOString();
   const models = providerModelsFromSettings(BUILT_IN_MODELS, PROVIDER, codexSettings.customModels);
+  const slashCommands = yield* Effect.tryPromise({
+    try: () => discoverCodexSlashCommands(process.cwd(), codexSettings.homePath ?? OS.homedir()),
+    catch: () => [] as const,
+  }).pipe(Effect.orElseSucceed(() => []));
+  const buildSnapshot = (input: {
+    readonly models?: ReadonlyArray<ServerProviderModel>;
+    readonly probe: {
+      readonly installed: boolean;
+      readonly version: string | null;
+      readonly status: Exclude<ServerProviderState, "disabled">;
+      readonly auth: ServerProviderAuth;
+      readonly message?: string;
+    };
+  }) =>
+    buildServerProvider({
+      provider: PROVIDER,
+      enabled: codexSettings.enabled,
+      checkedAt,
+      models: input.models ?? models,
+      probe: input.probe,
+      slashCommands,
+    });
 
   if (!codexSettings.enabled) {
     return buildServerProvider({
@@ -347,6 +370,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       enabled: false,
       checkedAt,
       models,
+      slashCommands,
       probe: {
         installed: false,
         version: null,
@@ -364,11 +388,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   if (Result.isFailure(versionProbe)) {
     const error = versionProbe.failure;
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
-      models,
+    return buildSnapshot({
       probe: {
         installed: !isCommandMissingCause(error),
         version: null,
@@ -382,11 +402,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   }
 
   if (Option.isNone(versionProbe.success)) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
-      models,
+    return buildSnapshot({
       probe: {
         installed: true,
         version: null,
@@ -403,11 +419,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     parseGenericCliVersion(`${version.stdout}\n${version.stderr}`);
   if (version.code !== 0) {
     const detail = detailFromResult(version);
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
-      models,
+    return buildSnapshot({
       probe: {
         installed: true,
         version: parsedVersion,
@@ -421,11 +433,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   }
 
   if (parsedVersion && !isCodexCliVersionSupported(parsedVersion)) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
-      models,
+    return buildSnapshot({
       probe: {
         installed: true,
         version: parsedVersion,
@@ -437,11 +445,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   }
 
   if (yield* hasCustomModelProvider) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
-      models,
+    return buildSnapshot({
       probe: {
         installed: true,
         version: parsedVersion,
@@ -466,10 +470,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   if (Result.isFailure(authProbe)) {
     const error = authProbe.failure;
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
+    return buildSnapshot({
       models: resolvedModels,
       probe: {
         installed: true,
@@ -485,10 +486,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   }
 
   if (Option.isNone(authProbe.success)) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: codexSettings.enabled,
-      checkedAt,
+    return buildSnapshot({
       models: resolvedModels,
       probe: {
         installed: true,
@@ -503,10 +501,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   const parsed = parseAuthStatusFromOutput(authProbe.success.value);
   const authType = codexAuthSubType(account);
   const authLabel = codexAuthSubLabel(account);
-  return buildServerProvider({
-    provider: PROVIDER,
-    enabled: codexSettings.enabled,
-    checkedAt,
+  return buildSnapshot({
     models: resolvedModels,
     probe: {
       installed: true,
