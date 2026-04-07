@@ -80,6 +80,7 @@ const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
 const SERVER_SETTINGS_PATH = Path.join(STATE_DIR, "settings.json");
 const AUTO_UPDATE_STARTUP_DELAY_MS = 15_000;
 const AUTO_UPDATE_POLL_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const AUTO_UPDATE_INSTALL_LAUNCH_TIMEOUT_MS = 15_000;
 const DESKTOP_UPDATE_CHANNEL = "latest";
 const DESKTOP_UPDATE_ALLOW_PRERELEASE = false;
 
@@ -315,6 +316,7 @@ function getDestructiveMenuIcon(): Electron.NativeImage | undefined {
 }
 let updatePollTimer: ReturnType<typeof setInterval> | null = null;
 let updateStartupTimer: ReturnType<typeof setTimeout> | null = null;
+let updateInstallLaunchTimer: ReturnType<typeof setTimeout> | null = null;
 let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let updateInstallInFlight = false;
@@ -766,6 +768,43 @@ function clearUpdatePollTimer(): void {
   }
 }
 
+function clearUpdateInstallLaunchTimer(): void {
+  if (updateInstallLaunchTimer) {
+    clearTimeout(updateInstallLaunchTimer);
+    updateInstallLaunchTimer = null;
+  }
+}
+
+function canInstallDownloadedUpdate(state: DesktopUpdateState): boolean {
+  return (
+    state.downloadedVersion !== null &&
+    state.status !== "checking" &&
+    state.status !== "downloading" &&
+    state.status !== "disabled"
+  );
+}
+
+function armInstallLaunchTimeout(): void {
+  clearUpdateInstallLaunchTimer();
+  updateInstallLaunchTimer = setTimeout(() => {
+    updateInstallLaunchTimer = null;
+    if (!updateInstallInFlight || !isQuitting) {
+      return;
+    }
+
+    const version = updateState.downloadedVersion ?? updateState.availableVersion;
+    const message = version
+      ? `Timed out waiting for the ${version} installer to start. Try installing the downloaded update again.`
+      : "Timed out waiting for the installer to start. Try installing the downloaded update again.";
+
+    updateInstallInFlight = false;
+    isQuitting = false;
+    setUpdateState(reduceDesktopUpdateStateOnInstallFailure(updateState, message));
+    console.error(`[desktop-updater] ${message}`);
+  }, AUTO_UPDATE_INSTALL_LAUNCH_TIMEOUT_MS);
+  updateInstallLaunchTimer.unref();
+}
+
 function emitUpdateState(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed()) continue;
@@ -840,7 +879,7 @@ async function downloadAvailableUpdate(): Promise<{ accepted: boolean; completed
 }
 
 async function installDownloadedUpdate(): Promise<{ accepted: boolean; completed: boolean }> {
-  if (isQuitting || !updaterConfigured || updateState.status !== "downloaded") {
+  if (isQuitting || !updaterConfigured || !canInstallDownloadedUpdate(updateState)) {
     return { accepted: false, completed: false };
   }
 
@@ -849,17 +888,21 @@ async function installDownloadedUpdate(): Promise<{ accepted: boolean; completed
   clearUpdatePollTimer();
   try {
     await stopBackendAndWaitForExit();
-    // Destroy all windows before launching the NSIS installer to avoid the installer finding live windows it needs to close.
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.destroy();
+    // NSIS is sensitive to live app windows during handoff. Squirrel.Mac is not.
+    if (process.platform === "win32") {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.destroy();
+      }
     }
     // `quitAndInstall()` only starts the handoff to the updater. The actual
     // install may still fail asynchronously, so keep the action incomplete
     // until we either quit or receive an updater error.
+    armInstallLaunchTimeout();
     autoUpdater.quitAndInstall(true, true);
     return { accepted: true, completed: false };
   } catch (error: unknown) {
     const message = formatErrorMessage(error);
+    clearUpdateInstallLaunchTimer();
     updateInstallInFlight = false;
     isQuitting = false;
     setUpdateState(reduceDesktopUpdateStateOnInstallFailure(updateState, message));
@@ -941,6 +984,7 @@ function configureAutoUpdater(): void {
   autoUpdater.on("error", (error) => {
     const message = formatErrorMessage(error);
     if (updateInstallInFlight) {
+      clearUpdateInstallLaunchTimer();
       updateInstallInFlight = false;
       isQuitting = false;
       setUpdateState(reduceDesktopUpdateStateOnInstallFailure(updateState, message));
@@ -1451,6 +1495,7 @@ async function bootstrap(): Promise<void> {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  clearUpdateInstallLaunchTimer();
   updateInstallInFlight = false;
   writeDesktopLogHeader("before-quit received");
   clearUpdatePollTimer();
