@@ -26,5 +26,5 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "productName": "Matcha (Alpha)"
+  "productName": "Matcha"
 }

@@ -530,12 +530,17 @@ export function WebSocketConnectionSurface({ children }: { readonly children: Re
 
   if (serverConfig === null) {
     const uiState = getWsConnectionUiState(status);
-    return (
-      <WebSocketBlockingState
-        status={status}
-        uiState={uiState === "connected" ? "connecting" : uiState}
-      />
-    );
+    if (uiState === "connecting" || uiState === "connected") {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+          <div className="flex items-center gap-3">
+            <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Connecting…</p>
+          </div>
+        </div>
+      );
+    }
+    return <WebSocketBlockingState status={status} uiState={uiState} />;
   }
 
   return children;
