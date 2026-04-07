@@ -663,6 +663,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                 version: 1 as const,
                 type: "keybindingsUpdated" as const,
                 payload: {
+                  keybindings: event.keybindings,
                   issues: event.issues,
                 },
               })),

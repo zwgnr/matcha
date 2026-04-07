@@ -31,6 +31,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { isElectron } from "../env";
+import { ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE } from "../lib/titleBar";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import {
   clampCollapsedComposerCursor,
@@ -115,7 +116,7 @@ import {
   nextProjectScriptId,
   projectScriptIdFromCommand,
 } from "~/projectScripts";
-import { SidebarTrigger } from "./ui/sidebar";
+import { SidebarTrigger, useSidebar } from "./ui/sidebar";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
@@ -619,6 +620,7 @@ function PersistentThreadTerminalDrawer({
 }
 
 export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
+  const { open: sidebarOpen } = useSidebar();
   const navigate = useNavigate();
   const workspaceThreadId = useWorkspaceTabStore(
     (s) => s.findWorkspaceThreadIdByProviderThreadId(routeThreadId) ?? routeThreadId,
@@ -4111,7 +4113,10 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
           </header>
         )}
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
+          <div
+            className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5"
+            style={sidebarOpen ? undefined : ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE}
+          >
             <span className="text-xs text-muted-foreground/50">No active thread</span>
           </div>
         )}
@@ -4132,6 +4137,7 @@ export default function ChatView({ threadId: routeThreadId }: ChatViewProps) {
           "border-b border-border px-3 sm:px-5",
           isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
         )}
+        style={isElectron && !sidebarOpen ? ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE : undefined}
       >
         <ChatHeader
           activeThreadId={activeThread.id}

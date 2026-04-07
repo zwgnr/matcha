@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   FolderIcon,
   GitPullRequestIcon,
+  PanelLeftCloseIcon,
   PlusIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -57,6 +58,7 @@ import {
   type SidebarThreadSortOrder,
 } from "@matcha/contracts/settings";
 import { isElectron } from "../env";
+import { ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE } from "../lib/titleBar";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
@@ -70,6 +72,7 @@ import { useStore } from "../store";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
 import {
+  isSidebarToggleShortcut,
   resolveShortcutCommand,
   shortcutLabelForCommand,
   shouldShowThreadJumpHints,
@@ -114,6 +117,7 @@ import {
   SidebarMenuSubItem,
   SidebarSeparator,
   SidebarTrigger,
+  useSidebar,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { makeProviderTab, useWorkspaceTabStore } from "../threadTabStore";
@@ -710,6 +714,7 @@ export default function Sidebar() {
     ? (findWorkspaceThreadIdByProviderThreadId(routeThreadId) ?? routeThreadId)
     : null;
   const keybindings = useServerKeybindings();
+  const { toggleSidebar } = useSidebar();
   const [addingProject, setAddingProject] = useState(false);
   const [newCwd, setNewCwd] = useState("");
   const [isPickingFolder, setIsPickingFolder] = useState(false);
@@ -1608,6 +1613,13 @@ export default function Sidebar() {
         }),
       );
 
+      if (isSidebarToggleShortcut(event, keybindings, { platform })) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleSidebar();
+        return;
+      }
+
       if (event.defaultPrevented || event.repeat) {
         return;
       }
@@ -1661,12 +1673,12 @@ export default function Sidebar() {
       updateThreadJumpHintsVisibility(false);
     };
 
-    window.addEventListener("keydown", onWindowKeyDown);
+    window.addEventListener("keydown", onWindowKeyDown, { capture: true });
     window.addEventListener("keyup", onWindowKeyUp);
     window.addEventListener("blur", onWindowBlur);
 
     return () => {
-      window.removeEventListener("keydown", onWindowKeyDown);
+      window.removeEventListener("keydown", onWindowKeyDown, { capture: true });
       window.removeEventListener("keyup", onWindowKeyUp);
       window.removeEventListener("blur", onWindowBlur);
     };
@@ -1678,6 +1690,7 @@ export default function Sidebar() {
     effectiveRouteThreadId,
     routeTerminalOpen,
     threadJumpThreadIds,
+    toggleSidebar,
     updateThreadJumpHintsVisibility,
   ]);
 
@@ -2041,7 +2054,7 @@ export default function Sidebar() {
   }, []);
 
   const wordmark = (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full items-center gap-2">
       <SidebarTrigger className="shrink-0 md:hidden" />
       <Tooltip>
         <TooltipTrigger
@@ -2062,13 +2075,33 @@ export default function Sidebar() {
           Version {APP_VERSION}
         </TooltipPopup>
       </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Collapse sidebar"
+              className="ml-auto hidden shrink-0 cursor-pointer items-center justify-center rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground md:flex"
+              onClick={toggleSidebar}
+            />
+          }
+        >
+          <PanelLeftCloseIcon className="size-4" />
+        </TooltipTrigger>
+        <TooltipPopup side="bottom" sideOffset={2}>
+          Collapse sidebar
+        </TooltipPopup>
+      </Tooltip>
     </div>
   );
 
   return (
     <>
       {isElectron ? (
-        <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[90px]">
+        <SidebarHeader
+          className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0"
+          style={ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE}
+        >
           {wordmark}
         </SidebarHeader>
       ) : (

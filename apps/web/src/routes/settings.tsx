@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { Button } from "../components/ui/button";
-import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
+import { SidebarInset, SidebarTrigger, useSidebar } from "../components/ui/sidebar";
 import { isElectron } from "../env";
+import { ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE } from "../lib/titleBar";
 
 function SettingsContentLayout() {
+  const { open: sidebarOpen } = useSidebar();
   const [restoreSignal, setRestoreSignal] = useState(0);
   const { changedSettingLabels, restoreDefaults } = useSettingsRestore(() =>
     setRestoreSignal((value) => value + 1),
@@ -52,7 +54,10 @@ function SettingsContentLayout() {
         )}
 
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
+          <div
+            className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5"
+            style={sidebarOpen ? undefined : ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE}
+          >
             <span className="text-xs font-medium tracking-wide text-muted-foreground/70">
               Settings
             </span>

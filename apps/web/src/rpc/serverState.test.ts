@@ -2,6 +2,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ThreadId,
+  type ResolvedKeybindingsConfig,
   type ServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
@@ -233,6 +234,20 @@ describe("serverState", () => {
       expect(getServerConfig()).toEqual(baseServerConfig);
     });
 
+    const nextKeybindings = [
+      {
+        command: "sidebar.toggle",
+        shortcut: {
+          key: "b",
+          metaKey: true,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+          modKey: false,
+        },
+      },
+    ] satisfies ResolvedKeybindingsConfig;
+
     const nextProviders: ReadonlyArray<ServerProvider> = [
       {
         ...defaultProviders[0]!,
@@ -246,6 +261,7 @@ describe("serverState", () => {
       version: 1,
       type: "keybindingsUpdated",
       payload: {
+        keybindings: nextKeybindings,
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
       },
     });
@@ -270,6 +286,7 @@ describe("serverState", () => {
     await waitFor(() => {
       expect(getServerConfig()).toEqual({
         ...baseServerConfig,
+        keybindings: nextKeybindings,
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: nextProviders,
         settings: {

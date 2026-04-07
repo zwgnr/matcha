@@ -1,0 +1,5 @@
+export const ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
+
+export const ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE = {
+  paddingInlineStart: ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET,
+} as const;

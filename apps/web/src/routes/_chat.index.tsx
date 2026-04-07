@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { isElectron } from "../env";
-import { SidebarTrigger } from "../components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "../components/ui/sidebar";
+import { ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE } from "../lib/titleBar";
 
 function ChatIndexRouteView() {
+  const { open: sidebarOpen } = useSidebar();
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-muted-foreground/40">
       {!isElectron && (
@@ -16,7 +19,10 @@ function ChatIndexRouteView() {
       )}
 
       {isElectron && (
-        <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
+        <div
+          className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5"
+          style={sidebarOpen ? undefined : ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE}
+        >
           <span className="text-xs text-muted-foreground/50">No active thread</span>
         </div>
       )}
