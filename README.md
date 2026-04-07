@@ -51,4 +51,6 @@ Observability guide: [docs/observability.md](./docs/observability.md)
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
 
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+## Credits
+
+Matcha is forked from [T3 Code](https://github.com/pingdotgg/t3code). Thanks to the T3 team for the original project.

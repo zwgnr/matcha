@@ -47,6 +47,7 @@ Docs:
 
 ## Reference Repos
 
+- Original upstream fork: https://github.com/pingdotgg/t3code
 - Open-source Codex repo: https://github.com/openai/codex
 - Codex-Monitor (Tauri, feature-complete, strong reference implementation): https://github.com/Dimillian/CodexMonitor
 
