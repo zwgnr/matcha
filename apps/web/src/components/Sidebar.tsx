@@ -1,13 +1,11 @@
 import {
   ArchiveIcon,
-  ArrowUpDownIcon,
   ChevronRightIcon,
   FolderIcon,
   GitPullRequestIcon,
   PanelLeftCloseIcon,
   PlusIcon,
   SettingsIcon,
-  SquarePenIcon,
   TerminalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
@@ -53,10 +51,6 @@ import {
 } from "@matcha/contracts";
 import { useQueries } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import {
-  type SidebarProjectSortOrder,
-  type SidebarWorkspaceSortOrder,
-} from "@matcha/contracts/settings";
 import { isElectron } from "../env";
 import { ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE } from "../lib/titleBar";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
@@ -85,6 +79,7 @@ import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewWorkspace } from "../hooks/useHandleNewWorkspace";
 import { NewWorkspaceDialog, type NewWorkspaceResult } from "./NewWorkspaceDialog";
+import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { buildNewWorkspaceWorktreeBranchName } from "../worktree";
 
 import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
@@ -102,14 +97,12 @@ import {
 } from "./desktopUpdate.logic";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
-import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarHeader,
-  SidebarMenuAction,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -138,10 +131,10 @@ import {
 } from "./Sidebar.logic";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
+import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import { useSidebarWorkspaceSummaryById } from "../storeSelectors";
-import type { Project, SidebarWorkspaceSummary } from "../types";
+import type { Project, ProjectScript, SidebarWorkspaceSummary } from "../types";
 import type { WorkspaceStatusPill } from "./Sidebar.logic";
 const WORKSPACE_PREVIEW_LIMIT = 6;
 
@@ -166,15 +159,6 @@ function collectWorkspaceStatusPills(
   }
   return statuses;
 }
-const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
-  updated_at: "Last user message",
-  created_at: "Created at",
-  manual: "Manual",
-};
-const SIDEBAR_WORKSPACE_SORT_LABELS: Record<SidebarWorkspaceSortOrder, string> = {
-  updated_at: "Last user message",
-  created_at: "Created at",
-};
 const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
   easing: "ease-out",
@@ -628,75 +612,6 @@ type SortableProjectHandleProps = Pick<
   "attributes" | "listeners" | "setActivatorNodeRef"
 >;
 
-function ProjectSortMenu({
-  projectSortOrder,
-  workspaceSortOrder,
-  onProjectSortOrderChange,
-  onWorkspaceSortOrderChange,
-}: {
-  projectSortOrder: SidebarProjectSortOrder;
-  workspaceSortOrder: SidebarWorkspaceSortOrder;
-  onProjectSortOrderChange: (sortOrder: SidebarProjectSortOrder) => void;
-  onWorkspaceSortOrderChange: (sortOrder: SidebarWorkspaceSortOrder) => void;
-}) {
-  return (
-    <Menu>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <MenuTrigger className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
-          }
-        >
-          <ArrowUpDownIcon className="size-3.5" />
-        </TooltipTrigger>
-        <TooltipPopup side="right">Sort projects</TooltipPopup>
-      </Tooltip>
-      <MenuPopup align="end" side="bottom" className="min-w-44">
-        <MenuGroup>
-          <div className="px-2 py-1 sm:text-xs font-medium text-muted-foreground">
-            Sort projects
-          </div>
-          <MenuRadioGroup
-            value={projectSortOrder}
-            onValueChange={(value) => {
-              onProjectSortOrderChange(value as SidebarProjectSortOrder);
-            }}
-          >
-            {(Object.entries(SIDEBAR_SORT_LABELS) as Array<[SidebarProjectSortOrder, string]>).map(
-              ([value, label]) => (
-                <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
-                  {label}
-                </MenuRadioItem>
-              ),
-            )}
-          </MenuRadioGroup>
-        </MenuGroup>
-        <MenuGroup>
-          <div className="px-2 pt-2 pb-1 sm:text-xs font-medium text-muted-foreground">
-            Sort workspaces
-          </div>
-          <MenuRadioGroup
-            value={workspaceSortOrder}
-            onValueChange={(value) => {
-              onWorkspaceSortOrderChange(value as SidebarWorkspaceSortOrder);
-            }}
-          >
-            {(
-              Object.entries(SIDEBAR_WORKSPACE_SORT_LABELS) as Array<
-                [SidebarWorkspaceSortOrder, string]
-              >
-            ).map(([value, label]) => (
-              <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
-                {label}
-              </MenuRadioItem>
-            ))}
-          </MenuRadioGroup>
-        </MenuGroup>
-      </MenuPopup>
-    </Menu>
-  );
-}
-
 function SortableProjectItem({
   projectId,
   disabled = false,
@@ -767,7 +682,6 @@ export default function Sidebar() {
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const isOnSettings = pathname.startsWith("/settings");
   const appSettings = useSettings();
-  const { updateSettings } = useUpdateSettings();
   const { handleNewWorkspace } = useHandleNewWorkspace();
   const { archiveWorkspace, deleteWorkspace } = useWorkspaceActions();
   const routeWorkspaceId = useParams({
@@ -788,6 +702,7 @@ export default function Sidebar() {
   const [newWorkspaceDialogProjectId, setNewWorkspaceDialogProjectId] = useState<ProjectId | null>(
     null,
   );
+  const [settingsDialogProjectId, setSettingsDialogProjectId] = useState<ProjectId | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<WorkspaceId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const [confirmingArchiveWorkspaceId, setConfirmingArchiveWorkspaceId] =
@@ -1163,6 +1078,24 @@ export default function Sidebar() {
     ? projects.find((p) => p.id === newWorkspaceDialogProjectId)
     : null;
 
+  const settingsDialogProject = settingsDialogProjectId
+    ? projects.find((p) => p.id === settingsDialogProjectId)
+    : null;
+
+  const handleProjectSettingsSave = useCallback(
+    async (projectId: ProjectId, scripts: ProjectScript[]) => {
+      const api = readNativeApi();
+      if (!api) return;
+      await api.orchestration.dispatchCommand({
+        type: "project.meta.update",
+        commandId: newCommandId(),
+        projectId,
+        scripts,
+      });
+    },
+    [],
+  );
+
   const handleStartAddProject = () => {
     setAddProjectError(null);
     if (shouldBrowseForProjectImmediately) {
@@ -1461,11 +1394,17 @@ export default function Sidebar() {
 
       const clicked = await api.contextMenu.show(
         [
+          { id: "new-workspace", label: "New Workspace" },
+          { id: "separator", label: "-" },
           { id: "copy-path", label: "Copy Project Path" },
           { id: "delete", label: "Remove project", destructive: true },
         ],
         position,
       );
+      if (clicked === "new-workspace") {
+        setNewWorkspaceDialogProjectId(projectId);
+        return;
+      }
       if (clicked === "copy-path") {
         copyPathToClipboard(project.cwd, { path: project.cwd });
         return;
@@ -1891,35 +1830,52 @@ export default function Sidebar() {
               {project.name}
             </span>
           </SidebarMenuButton>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <SidebarMenuAction
-                  render={
-                    <button
-                      type="button"
-                      aria-label={`Create new workspace in ${project.name}`}
-                      data-testid="new-workspace-button"
-                    />
-                  }
-                  showOnHover
-                  className="top-1 right-1.5 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setNewWorkspaceDialogProjectId(project.id);
-                  }}
-                >
-                  <SquarePenIcon className="size-3.5" />
-                </SidebarMenuAction>
-              }
-            />
-            <TooltipPopup side="top">
-              {newWorkspaceShortcutLabel
-                ? `New workspace (${newWorkspaceShortcutLabel})`
-                : "New workspace"}
-            </TooltipPopup>
-          </Tooltip>
+          <div className="absolute top-1 right-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/project-header:opacity-100 group-hover/project-header:opacity-100">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`Settings for ${project.name}`}
+                    data-testid="project-settings-button"
+                    className="flex size-5 items-center justify-center rounded-md p-0 text-muted-foreground/40 transition-colors hover:bg-secondary hover:text-foreground"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setSettingsDialogProjectId(project.id);
+                    }}
+                  />
+                }
+              >
+                <SettingsIcon className="size-3" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">Project settings</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`Create new workspace in ${project.name}`}
+                    data-testid="new-workspace-button"
+                    className="flex size-5 items-center justify-center rounded-md p-0 text-muted-foreground/40 transition-colors hover:bg-secondary hover:text-foreground"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setNewWorkspaceDialogProjectId(project.id);
+                    }}
+                  />
+                }
+              >
+                <PlusIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {newWorkspaceShortcutLabel
+                  ? `New workspace (${newWorkspaceShortcutLabel})`
+                  : "New workspace"}
+              </TooltipPopup>
+            </Tooltip>
+          </div>
         </div>
 
         <SidebarMenuSub
@@ -1928,12 +1884,16 @@ export default function Sidebar() {
         >
           {shouldShowWorkspacePanel && showEmptyWorkspaceState ? (
             <SidebarMenuSubItem className="w-full" data-workspace-selection-safe>
-              <div
+              <button
+                type="button"
                 data-workspace-selection-safe
-                className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60"
+                className="flex h-6 w-full translate-x-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-[10px] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-muted-foreground"
+                onClick={() => setNewWorkspaceDialogProjectId(project.id)}
+                aria-label={`Create first workspace in ${project.name}`}
               >
-                <span>No workspaces yet</span>
-              </div>
+                <PlusIcon className="size-3 shrink-0" />
+                <span>New workspace</span>
+              </button>
             </SidebarMenuSubItem>
           ) : null}
           {shouldShowWorkspacePanel &&
@@ -2278,53 +2238,20 @@ export default function Sidebar() {
               </SidebarGroup>
             ) : null}
             <SidebarGroup className="px-2 py-2">
-              <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  Projects
-                </span>
-                <div className="flex items-center gap-1">
-                  <ProjectSortMenu
-                    projectSortOrder={appSettings.sidebarProjectSortOrder}
-                    workspaceSortOrder={appSettings.sidebarWorkspaceSortOrder}
-                    onProjectSortOrderChange={(sortOrder) => {
-                      updateSettings({ sidebarProjectSortOrder: sortOrder });
-                    }}
-                    onWorkspaceSortOrderChange={(sortOrder) => {
-                      updateSettings({ sidebarWorkspaceSortOrder: sortOrder });
-                    }}
-                  />
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label={
-                            shouldShowProjectPathEntry ? "Cancel add project" : "Add project"
-                          }
-                          aria-pressed={shouldShowProjectPathEntry}
-                          className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                          onClick={handleStartAddProject}
-                        />
-                      }
-                    >
-                      <PlusIcon
-                        className={`size-3.5 transition-transform duration-150 ${
-                          shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
-                        }`}
-                      />
-                    </TooltipTrigger>
-                    <TooltipPopup side="right">
-                      {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
-                    </TooltipPopup>
-                  </Tooltip>
-                </div>
-              </div>
+              <button
+                type="button"
+                className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                onClick={handleStartAddProject}
+              >
+                <PlusIcon className="size-3.5" />
+                Add project
+              </button>
               {shouldShowProjectPathEntry && (
-                <div className="mb-2 px-1">
+                <div className="mb-2 space-y-1.5 px-1">
                   {isElectron && (
                     <button
                       type="button"
-                      className="mb-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={() => void handlePickFolder()}
                       disabled={isPickingFolder || isAddingProject}
                     >
@@ -2335,12 +2262,12 @@ export default function Sidebar() {
                   <div className="flex gap-1.5">
                     <input
                       ref={addProjectInputRef}
-                      className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
+                      className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
                         addProjectError
                           ? "border-red-500/70 focus:border-red-500"
                           : "border-border focus:border-ring"
                       }`}
-                      placeholder="/path/to/project"
+                      placeholder="/path/to/repo"
                       value={newCwd}
                       onChange={(event) => {
                         setNewCwd(event.target.value);
@@ -2357,7 +2284,7 @@ export default function Sidebar() {
                     />
                     <button
                       type="button"
-                      className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
+                      className="shrink-0 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
                       onClick={handleAddProject}
                       disabled={!canAddProject}
                     >
@@ -2365,7 +2292,7 @@ export default function Sidebar() {
                     </button>
                   </div>
                   {addProjectError && (
-                    <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">
+                    <p className="px-0.5 text-[11px] leading-tight text-red-400">
                       {addProjectError}
                     </p>
                   )}
@@ -2406,12 +2333,6 @@ export default function Sidebar() {
                   ))}
                 </SidebarMenu>
               )}
-
-              {projects.length === 0 && !shouldShowProjectPathEntry && (
-                <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
-                  No projects yet
-                </div>
-              )}
             </SidebarGroup>
           </SidebarContent>
 
@@ -2441,6 +2362,16 @@ export default function Sidebar() {
           if (!open) setNewWorkspaceDialogProjectId(null);
         }}
         onConfirm={handleNewWorkspaceDialogConfirm}
+      />
+      <ProjectSettingsDialog
+        open={settingsDialogProjectId !== null}
+        projectId={settingsDialogProjectId}
+        projectName={settingsDialogProject?.name ?? null}
+        scripts={settingsDialogProject?.scripts ?? []}
+        onOpenChange={(open) => {
+          if (!open) setSettingsDialogProjectId(null);
+        }}
+        onSave={handleProjectSettingsSave}
       />
     </>
   );
