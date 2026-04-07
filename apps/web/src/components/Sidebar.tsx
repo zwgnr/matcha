@@ -2164,9 +2164,11 @@ export default function Sidebar() {
               to="/"
             >
               <MatchaWordmark />
-              <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
-                {APP_STAGE_LABEL}
-              </span>
+              {APP_STAGE_LABEL && (
+                <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+                  {APP_STAGE_LABEL}
+                </span>
+              )}
             </Link>
           }
         />
