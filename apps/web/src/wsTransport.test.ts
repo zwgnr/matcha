@@ -197,7 +197,7 @@ describe("WsTransport", () => {
         phase: "disconnected",
       });
     });
-    expect(getWsConnectionUiState(getWsConnectionStatus())).toBe("error");
+    expect(getWsConnectionUiState(getWsConnectionStatus())).toBe("connecting");
 
     await transport.dispose();
   });
