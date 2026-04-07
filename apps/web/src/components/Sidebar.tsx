@@ -44,6 +44,7 @@ import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_RUNTIME_MODE,
   type DesktopUpdateState,
   ProjectId,
   ThreadId,
@@ -58,7 +59,13 @@ import {
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
+import {
+  isLinuxPlatform,
+  isMacPlatform,
+  newCommandId,
+  newProjectId,
+  newThreadId,
+} from "../lib/utils";
 import { useStore } from "../store";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
@@ -74,6 +81,7 @@ import { gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { NewThreadDialog, type NewThreadResult } from "./NewThreadDialog";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import { toastManager } from "./ui/toast";
@@ -108,7 +116,7 @@ import {
   SidebarTrigger,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
-import { useWorkspaceTabStore } from "../threadTabStore";
+import { makeProviderTab, useWorkspaceTabStore } from "../threadTabStore";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
   getVisibleSidebarThreadIds,
@@ -116,8 +124,6 @@ import {
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
-  resolveSidebarNewThreadSeedContext,
-  resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   orderItemsByPreferredIds,
@@ -694,7 +700,7 @@ export default function Sidebar() {
   const isOnSettings = pathname.startsWith("/settings");
   const appSettings = useSettings();
   const { updateSettings } = useUpdateSettings();
-  const { activeDraftThread, activeThread, handleNewThread } = useHandleNewThread();
+  const { handleNewThread } = useHandleNewThread();
   const { archiveThread, deleteThread } = useThreadActions();
   const routeThreadId = useParams({
     strict: false,
@@ -710,6 +716,7 @@ export default function Sidebar() {
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [addProjectError, setAddProjectError] = useState<string | null>(null);
   const addProjectInputRef = useRef<HTMLInputElement | null>(null);
+  const [newThreadDialogProjectId, setNewThreadDialogProjectId] = useState<ProjectId | null>(null);
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<ThreadId | null>(null);
@@ -989,6 +996,61 @@ export default function Sidebar() {
     }
     setIsPickingFolder(false);
   };
+
+  const handleNewThreadDialogConfirm = useCallback(
+    async (result: NewThreadResult) => {
+      const api = readNativeApi();
+      if (!api) return;
+
+      const store = useComposerDraftStore.getState();
+      const threadId = newThreadId();
+      const createdAt = new Date().toISOString();
+      const title = result.name || "New workspace";
+      const modelSelection = { provider: result.provider, model: result.model };
+
+      // Create the thread server-side so it appears in the sidebar immediately.
+      await api.orchestration.dispatchCommand({
+        type: "thread.create",
+        commandId: newCommandId(),
+        threadId,
+        projectId: result.projectId,
+        title,
+        modelSelection,
+        runtimeMode: DEFAULT_RUNTIME_MODE,
+        interactionMode: "default",
+        branch: result.branch,
+        worktreePath: null,
+        createdAt,
+      });
+
+      // Set up the client-side draft so the composer is ready.
+      store.upsertDraftThread(threadId, {
+        projectId: result.projectId,
+        createdAt,
+        branch: result.branch,
+        worktreePath: null,
+        envMode: appSettings.defaultThreadEnvMode,
+        runtimeMode: DEFAULT_RUNTIME_MODE,
+      });
+      store.setModelSelection(threadId, modelSelection);
+      store.applyStickyState(threadId);
+
+      // Initialize workspace tabs with the selected provider tab.
+      const { getOrInitTabs, addTab } = useWorkspaceTabStore.getState();
+      getOrInitTabs(threadId);
+      addTab(threadId, makeProviderTab(result.provider, threadId));
+
+      await navigate({
+        to: "/$threadId",
+        params: { threadId },
+      });
+    },
+    [appSettings.defaultThreadEnvMode, navigate],
+  );
+
+  const newThreadDialogProject = newThreadDialogProjectId
+    ? projects.find((p) => p.id === newThreadDialogProjectId)
+    : null;
 
   const handleStartAddProject = () => {
     setAddProjectError(null);
@@ -1700,36 +1762,7 @@ export default function Sidebar() {
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    const seedContext = resolveSidebarNewThreadSeedContext({
-                      projectId: project.id,
-                      defaultEnvMode: resolveSidebarNewThreadEnvMode({
-                        defaultEnvMode: appSettings.defaultThreadEnvMode,
-                      }),
-                      activeThread:
-                        activeThread && activeThread.projectId === project.id
-                          ? {
-                              projectId: activeThread.projectId,
-                              branch: activeThread.branch,
-                              worktreePath: activeThread.worktreePath,
-                            }
-                          : null,
-                      activeDraftThread:
-                        activeDraftThread && activeDraftThread.projectId === project.id
-                          ? {
-                              projectId: activeDraftThread.projectId,
-                              branch: activeDraftThread.branch,
-                              worktreePath: activeDraftThread.worktreePath,
-                              envMode: activeDraftThread.envMode,
-                            }
-                          : null,
-                    });
-                    void handleNewThread(project.id, {
-                      ...(seedContext.branch !== undefined ? { branch: seedContext.branch } : {}),
-                      ...(seedContext.worktreePath !== undefined
-                        ? { worktreePath: seedContext.worktreePath }
-                        : {}),
-                      envMode: seedContext.envMode,
-                    });
+                    setNewThreadDialogProjectId(project.id);
                   }}
                 >
                   <SquarePenIcon className="size-3.5" />
@@ -2228,6 +2261,15 @@ export default function Sidebar() {
           </SidebarFooter>
         </>
       )}
+      <NewThreadDialog
+        open={newThreadDialogProjectId !== null}
+        projectId={newThreadDialogProjectId}
+        projectName={newThreadDialogProject?.name ?? null}
+        onOpenChange={(open) => {
+          if (!open) setNewThreadDialogProjectId(null);
+        }}
+        onConfirm={handleNewThreadDialogConfirm}
+      />
     </>
   );
 }
