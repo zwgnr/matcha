@@ -97,6 +97,7 @@ let backendWsUrl = "";
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
+let downloadedUpdateZipPath: string | null = null;
 let desktopProtocolRegistered = false;
 let aboutCommitHashCache: string | null | undefined;
 let desktopLogSink: RotatingFileSink | null = null;
@@ -887,18 +888,20 @@ async function installDownloadedUpdate(): Promise<{ accepted: boolean; completed
   updateInstallInFlight = true;
   clearUpdatePollTimer();
   try {
-    await stopBackendAndWaitForExit();
-    // NSIS is sensitive to live app windows during handoff. Squirrel.Mac is not.
-    if (process.platform === "win32") {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.destroy();
+    if (process.platform === "darwin" && downloadedUpdateZipPath) {
+      // Bypass Squirrel.Mac (requires code signing) by extracting the
+      // app.asar from the downloaded ZIP and replacing it in-place.
+      await installUpdateByAsarReplace(downloadedUpdateZipPath);
+    } else {
+      await stopBackendAndWaitForExit();
+      if (process.platform === "win32") {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.destroy();
+        }
       }
+      armInstallLaunchTimeout();
+      autoUpdater.quitAndInstall(true, true);
     }
-    // `quitAndInstall()` only starts the handoff to the updater. The actual
-    // install may still fail asynchronously, so keep the action incomplete
-    // until we either quit or receive an updater error.
-    armInstallLaunchTimeout();
-    autoUpdater.quitAndInstall(true, true);
     return { accepted: true, completed: false };
   } catch (error: unknown) {
     const message = formatErrorMessage(error);
@@ -909,6 +912,56 @@ async function installDownloadedUpdate(): Promise<{ accepted: boolean; completed
     console.error(`[desktop-updater] Failed to install update: ${message}`);
     return { accepted: true, completed: false };
   }
+}
+
+async function installUpdateByAsarReplace(zipPath: string): Promise<void> {
+  const tmpDir = Path.join(OS.tmpdir(), `matcha-update-${Date.now()}`);
+  console.info(`[desktop-updater] Extracting update ZIP to ${tmpDir}`);
+
+  // Unzip the downloaded update
+  await new Promise<void>((resolve, reject) => {
+    const proc = ChildProcess.spawn("ditto", ["-xk", zipPath, tmpDir]);
+    proc.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`ditto exit code ${code}`)),
+    );
+    proc.on("error", reject);
+  });
+
+  // Find the app.asar in the extracted .app bundle
+  const extractedEntries = FS.readdirSync(tmpDir);
+  const appBundle = extractedEntries.find((e) => e.endsWith(".app"));
+  if (!appBundle) {
+    throw new Error(`No .app bundle found in update ZIP (contents: ${extractedEntries.join(", ")})`);
+  }
+  const newAsar = Path.join(tmpDir, appBundle, "Contents", "Resources", "app.asar");
+  if (!FS.existsSync(newAsar)) {
+    throw new Error(`app.asar not found at ${newAsar}`);
+  }
+
+  // Replace the current app.asar and app.asar.unpacked
+  const currentAsar = Path.join(process.resourcesPath, "app.asar");
+  const currentUnpacked = Path.join(process.resourcesPath, "app.asar.unpacked");
+  const newUnpacked = Path.join(tmpDir, appBundle, "Contents", "Resources", "app.asar.unpacked");
+  console.info(`[desktop-updater] Replacing ${currentAsar}`);
+
+  await stopBackendAndWaitForExit();
+
+  // Replace app.asar
+  const backupAsar = `${currentAsar}.bak`;
+  if (FS.existsSync(backupAsar)) FS.unlinkSync(backupAsar);
+  FS.renameSync(currentAsar, backupAsar);
+  FS.copyFileSync(newAsar, currentAsar);
+  FS.unlinkSync(backupAsar);
+
+  // Replace app.asar.unpacked if present in both
+  if (FS.existsSync(newUnpacked) && FS.existsSync(currentUnpacked)) {
+    FS.rmSync(currentUnpacked, { recursive: true, force: true });
+    FS.cpSync(newUnpacked, currentUnpacked, { recursive: true });
+  }
+
+  console.info("[desktop-updater] app.asar replaced, relaunching");
+  app.relaunch();
+  app.exit(0);
 }
 
 function configureAutoUpdater(): void {
@@ -948,7 +1001,7 @@ function configureAutoUpdater(): void {
   }
 
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = false;
   // Keep alpha branding, but force all installs onto the stable update track.
   autoUpdater.channel = DESKTOP_UPDATE_CHANNEL;
   autoUpdater.allowPrerelease = DESKTOP_UPDATE_ALLOW_PRERELEASE;
@@ -1018,8 +1071,9 @@ function configureAutoUpdater(): void {
     }
   });
   autoUpdater.on("update-downloaded", (info) => {
+    downloadedUpdateZipPath = (info as any).downloadedFile ?? null;
     setUpdateState(reduceDesktopUpdateStateOnDownloadComplete(updateState, info.version));
-    console.info(`[desktop-updater] Update downloaded: ${info.version}`);
+    console.info(`[desktop-updater] Update downloaded: ${info.version} path=${downloadedUpdateZipPath}`);
   });
 
   clearUpdatePollTimer();
