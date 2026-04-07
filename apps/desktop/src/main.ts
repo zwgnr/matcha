@@ -1473,7 +1473,7 @@ app
     });
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
+      if (!isQuitting && BrowserWindow.getAllWindows().length === 0) {
         mainWindow = createWindow();
       }
     });
