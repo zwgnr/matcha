@@ -1,6 +1,8 @@
 import * as ChildProcess from "node:child_process";
 import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const originalFs = require("original-fs") as typeof FS;
 import * as OS from "node:os";
 import * as Path from "node:path";
 
@@ -927,37 +929,44 @@ async function installUpdateByAsarReplace(zipPath: string): Promise<void> {
     proc.on("error", reject);
   });
 
-  // Find the app.asar in the extracted .app bundle
-  const extractedEntries = FS.readdirSync(tmpDir);
+  // Use original-fs to bypass Electron's ASAR interception — without this,
+  // Electron treats paths containing "app.asar" as archive lookups and fails.
+  const extractedEntries = originalFs.readdirSync(tmpDir);
   const appBundle = extractedEntries.find((e) => e.endsWith(".app"));
   if (!appBundle) {
     throw new Error(`No .app bundle found in update ZIP (contents: ${extractedEntries.join(", ")})`);
   }
-  const newAsar = Path.join(tmpDir, appBundle, "Contents", "Resources", "app.asar");
-  if (!FS.existsSync(newAsar)) {
-    throw new Error(`app.asar not found at ${newAsar}`);
+  const resourcesDir = Path.join(tmpDir, appBundle, "Contents", "Resources");
+  const newAsar = Path.join(resourcesDir, "app.asar");
+  if (!originalFs.existsSync(newAsar)) {
+    const entries = originalFs.existsSync(resourcesDir)
+      ? originalFs.readdirSync(resourcesDir).join(", ")
+      : "(dir missing)";
+    throw new Error(`app.asar not found at ${newAsar} (resources: ${entries})`);
   }
 
-  // Replace the current app.asar and app.asar.unpacked
   const currentAsar = Path.join(process.resourcesPath, "app.asar");
   const currentUnpacked = Path.join(process.resourcesPath, "app.asar.unpacked");
-  const newUnpacked = Path.join(tmpDir, appBundle, "Contents", "Resources", "app.asar.unpacked");
+  const newUnpacked = Path.join(resourcesDir, "app.asar.unpacked");
   console.info(`[desktop-updater] Replacing ${currentAsar}`);
 
   await stopBackendAndWaitForExit();
 
   // Replace app.asar
   const backupAsar = `${currentAsar}.bak`;
-  if (FS.existsSync(backupAsar)) FS.unlinkSync(backupAsar);
-  FS.renameSync(currentAsar, backupAsar);
-  FS.copyFileSync(newAsar, currentAsar);
-  FS.unlinkSync(backupAsar);
+  if (originalFs.existsSync(backupAsar)) originalFs.unlinkSync(backupAsar);
+  originalFs.renameSync(currentAsar, backupAsar);
+  originalFs.copyFileSync(newAsar, currentAsar);
+  originalFs.unlinkSync(backupAsar);
 
   // Replace app.asar.unpacked if present in both
-  if (FS.existsSync(newUnpacked) && FS.existsSync(currentUnpacked)) {
-    FS.rmSync(currentUnpacked, { recursive: true, force: true });
-    FS.cpSync(newUnpacked, currentUnpacked, { recursive: true });
+  if (originalFs.existsSync(newUnpacked) && originalFs.existsSync(currentUnpacked)) {
+    originalFs.rmSync(currentUnpacked, { recursive: true, force: true });
+    originalFs.cpSync(newUnpacked, currentUnpacked, { recursive: true });
   }
+
+  // Clean up
+  originalFs.rmSync(tmpDir, { recursive: true, force: true });
 
   console.info("[desktop-updater] app.asar replaced, relaunching");
   app.relaunch();
