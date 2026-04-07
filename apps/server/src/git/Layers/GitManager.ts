@@ -1328,23 +1328,23 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     },
   );
 
-  const preparePullRequestThread: GitManagerShape["preparePullRequestThread"] = Effect.fn(
-    "preparePullRequestThread",
+  const preparePullRequestWorkspace: GitManagerShape["preparePullRequestWorkspace"] = Effect.fn(
+    "preparePullRequestWorkspace",
   )(function* (input) {
     const maybeRunSetupScript = (worktreePath: string) => {
-      if (!input.threadId) {
+      if (!input.workspaceId) {
         return Effect.void;
       }
       return projectSetupScriptRunner
-        .runForThread({
-          threadId: input.threadId,
+        .runForWorkspace({
+          workspaceId: input.workspaceId,
           projectCwd: input.cwd,
           worktreePath,
         })
         .pipe(
           Effect.catch((error) =>
             Effect.logWarning(
-              `GitManager.preparePullRequestThread: failed to launch worktree setup script for thread ${input.threadId} in ${worktreePath}: ${error.message}`,
+              `GitManager.preparePullRequestWorkspace: failed to launch worktree setup script for workspace ${input.workspaceId} in ${worktreePath}: ${error.message}`,
             ).pipe(Effect.asVoid),
           ),
         );
@@ -1442,8 +1442,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       }
       if (existingBranchBeforeFetchPath === rootWorktreePath) {
         return yield* gitManagerError(
-          "preparePullRequestThread",
-          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree thread.",
+          "preparePullRequestWorkspace",
+          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree workspace.",
         );
       }
 
@@ -1470,8 +1470,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       }
       if (existingBranchAfterFetchPath === rootWorktreePath) {
         return yield* gitManagerError(
-          "preparePullRequestThread",
-          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree thread.",
+          "preparePullRequestWorkspace",
+          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree workspace.",
         );
       }
 
@@ -1709,7 +1709,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   return {
     status,
     resolvePullRequest,
-    preparePullRequestThread,
+    preparePullRequestWorkspace,
     runStackedAction,
   } satisfies GitManagerShape;
 });

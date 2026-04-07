@@ -173,17 +173,17 @@ export function buildBranchNamePrompt(input: BranchNamePromptInput) {
 }
 
 // ---------------------------------------------------------------------------
-// Thread title
+// Workspace title
 // ---------------------------------------------------------------------------
 
-export interface ThreadTitlePromptInput {
+export interface WorkspaceTitlePromptInput {
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
 }
 
-export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
+export function buildWorkspaceTitlePrompt(input: WorkspaceTitlePromptInput) {
   const prompt = buildPromptFromMessage({
-    instruction: "You write concise thread titles for coding conversations.",
+    instruction: "You write concise workspace titles for coding conversations.",
     responseShape: "Return a JSON object with key: title.",
     rules: [
       "Title should summarize the user's request, not restate it verbatim.",

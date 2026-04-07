@@ -4,7 +4,7 @@ import {
   type ProviderKind,
   type ProviderModelOptions,
   type ServerProviderModel,
-  type ThreadId,
+  type WorkspaceId,
 } from "@matcha/contracts";
 import {
   applyClaudePromptEffortPrefix,
@@ -35,11 +35,11 @@ import { cn } from "~/lib/utils";
 type ProviderOptions = ProviderModelOptions[ProviderKind];
 type TraitsPersistence =
   | {
-      threadId: ThreadId;
+      workspaceId: WorkspaceId;
       onModelOptionsChange?: never;
     }
   | {
-      threadId?: undefined;
+      workspaceId?: undefined;
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
@@ -167,7 +167,9 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         persistence.onModelOptionsChange(nextOptions);
         return;
       }
-      setProviderModelOptions(persistence.threadId, provider, nextOptions, { persistSticky: true });
+      setProviderModelOptions(persistence.workspaceId, provider, nextOptions, {
+        persistSticky: true,
+      });
     },
     [persistence, provider, setProviderModelOptions],
   );

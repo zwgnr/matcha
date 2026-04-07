@@ -3,7 +3,7 @@ import {
   IsoDateTime,
   NonNegativeInt,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   TrimmedNonEmptyString,
 } from "./baseSchemas";
 import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings";
@@ -182,7 +182,7 @@ export const ServerLifecycleWelcomePayload = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   projectName: TrimmedNonEmptyString,
   bootstrapProjectId: Schema.optional(ProjectId),
-  bootstrapThreadId: Schema.optional(ThreadId),
+  bootstrapWorkspaceId: Schema.optional(WorkspaceId),
 });
 export type ServerLifecycleWelcomePayload = typeof ServerLifecycleWelcomePayload.Type;
 

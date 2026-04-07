@@ -1,26 +1,30 @@
 import * as React from "react";
-import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@matcha/contracts/settings";
-import type { SidebarThreadSummary, Thread } from "../types";
+import type {
+  SidebarProjectSortOrder,
+  SidebarWorkspaceSortOrder,
+} from "@matcha/contracts/settings";
+import type { SidebarWorkspaceSummary, Workspace } from "../types";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
 
-export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
-export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 100;
-export type SidebarNewThreadEnvMode = "local" | "worktree";
+export const WORKSPACE_SELECTION_SAFE_SELECTOR =
+  "[data-workspace-item], [data-workspace-selection-safe]";
+export const WORKSPACE_JUMP_HINT_SHOW_DELAY_MS = 100;
+export type SidebarNewWorkspaceEnvMode = "local" | "worktree";
 type SidebarProject = {
   id: string;
   name: string;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
 };
-type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt"> & {
+type SidebarWorkspaceSortInput = Pick<Workspace, "createdAt" | "updatedAt"> & {
   latestUserMessageAt?: string | null;
-  messages?: Pick<Thread["messages"][number], "createdAt" | "role">[];
+  messages?: Pick<Workspace["messages"][number], "createdAt" | "role">[];
 };
 
-export type ThreadTraversalDirection = "previous" | "next";
+export type WorkspaceTraversalDirection = "previous" | "next";
 
-export interface ThreadStatusPill {
+export interface WorkspaceStatusPill {
   label:
     | "Working"
     | "Connecting"
@@ -33,7 +37,7 @@ export interface ThreadStatusPill {
   pulse: boolean;
 }
 
-const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
+const WORKSPACE_STATUS_PRIORITY: Record<WorkspaceStatusPill["label"], number> = {
   "Pending Approval": 5,
   "Awaiting Input": 4,
   Working: 3,
@@ -42,8 +46,8 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Completed: 1,
 };
 
-type ThreadStatusInput = Pick<
-  SidebarThreadSummary,
+type WorkspaceStatusInput = Pick<
+  SidebarWorkspaceSummary,
   | "hasActionableProposedPlan"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
@@ -54,17 +58,17 @@ type ThreadStatusInput = Pick<
   lastVisitedAt?: string | undefined;
 };
 
-export interface ThreadJumpHintVisibilityController {
+export interface WorkspaceJumpHintVisibilityController {
   sync: (shouldShow: boolean) => void;
   dispose: () => void;
 }
 
-export function createThreadJumpHintVisibilityController(input: {
+export function createWorkspaceJumpHintVisibilityController(input: {
   delayMs: number;
   onVisibilityChange: (visible: boolean) => void;
   setTimeoutFn?: typeof globalThis.setTimeout;
   clearTimeoutFn?: typeof globalThis.clearTimeout;
-}): ThreadJumpHintVisibilityController {
+}): WorkspaceJumpHintVisibilityController {
   const setTimeoutFn = input.setTimeoutFn ?? globalThis.setTimeout;
   const clearTimeoutFn = input.clearTimeoutFn ?? globalThis.clearTimeout;
   let isVisible = false;
@@ -105,18 +109,18 @@ export function createThreadJumpHintVisibilityController(input: {
   };
 }
 
-export function useThreadJumpHintVisibility(): {
-  showThreadJumpHints: boolean;
-  updateThreadJumpHintsVisibility: (shouldShow: boolean) => void;
+export function useWorkspaceJumpHintVisibility(): {
+  showWorkspaceJumpHints: boolean;
+  updateWorkspaceJumpHintsVisibility: (shouldShow: boolean) => void;
 } {
-  const [showThreadJumpHints, setShowThreadJumpHints] = React.useState(false);
-  const controllerRef = React.useRef<ThreadJumpHintVisibilityController | null>(null);
+  const [showWorkspaceJumpHints, setShowWorkspaceJumpHints] = React.useState(false);
+  const controllerRef = React.useRef<WorkspaceJumpHintVisibilityController | null>(null);
 
   React.useEffect(() => {
-    const controller = createThreadJumpHintVisibilityController({
-      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+    const controller = createWorkspaceJumpHintVisibilityController({
+      delayMs: WORKSPACE_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
-        setShowThreadJumpHints(visible);
+        setShowWorkspaceJumpHints(visible);
       },
       setTimeoutFn: window.setTimeout.bind(window),
       clearTimeoutFn: window.clearTimeout.bind(window),
@@ -129,71 +133,71 @@ export function useThreadJumpHintVisibility(): {
     };
   }, []);
 
-  const updateThreadJumpHintsVisibility = React.useCallback((shouldShow: boolean) => {
+  const updateWorkspaceJumpHintsVisibility = React.useCallback((shouldShow: boolean) => {
     controllerRef.current?.sync(shouldShow);
   }, []);
 
   return {
-    showThreadJumpHints,
-    updateThreadJumpHintsVisibility,
+    showWorkspaceJumpHints,
+    updateWorkspaceJumpHintsVisibility,
   };
 }
 
-export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
-  if (!thread.latestTurn?.completedAt) return false;
-  const completedAt = Date.parse(thread.latestTurn.completedAt);
+export function hasUnseenCompletion(workspace: WorkspaceStatusInput): boolean {
+  if (!workspace.latestTurn?.completedAt) return false;
+  const completedAt = Date.parse(workspace.latestTurn.completedAt);
   if (Number.isNaN(completedAt)) return false;
-  if (!thread.lastVisitedAt) return true;
+  if (!workspace.lastVisitedAt) return true;
 
-  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
+  const lastVisitedAt = Date.parse(workspace.lastVisitedAt);
   if (Number.isNaN(lastVisitedAt)) return true;
   return completedAt > lastVisitedAt;
 }
 
-export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
+export function shouldClearWorkspaceSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
-  return !target.closest(THREAD_SELECTION_SAFE_SELECTOR);
+  return !target.closest(WORKSPACE_SELECTION_SAFE_SELECTOR);
 }
 
-export function resolveSidebarNewThreadEnvMode(input: {
-  requestedEnvMode?: SidebarNewThreadEnvMode;
-  defaultEnvMode: SidebarNewThreadEnvMode;
-}): SidebarNewThreadEnvMode {
+export function resolveSidebarNewWorkspaceEnvMode(input: {
+  requestedEnvMode?: SidebarNewWorkspaceEnvMode;
+  defaultEnvMode: SidebarNewWorkspaceEnvMode;
+}): SidebarNewWorkspaceEnvMode {
   return input.requestedEnvMode ?? input.defaultEnvMode;
 }
 
-export function resolveSidebarNewThreadSeedContext(input: {
+export function resolveSidebarNewWorkspaceSeedContext(input: {
   projectId: string;
-  defaultEnvMode: SidebarNewThreadEnvMode;
-  activeThread?: {
+  defaultEnvMode: SidebarNewWorkspaceEnvMode;
+  activeWorkspace?: {
     projectId: string;
     branch: string | null;
     worktreePath: string | null;
   } | null;
-  activeDraftThread?: {
+  activeDraftWorkspace?: {
     projectId: string;
     branch: string | null;
     worktreePath: string | null;
-    envMode: SidebarNewThreadEnvMode;
+    envMode: SidebarNewWorkspaceEnvMode;
   } | null;
 }): {
   branch?: string | null;
   worktreePath?: string | null;
-  envMode: SidebarNewThreadEnvMode;
+  envMode: SidebarNewWorkspaceEnvMode;
 } {
-  if (input.activeDraftThread?.projectId === input.projectId) {
+  if (input.activeDraftWorkspace?.projectId === input.projectId) {
     return {
-      branch: input.activeDraftThread.branch,
-      worktreePath: input.activeDraftThread.worktreePath,
-      envMode: input.activeDraftThread.envMode,
+      branch: input.activeDraftWorkspace.branch,
+      worktreePath: input.activeDraftWorkspace.worktreePath,
+      envMode: input.activeDraftWorkspace.envMode,
     };
   }
 
-  if (input.activeThread?.projectId === input.projectId) {
+  if (input.activeWorkspace?.projectId === input.projectId) {
     return {
-      branch: input.activeThread.branch,
-      worktreePath: input.activeThread.worktreePath,
-      envMode: input.activeThread.worktreePath ? "worktree" : "local",
+      branch: input.activeWorkspace.branch,
+      worktreePath: input.activeWorkspace.worktreePath,
+      envMode: input.activeWorkspace.worktreePath ? "worktree" : "local",
     };
   }
 
@@ -230,42 +234,42 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   return [...ordered, ...remaining];
 }
 
-export function getVisibleSidebarThreadIds<TThreadId>(
+export function getVisibleSidebarWorkspaceIds<TWorkspaceId>(
   renderedProjects: readonly {
-    shouldShowThreadPanel?: boolean;
-    renderedThreadIds: readonly TThreadId[];
+    shouldShowWorkspacePanel?: boolean;
+    renderedWorkspaceIds: readonly TWorkspaceId[];
   }[],
-): TThreadId[] {
+): TWorkspaceId[] {
   return renderedProjects.flatMap((renderedProject) =>
-    renderedProject.shouldShowThreadPanel === false ? [] : renderedProject.renderedThreadIds,
+    renderedProject.shouldShowWorkspacePanel === false ? [] : renderedProject.renderedWorkspaceIds,
   );
 }
 
-export function resolveAdjacentThreadId<T>(input: {
-  threadIds: readonly T[];
-  currentThreadId: T | null;
-  direction: ThreadTraversalDirection;
+export function resolveAdjacentWorkspaceId<T>(input: {
+  workspaceIds: readonly T[];
+  currentWorkspaceId: T | null;
+  direction: WorkspaceTraversalDirection;
 }): T | null {
-  const { currentThreadId, direction, threadIds } = input;
+  const { currentWorkspaceId, direction, workspaceIds } = input;
 
-  if (threadIds.length === 0) {
+  if (workspaceIds.length === 0) {
     return null;
   }
 
-  if (currentThreadId === null) {
-    return direction === "previous" ? (threadIds.at(-1) ?? null) : (threadIds[0] ?? null);
+  if (currentWorkspaceId === null) {
+    return direction === "previous" ? (workspaceIds.at(-1) ?? null) : (workspaceIds[0] ?? null);
   }
 
-  const currentIndex = threadIds.indexOf(currentThreadId);
+  const currentIndex = workspaceIds.indexOf(currentWorkspaceId);
   if (currentIndex === -1) {
     return null;
   }
 
   if (direction === "previous") {
-    return currentIndex > 0 ? (threadIds[currentIndex - 1] ?? null) : null;
+    return currentIndex > 0 ? (workspaceIds[currentIndex - 1] ?? null) : null;
   }
 
-  return currentIndex < threadIds.length - 1 ? (threadIds[currentIndex + 1] ?? null) : null;
+  return currentIndex < workspaceIds.length - 1 ? (workspaceIds[currentIndex + 1] ?? null) : null;
 }
 
 export function isContextMenuPointerDown(input: {
@@ -277,7 +281,7 @@ export function isContextMenuPointerDown(input: {
   return input.isMac && input.button === 0 && input.ctrlKey;
 }
 
-export function resolveThreadRowClassName(input: {
+export function resolveWorkspaceRowClassName(input: {
   isActive: boolean;
   isSelected: boolean;
 }): string {
@@ -308,12 +312,12 @@ export function resolveThreadRowClassName(input: {
   return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
 }
 
-export function resolveThreadStatusPill(input: {
-  thread: ThreadStatusInput;
-}): ThreadStatusPill | null {
-  const { thread } = input;
+export function resolveWorkspaceStatusPill(input: {
+  workspace: WorkspaceStatusInput;
+}): WorkspaceStatusPill | null {
+  const { workspace } = input;
 
-  if (thread.hasPendingApprovals) {
+  if (workspace.hasPendingApprovals) {
     return {
       label: "Pending Approval",
       colorClass: "text-amber-600 dark:text-amber-300/90",
@@ -322,7 +326,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.hasPendingUserInput) {
+  if (workspace.hasPendingUserInput) {
     return {
       label: "Awaiting Input",
       colorClass: "text-indigo-600 dark:text-indigo-300/90",
@@ -331,7 +335,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "running") {
+  if (workspace.session?.status === "running") {
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -340,7 +344,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "connecting") {
+  if (workspace.session?.status === "connecting") {
     return {
       label: "Connecting",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -350,10 +354,10 @@ export function resolveThreadStatusPill(input: {
   }
 
   const hasPlanReadyPrompt =
-    !thread.hasPendingUserInput &&
-    thread.interactionMode === "plan" &&
-    isLatestTurnSettled(thread.latestTurn, thread.session) &&
-    thread.hasActionableProposedPlan;
+    !workspace.hasPendingUserInput &&
+    workspace.interactionMode === "plan" &&
+    isLatestTurnSettled(workspace.latestTurn, workspace.session) &&
+    workspace.hasActionableProposedPlan;
   if (hasPlanReadyPrompt) {
     return {
       label: "Plan Ready",
@@ -363,7 +367,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (hasUnseenCompletion(thread)) {
+  if (hasUnseenCompletion(workspace)) {
     return {
       label: "Completed",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
@@ -376,15 +380,16 @@ export function resolveThreadStatusPill(input: {
 }
 
 export function resolveProjectStatusIndicator(
-  statuses: ReadonlyArray<ThreadStatusPill | null>,
-): ThreadStatusPill | null {
-  let highestPriorityStatus: ThreadStatusPill | null = null;
+  statuses: ReadonlyArray<WorkspaceStatusPill | null>,
+): WorkspaceStatusPill | null {
+  let highestPriorityStatus: WorkspaceStatusPill | null = null;
 
   for (const status of statuses) {
     if (status === null) continue;
     if (
       highestPriorityStatus === null ||
-      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
+      WORKSPACE_STATUS_PRIORITY[status.label] >
+        WORKSPACE_STATUS_PRIORITY[highestPriorityStatus.label]
     ) {
       highestPriorityStatus = status;
     }
@@ -393,51 +398,56 @@ export function resolveProjectStatusIndicator(
   return highestPriorityStatus;
 }
 
-export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input: {
-  threads: readonly T[];
-  activeThreadId: T["id"] | undefined;
-  isThreadListExpanded: boolean;
+export function getVisibleWorkspacesForProject<T extends Pick<Workspace, "id">>(input: {
+  workspaces: readonly T[];
+  activeWorkspaceId: T["id"] | undefined;
+  isWorkspaceListExpanded: boolean;
   previewLimit: number;
 }): {
-  hasHiddenThreads: boolean;
-  visibleThreads: T[];
-  hiddenThreads: T[];
+  hasHiddenWorkspaces: boolean;
+  visibleWorkspaces: T[];
+  hiddenWorkspaces: T[];
 } {
-  const { activeThreadId, isThreadListExpanded, previewLimit, threads } = input;
-  const hasHiddenThreads = threads.length > previewLimit;
+  const { activeWorkspaceId, isWorkspaceListExpanded, previewLimit, workspaces } = input;
+  const hasHiddenWorkspaces = workspaces.length > previewLimit;
 
-  if (!hasHiddenThreads || isThreadListExpanded) {
+  if (!hasHiddenWorkspaces || isWorkspaceListExpanded) {
     return {
-      hasHiddenThreads,
-      hiddenThreads: [],
-      visibleThreads: [...threads],
+      hasHiddenWorkspaces,
+      hiddenWorkspaces: [],
+      visibleWorkspaces: [...workspaces],
     };
   }
 
-  const previewThreads = threads.slice(0, previewLimit);
-  if (!activeThreadId || previewThreads.some((thread) => thread.id === activeThreadId)) {
+  const previewWorkspaces = workspaces.slice(0, previewLimit);
+  if (
+    !activeWorkspaceId ||
+    previewWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)
+  ) {
     return {
-      hasHiddenThreads: true,
-      hiddenThreads: threads.slice(previewLimit),
-      visibleThreads: previewThreads,
+      hasHiddenWorkspaces: true,
+      hiddenWorkspaces: workspaces.slice(previewLimit),
+      visibleWorkspaces: previewWorkspaces,
     };
   }
 
-  const activeThread = threads.find((thread) => thread.id === activeThreadId);
-  if (!activeThread) {
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  if (!activeWorkspace) {
     return {
-      hasHiddenThreads: true,
-      hiddenThreads: threads.slice(previewLimit),
-      visibleThreads: previewThreads,
+      hasHiddenWorkspaces: true,
+      hiddenWorkspaces: workspaces.slice(previewLimit),
+      visibleWorkspaces: previewWorkspaces,
     };
   }
 
-  const visibleThreadIds = new Set([...previewThreads, activeThread].map((thread) => thread.id));
+  const visibleWorkspaceIds = new Set(
+    [...previewWorkspaces, activeWorkspace].map((workspace) => workspace.id),
+  );
 
   return {
-    hasHiddenThreads: true,
-    hiddenThreads: threads.filter((thread) => !visibleThreadIds.has(thread.id)),
-    visibleThreads: threads.filter((thread) => visibleThreadIds.has(thread.id)),
+    hasHiddenWorkspaces: true,
+    hiddenWorkspaces: workspaces.filter((workspace) => !visibleWorkspaceIds.has(workspace.id)),
+    visibleWorkspaces: workspaces.filter((workspace) => visibleWorkspaceIds.has(workspace.id)),
   };
 }
 
@@ -447,14 +457,14 @@ function toSortableTimestamp(iso: string | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function getLatestUserMessageTimestamp(thread: SidebarThreadSortInput): number {
-  if (thread.latestUserMessageAt) {
-    return toSortableTimestamp(thread.latestUserMessageAt) ?? Number.NEGATIVE_INFINITY;
+function getLatestUserMessageTimestamp(workspace: SidebarWorkspaceSortInput): number {
+  if (workspace.latestUserMessageAt) {
+    return toSortableTimestamp(workspace.latestUserMessageAt) ?? Number.NEGATIVE_INFINITY;
   }
 
   let latestUserMessageTimestamp: number | null = null;
 
-  for (const message of thread.messages ?? []) {
+  for (const message of workspace.messages ?? []) {
     if (message.role !== "user") continue;
     const messageTimestamp = toSortableTimestamp(message.createdAt);
     if (messageTimestamp === null) continue;
@@ -468,25 +478,27 @@ function getLatestUserMessageTimestamp(thread: SidebarThreadSortInput): number {
     return latestUserMessageTimestamp;
   }
 
-  return toSortableTimestamp(thread.updatedAt ?? thread.createdAt) ?? Number.NEGATIVE_INFINITY;
+  return (
+    toSortableTimestamp(workspace.updatedAt ?? workspace.createdAt) ?? Number.NEGATIVE_INFINITY
+  );
 }
 
-function getThreadSortTimestamp(
-  thread: SidebarThreadSortInput,
-  sortOrder: SidebarThreadSortOrder | Exclude<SidebarProjectSortOrder, "manual">,
+function getWorkspaceSortTimestamp(
+  workspace: SidebarWorkspaceSortInput,
+  sortOrder: SidebarWorkspaceSortOrder | Exclude<SidebarProjectSortOrder, "manual">,
 ): number {
   if (sortOrder === "created_at") {
-    return toSortableTimestamp(thread.createdAt) ?? Number.NEGATIVE_INFINITY;
+    return toSortableTimestamp(workspace.createdAt) ?? Number.NEGATIVE_INFINITY;
   }
-  return getLatestUserMessageTimestamp(thread);
+  return getLatestUserMessageTimestamp(workspace);
 }
 
-export function sortThreadsForSidebar<
-  T extends Pick<Thread, "id" | "createdAt" | "updatedAt"> & SidebarThreadSortInput,
->(threads: readonly T[], sortOrder: SidebarThreadSortOrder): T[] {
-  return threads.toSorted((left, right) => {
-    const rightTimestamp = getThreadSortTimestamp(right, sortOrder);
-    const leftTimestamp = getThreadSortTimestamp(left, sortOrder);
+export function sortWorkspacesForSidebar<
+  T extends Pick<Workspace, "id" | "createdAt" | "updatedAt"> & SidebarWorkspaceSortInput,
+>(workspaces: readonly T[], sortOrder: SidebarWorkspaceSortOrder): T[] {
+  return workspaces.toSorted((left, right) => {
+    const rightTimestamp = getWorkspaceSortTimestamp(right, sortOrder);
+    const leftTimestamp = getWorkspaceSortTimestamp(left, sortOrder);
     const byTimestamp =
       rightTimestamp === leftTimestamp ? 0 : rightTimestamp > leftTimestamp ? 1 : -1;
     if (byTimestamp !== 0) return byTimestamp;
@@ -494,27 +506,28 @@ export function sortThreadsForSidebar<
   });
 }
 
-export function getFallbackThreadIdAfterDelete<
-  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> & SidebarThreadSortInput,
+export function getFallbackWorkspaceIdAfterDelete<
+  T extends Pick<Workspace, "id" | "projectId" | "createdAt" | "updatedAt"> &
+    SidebarWorkspaceSortInput,
 >(input: {
-  threads: readonly T[];
-  deletedThreadId: T["id"];
-  sortOrder: SidebarThreadSortOrder;
-  deletedThreadIds?: ReadonlySet<T["id"]>;
+  workspaces: readonly T[];
+  deletedWorkspaceId: T["id"];
+  sortOrder: SidebarWorkspaceSortOrder;
+  deletedWorkspaceIds?: ReadonlySet<T["id"]>;
 }): T["id"] | null {
-  const { deletedThreadId, deletedThreadIds, sortOrder, threads } = input;
-  const deletedThread = threads.find((thread) => thread.id === deletedThreadId);
-  if (!deletedThread) {
+  const { deletedWorkspaceId, deletedWorkspaceIds, sortOrder, workspaces } = input;
+  const deletedWorkspace = workspaces.find((workspace) => workspace.id === deletedWorkspaceId);
+  if (!deletedWorkspace) {
     return null;
   }
 
   return (
-    sortThreadsForSidebar(
-      threads.filter(
-        (thread) =>
-          thread.projectId === deletedThread.projectId &&
-          thread.id !== deletedThreadId &&
-          !deletedThreadIds?.has(thread.id),
+    sortWorkspacesForSidebar(
+      workspaces.filter(
+        (workspace) =>
+          workspace.projectId === deletedWorkspace.projectId &&
+          workspace.id !== deletedWorkspaceId &&
+          !deletedWorkspaceIds?.has(workspace.id),
       ),
       sortOrder,
     )[0]?.id ?? null
@@ -523,12 +536,12 @@ export function getFallbackThreadIdAfterDelete<
 
 export function getProjectSortTimestamp(
   project: SidebarProject,
-  projectThreads: readonly SidebarThreadSortInput[],
+  projectWorkspaces: readonly SidebarWorkspaceSortInput[],
   sortOrder: Exclude<SidebarProjectSortOrder, "manual">,
 ): number {
-  if (projectThreads.length > 0) {
-    return projectThreads.reduce(
-      (latest, thread) => Math.max(latest, getThreadSortTimestamp(thread, sortOrder)),
+  if (projectWorkspaces.length > 0) {
+    return projectWorkspaces.reduce(
+      (latest, workspace) => Math.max(latest, getWorkspaceSortTimestamp(workspace, sortOrder)),
       Number.NEGATIVE_INFINITY,
     );
   }
@@ -541,32 +554,33 @@ export function getProjectSortTimestamp(
 
 export function sortProjectsForSidebar<
   TProject extends SidebarProject,
-  TThread extends Pick<Thread, "projectId" | "createdAt" | "updatedAt"> & SidebarThreadSortInput,
+  TWorkspace extends Pick<Workspace, "projectId" | "createdAt" | "updatedAt"> &
+    SidebarWorkspaceSortInput,
 >(
   projects: readonly TProject[],
-  threads: readonly TThread[],
+  workspaces: readonly TWorkspace[],
   sortOrder: SidebarProjectSortOrder,
 ): TProject[] {
   if (sortOrder === "manual") {
     return [...projects];
   }
 
-  const threadsByProjectId = new Map<string, TThread[]>();
-  for (const thread of threads) {
-    const existing = threadsByProjectId.get(thread.projectId) ?? [];
-    existing.push(thread);
-    threadsByProjectId.set(thread.projectId, existing);
+  const workspacesByProjectId = new Map<string, TWorkspace[]>();
+  for (const workspace of workspaces) {
+    const existing = workspacesByProjectId.get(workspace.projectId) ?? [];
+    existing.push(workspace);
+    workspacesByProjectId.set(workspace.projectId, existing);
   }
 
   return [...projects].toSorted((left, right) => {
     const rightTimestamp = getProjectSortTimestamp(
       right,
-      threadsByProjectId.get(right.id) ?? [],
+      workspacesByProjectId.get(right.id) ?? [],
       sortOrder,
     );
     const leftTimestamp = getProjectSortTimestamp(
       left,
-      threadsByProjectId.get(left.id) ?? [],
+      workspacesByProjectId.get(left.id) ?? [],
       sortOrder,
     );
     const byTimestamp =

@@ -10,11 +10,11 @@ export type EnvMode = typeof EnvMode.Type;
 
 export function resolveEffectiveEnvMode(input: {
   activeWorktreePath: string | null;
-  hasServerThread: boolean;
-  draftThreadEnvMode: EnvMode | undefined;
+  hasServerWorkspace: boolean;
+  draftWorkspaceEnvMode: EnvMode | undefined;
 }): EnvMode {
-  const { activeWorktreePath, hasServerThread, draftThreadEnvMode } = input;
-  return activeWorktreePath || (!hasServerThread && draftThreadEnvMode === "worktree")
+  const { activeWorktreePath, hasServerWorkspace, draftWorkspaceEnvMode } = input;
+  return activeWorktreePath || (!hasServerWorkspace && draftWorkspaceEnvMode === "worktree")
     ? "worktree"
     : "local";
 }
@@ -37,14 +37,14 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
 export function resolveBranchToolbarValue(input: {
   envMode: EnvMode;
   activeWorktreePath: string | null;
-  activeThreadBranch: string | null;
+  activeWorkspaceBranch: string | null;
   currentGitBranch: string | null;
 }): string | null {
-  const { envMode, activeWorktreePath, activeThreadBranch, currentGitBranch } = input;
+  const { envMode, activeWorktreePath, activeWorkspaceBranch, currentGitBranch } = input;
   if (envMode === "worktree" && !activeWorktreePath) {
-    return activeThreadBranch ?? currentGitBranch;
+    return activeWorkspaceBranch ?? currentGitBranch;
   }
-  return currentGitBranch ?? activeThreadBranch;
+  return currentGitBranch ?? activeWorkspaceBranch;
 }
 
 export function resolveBranchSelectionTarget(input: {

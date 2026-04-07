@@ -233,7 +233,7 @@ describe("ProviderModelPicker", () => {
     }
   });
 
-  it("shows models directly when the provider is locked mid-thread", async () => {
+  it("shows models directly when the provider is locked mid-workspace", async () => {
     const mounted = await mountPicker({
       provider: "claudeAgent",
       model: "claude-opus-4-6",

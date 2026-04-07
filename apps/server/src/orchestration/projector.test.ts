@@ -2,7 +2,7 @@ import {
   CommandId,
   EventId,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   type OrchestrationEvent,
 } from "@matcha/contracts";
 import { Effect } from "effect";
@@ -27,7 +27,7 @@ function makeEvent(input: {
     aggregateId:
       input.aggregateKind === "project"
         ? ProjectId.makeUnsafe(input.aggregateId)
-        : ThreadId.makeUnsafe(input.aggregateId),
+        : WorkspaceId.makeUnsafe(input.aggregateId),
     occurredAt: input.occurredAt,
     commandId: input.commandId === null ? null : CommandId.makeUnsafe(input.commandId),
     causationEventId: null,
@@ -38,7 +38,7 @@ function makeEvent(input: {
 }
 
 describe("orchestration projector", () => {
-  it("applies thread.created events", async () => {
+  it("applies workspace.created events", async () => {
     const now = new Date().toISOString();
     const model = createEmptyReadModel(now);
 
@@ -47,13 +47,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: now,
-          commandId: "cmd-thread-create",
+          commandId: "cmd-workspace-create",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -71,9 +71,9 @@ describe("orchestration projector", () => {
     );
 
     expect(next.snapshotSequence).toBe(1);
-    expect(next.threads).toEqual([
+    expect(next.workspaces).toEqual([
       {
-        id: "thread-1",
+        id: "workspace-1",
         projectId: "project-1",
         title: "demo",
         modelSelection: {
@@ -108,13 +108,13 @@ describe("orchestration projector", () => {
           model,
           makeEvent({
             sequence: 1,
-            type: "thread.created",
-            aggregateKind: "thread",
-            aggregateId: "thread-1",
+            type: "workspace.created",
+            aggregateKind: "workspace",
+            aggregateId: "workspace-1",
             occurredAt: now,
             commandId: "cmd-invalid",
             payload: {
-              // missing required threadId
+              // missing required workspaceId
               projectId: "project-1",
               title: "demo",
               modelSelection: {
@@ -132,7 +132,7 @@ describe("orchestration projector", () => {
     ).rejects.toBeDefined();
   });
 
-  it("applies thread.archived and thread.unarchived events", async () => {
+  it("applies workspace.archived and workspace.unarchived events", async () => {
     const now = new Date().toISOString();
     const later = new Date(Date.parse(now) + 1_000).toISOString();
     const created = await Effect.runPromise(
@@ -140,13 +140,13 @@ describe("orchestration projector", () => {
         createEmptyReadModel(now),
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: now,
-          commandId: "cmd-thread-create",
+          commandId: "cmd-workspace-create",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -169,39 +169,39 @@ describe("orchestration projector", () => {
         created,
         makeEvent({
           sequence: 2,
-          type: "thread.archived",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.archived",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: later,
-          commandId: "cmd-thread-archive",
+          commandId: "cmd-workspace-archive",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             archivedAt: later,
             updatedAt: later,
           },
         }),
       ),
     );
-    expect(archived.threads[0]?.archivedAt).toBe(later);
+    expect(archived.workspaces[0]?.archivedAt).toBe(later);
 
     const unarchived = await Effect.runPromise(
       projectEvent(
         archived,
         makeEvent({
           sequence: 3,
-          type: "thread.unarchived",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.unarchived",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: later,
-          commandId: "cmd-thread-unarchive",
+          commandId: "cmd-workspace-unarchive",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             updatedAt: later,
           },
         }),
       ),
     );
-    expect(unarchived.threads[0]?.archivedAt).toBeNull();
+    expect(unarchived.workspaces[0]?.archivedAt).toBeNull();
   });
 
   it("keeps projector forward-compatible for unhandled event types", async () => {
@@ -213,13 +213,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 7,
-          type: "thread.turn-start-requested",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.turn-start-requested",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: "2026-01-01T00:00:00.000Z",
           commandId: "cmd-unhandled",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             messageId: "message-1",
             runtimeMode: "approval-required",
             createdAt: "2026-01-01T00:00:00.000Z",
@@ -230,7 +230,7 @@ describe("orchestration projector", () => {
 
     expect(next.snapshotSequence).toBe(7);
     expect(next.updatedAt).toBe("2026-01-01T00:00:00.000Z");
-    expect(next.threads).toEqual([]);
+    expect(next.workspaces).toEqual([]);
   });
 
   it("tracks latest turn id from session lifecycle events", async () => {
@@ -243,13 +243,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -271,19 +271,19 @@ describe("orchestration projector", () => {
         afterCreate,
         makeEvent({
           sequence: 2,
-          type: "thread.session-set",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.session-set",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: startedAt,
           commandId: "cmd-running",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             session: {
-              threadId: "thread-1",
+              workspaceId: "workspace-1",
               status: "running",
               providerName: "codex",
               providerSessionId: "session-1",
-              providerThreadId: "provider-thread-1",
+              providerWorkspaceId: "provider-workspace-1",
               runtimeMode: "approval-required",
               activeTurnId: "turn-1",
               lastError: null,
@@ -294,12 +294,12 @@ describe("orchestration projector", () => {
       ),
     );
 
-    const thread = afterRunning.threads[0];
-    expect(thread?.latestTurn?.turnId).toBe("turn-1");
-    expect(thread?.session?.status).toBe("running");
+    const workspace = afterRunning.workspaces[0];
+    expect(workspace?.latestTurn?.turnId).toBe("turn-1");
+    expect(workspace?.session?.status).toBe("running");
   });
 
-  it("updates canonical thread runtime mode from thread.runtime-mode-set", async () => {
+  it("updates canonical workspace runtime mode from workspace.runtime-mode-set", async () => {
     const createdAt = "2026-02-23T08:00:00.000Z";
     const updatedAt = "2026-02-23T08:00:05.000Z";
     const model = createEmptyReadModel(createdAt);
@@ -309,13 +309,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -337,13 +337,13 @@ describe("orchestration projector", () => {
         afterCreate,
         makeEvent({
           sequence: 2,
-          type: "thread.runtime-mode-set",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.runtime-mode-set",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: updatedAt,
           commandId: "cmd-runtime-mode-set",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             runtimeMode: "approval-required",
             updatedAt,
           },
@@ -351,8 +351,8 @@ describe("orchestration projector", () => {
       ),
     );
 
-    expect(afterUpdate.threads[0]?.runtimeMode).toBe("approval-required");
-    expect(afterUpdate.threads[0]?.updatedAt).toBe(updatedAt);
+    expect(afterUpdate.workspaces[0]?.runtimeMode).toBe("approval-required");
+    expect(afterUpdate.workspaces[0]?.updatedAt).toBe(updatedAt);
   });
 
   it("marks assistant messages completed with non-streaming updates", async () => {
@@ -366,13 +366,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -394,13 +394,13 @@ describe("orchestration projector", () => {
         afterCreate,
         makeEvent({
           sequence: 2,
-          type: "thread.message-sent",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.message-sent",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: deltaAt,
           commandId: "cmd-delta",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             messageId: "assistant:msg-1",
             role: "assistant",
             text: "hello",
@@ -418,13 +418,13 @@ describe("orchestration projector", () => {
         afterDelta,
         makeEvent({
           sequence: 3,
-          type: "thread.message-sent",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.message-sent",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: completeAt,
           commandId: "cmd-complete",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             messageId: "assistant:msg-1",
             role: "assistant",
             text: "",
@@ -437,14 +437,14 @@ describe("orchestration projector", () => {
       ),
     );
 
-    const message = afterComplete.threads[0]?.messages[0];
+    const message = afterComplete.workspaces[0]?.messages[0];
     expect(message?.id).toBe("assistant:msg-1");
     expect(message?.text).toBe("hello");
     expect(message?.streaming).toBe(false);
     expect(message?.updatedAt).toBe(completeAt);
   });
 
-  it("prunes reverted turn messages from in-memory thread snapshot", async () => {
+  it("prunes reverted turn messages from in-memory workspace snapshot", async () => {
     const createdAt = "2026-02-23T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);
 
@@ -453,13 +453,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -479,13 +479,13 @@ describe("orchestration projector", () => {
     const events: ReadonlyArray<OrchestrationEvent> = [
       makeEvent({
         sequence: 2,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:01.000Z",
         commandId: "cmd-user-1",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           messageId: "user-msg-1",
           role: "user",
           text: "First edit",
@@ -497,13 +497,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 3,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:02.000Z",
         commandId: "cmd-assistant-1",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           messageId: "assistant-msg-1",
           role: "assistant",
           text: "Updated README to v2.\n",
@@ -515,16 +515,16 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 4,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.turn-diff-completed",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:02.500Z",
         commandId: "cmd-turn-1-complete",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           turnId: "turn-1",
           checkpointTurnCount: 1,
-          checkpointRef: "refs/t3/checkpoints/thread-1/turn/1",
+          checkpointRef: "refs/t3/checkpoints/workspace-1/turn/1",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-msg-1",
@@ -533,13 +533,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 5,
-        type: "thread.activity-appended",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.activity-appended",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:02.750Z",
         commandId: "cmd-activity-1",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           activity: {
             id: "activity-1",
             tone: "tool",
@@ -553,13 +553,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 6,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:03.000Z",
         commandId: "cmd-user-2",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           messageId: "user-msg-2",
           role: "user",
           text: "Second edit",
@@ -571,13 +571,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 7,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:04.000Z",
         commandId: "cmd-assistant-2",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           messageId: "assistant-msg-2",
           role: "assistant",
           text: "Updated README to v3.\n",
@@ -589,16 +589,16 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 8,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.turn-diff-completed",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:04.500Z",
         commandId: "cmd-turn-2-complete",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           turnId: "turn-2",
           checkpointTurnCount: 2,
-          checkpointRef: "refs/t3/checkpoints/thread-1/turn/2",
+          checkpointRef: "refs/t3/checkpoints/workspace-1/turn/2",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-msg-2",
@@ -607,13 +607,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 9,
-        type: "thread.activity-appended",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.activity-appended",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:04.750Z",
         commandId: "cmd-activity-2",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           activity: {
             id: "activity-2",
             tone: "tool",
@@ -627,13 +627,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 10,
-        type: "thread.reverted",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "workspace.reverted",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-1",
         occurredAt: "2026-02-23T10:00:05.000Z",
         commandId: "cmd-revert",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           turnCount: 1,
         },
       }),
@@ -645,18 +645,18 @@ describe("orchestration projector", () => {
       Promise.resolve(afterCreate),
     );
 
-    const thread = afterRevert.threads[0];
-    expect(thread?.messages.map((message) => ({ role: message.role, text: message.text }))).toEqual(
-      [
-        { role: "user", text: "First edit" },
-        { role: "assistant", text: "Updated README to v2.\n" },
-      ],
-    );
+    const workspace = afterRevert.workspaces[0];
     expect(
-      thread?.activities.map((activity) => ({ id: activity.id, turnId: activity.turnId })),
+      workspace?.messages.map((message) => ({ role: message.role, text: message.text })),
+    ).toEqual([
+      { role: "user", text: "First edit" },
+      { role: "assistant", text: "Updated README to v2.\n" },
+    ]);
+    expect(
+      workspace?.activities.map((activity) => ({ id: activity.id, turnId: activity.turnId })),
     ).toEqual([{ id: "activity-1", turnId: "turn-1" }]);
-    expect(thread?.checkpoints.map((checkpoint) => checkpoint.checkpointTurnCount)).toEqual([1]);
-    expect(thread?.latestTurn?.turnId).toBe("turn-1");
+    expect(workspace?.checkpoints.map((checkpoint) => checkpoint.checkpointTurnCount)).toEqual([1]);
+    expect(workspace?.latestTurn?.turnId).toBe("turn-1");
   });
 
   it("does not fallback-retain messages tied to removed turn IDs", async () => {
@@ -668,13 +668,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-revert",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-revert",
           occurredAt: createdAt,
           commandId: "cmd-create-revert",
           payload: {
-            threadId: "thread-revert",
+            workspaceId: "workspace-revert",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -694,16 +694,16 @@ describe("orchestration projector", () => {
     const events: ReadonlyArray<OrchestrationEvent> = [
       makeEvent({
         sequence: 2,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "workspace.turn-diff-completed",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-revert",
         occurredAt: "2026-02-26T12:00:01.000Z",
         commandId: "cmd-turn-1",
         payload: {
-          threadId: "thread-revert",
+          workspaceId: "workspace-revert",
           turnId: "turn-1",
           checkpointTurnCount: 1,
-          checkpointRef: "refs/t3/checkpoints/thread-revert/turn/1",
+          checkpointRef: "refs/t3/checkpoints/workspace-revert/turn/1",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-keep",
@@ -712,13 +712,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 3,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-revert",
         occurredAt: "2026-02-26T12:00:01.100Z",
         commandId: "cmd-assistant-keep",
         payload: {
-          threadId: "thread-revert",
+          workspaceId: "workspace-revert",
           messageId: "assistant-keep",
           role: "assistant",
           text: "kept",
@@ -730,16 +730,16 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 4,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "workspace.turn-diff-completed",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-revert",
         occurredAt: "2026-02-26T12:00:02.000Z",
         commandId: "cmd-turn-2",
         payload: {
-          threadId: "thread-revert",
+          workspaceId: "workspace-revert",
           turnId: "turn-2",
           checkpointTurnCount: 2,
-          checkpointRef: "refs/t3/checkpoints/thread-revert/turn/2",
+          checkpointRef: "refs/t3/checkpoints/workspace-revert/turn/2",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-remove",
@@ -748,13 +748,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 5,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-revert",
         occurredAt: "2026-02-26T12:00:02.050Z",
         commandId: "cmd-user-remove",
         payload: {
-          threadId: "thread-revert",
+          workspaceId: "workspace-revert",
           messageId: "user-remove",
           role: "user",
           text: "removed",
@@ -766,13 +766,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 6,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "workspace.message-sent",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-revert",
         occurredAt: "2026-02-26T12:00:02.100Z",
         commandId: "cmd-assistant-remove",
         payload: {
-          threadId: "thread-revert",
+          workspaceId: "workspace-revert",
           messageId: "assistant-remove",
           role: "assistant",
           text: "removed",
@@ -784,13 +784,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 7,
-        type: "thread.reverted",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "workspace.reverted",
+        aggregateKind: "workspace",
+        aggregateId: "workspace-revert",
         occurredAt: "2026-02-26T12:00:03.000Z",
         commandId: "cmd-revert",
         payload: {
-          threadId: "thread-revert",
+          workspaceId: "workspace-revert",
           turnCount: 1,
         },
       }),
@@ -802,9 +802,9 @@ describe("orchestration projector", () => {
       Promise.resolve(afterCreate),
     );
 
-    const thread = afterRevert.threads[0];
+    const workspace = afterRevert.workspaces[0];
     expect(
-      thread?.messages.map((message) => ({
+      workspace?.messages.map((message) => ({
         id: message.id,
         role: message.role,
         turnId: message.turnId,
@@ -812,7 +812,7 @@ describe("orchestration projector", () => {
     ).toEqual([{ id: "assistant-keep", role: "assistant", turnId: "turn-1" }]);
   });
 
-  it("caps message and checkpoint retention for long-lived threads", async () => {
+  it("caps message and checkpoint retention for long-lived workspaces", async () => {
     const createdAt = "2026-03-01T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);
 
@@ -821,13 +821,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-capped",
+          type: "workspace.created",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-capped",
           occurredAt: createdAt,
           commandId: "cmd-create-capped",
           payload: {
-            threadId: "thread-capped",
+            workspaceId: "workspace-capped",
             projectId: "project-1",
             title: "capped",
             modelSelection: {
@@ -849,13 +849,13 @@ describe("orchestration projector", () => {
       (_, index) =>
         makeEvent({
           sequence: index + 2,
-          type: "thread.message-sent",
-          aggregateKind: "thread",
-          aggregateId: "thread-capped",
+          type: "workspace.message-sent",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-capped",
           occurredAt: `2026-03-01T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
           commandId: `cmd-message-${index}`,
           payload: {
-            threadId: "thread-capped",
+            workspaceId: "workspace-capped",
             messageId: `msg-${index}`,
             role: "assistant",
             text: `message-${index}`,
@@ -879,16 +879,16 @@ describe("orchestration projector", () => {
       (_, index) =>
         makeEvent({
           sequence: index + 2_102,
-          type: "thread.turn-diff-completed",
-          aggregateKind: "thread",
-          aggregateId: "thread-capped",
+          type: "workspace.turn-diff-completed",
+          aggregateKind: "workspace",
+          aggregateId: "workspace-capped",
           occurredAt: `2026-03-01T10:30:${String(index % 60).padStart(2, "0")}.000Z`,
           commandId: `cmd-checkpoint-${index}`,
           payload: {
-            threadId: "thread-capped",
+            workspaceId: "workspace-capped",
             turnId: `turn-${index}`,
             checkpointTurnCount: index + 1,
-            checkpointRef: `refs/t3/checkpoints/thread-capped/turn/${index + 1}`,
+            checkpointRef: `refs/t3/checkpoints/workspace-capped/turn/${index + 1}`,
             status: "ready",
             files: [],
             assistantMessageId: `msg-${index}`,
@@ -904,12 +904,12 @@ describe("orchestration projector", () => {
       Promise.resolve(afterMessages),
     );
 
-    const thread = finalState.threads[0];
-    expect(thread?.messages).toHaveLength(2_000);
-    expect(thread?.messages[0]?.id).toBe("msg-100");
-    expect(thread?.messages.at(-1)?.id).toBe("msg-2099");
-    expect(thread?.checkpoints).toHaveLength(500);
-    expect(thread?.checkpoints[0]?.turnId).toBe("turn-100");
-    expect(thread?.checkpoints.at(-1)?.turnId).toBe("turn-599");
+    const workspace = finalState.workspaces[0];
+    expect(workspace?.messages).toHaveLength(2_000);
+    expect(workspace?.messages[0]?.id).toBe("msg-100");
+    expect(workspace?.messages.at(-1)?.id).toBe("msg-2099");
+    expect(workspace?.checkpoints).toHaveLength(500);
+    expect(workspace?.checkpoints[0]?.turnId).toBe("turn-100");
+    expect(workspace?.checkpoints.at(-1)?.turnId).toBe("turn-599");
   });
 });

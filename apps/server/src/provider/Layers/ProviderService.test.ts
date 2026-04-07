@@ -14,7 +14,7 @@ import {
   EventId,
   type ProviderKind,
   ProviderSessionStartInput,
-  ThreadId,
+  WorkspaceId,
   TurnId,
 } from "@matcha/contracts";
 import { it, assert, vi } from "@effect/vitest";
@@ -49,7 +49,7 @@ const defaultServerSettingsLayer = ServerSettingsService.layerTest();
 
 const asRequestId = (value: string): ApprovalRequestId => ApprovalRequestId.makeUnsafe(value);
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
-const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
+const asWorkspaceId = (value: string): WorkspaceId => WorkspaceId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 
 type LegacyProviderRuntimeEvent = {
@@ -57,7 +57,7 @@ type LegacyProviderRuntimeEvent = {
   readonly eventId: EventId;
   readonly provider: ProviderKind;
   readonly createdAt: string;
-  readonly threadId: ThreadId;
+  readonly workspaceId: WorkspaceId;
   readonly turnId?: string | undefined;
   readonly itemId?: string | undefined;
   readonly requestId?: string | undefined;
@@ -66,7 +66,7 @@ type LegacyProviderRuntimeEvent = {
 };
 
 function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
-  const sessions = new Map<ThreadId, ProviderSession>();
+  const sessions = new Map<WorkspaceId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
 
   const startSession = vi.fn((input: ProviderSessionStartInput) =>
@@ -76,13 +76,13 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
         provider,
         status: "ready",
         runtimeMode: input.runtimeMode,
-        threadId: input.threadId,
-        resumeCursor: input.resumeCursor ?? { opaque: `resume-${String(input.threadId)}` },
+        workspaceId: input.workspaceId,
+        resumeCursor: input.resumeCursor ?? { opaque: `resume-${String(input.workspaceId)}` },
         cwd: input.cwd ?? process.cwd(),
         createdAt: now,
         updatedAt: now,
       };
-      sessions.set(session.threadId, session);
+      sessions.set(session.workspaceId, session);
       return session;
     }),
   );
@@ -91,30 +91,30 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
     (
       input: ProviderSendTurnInput,
     ): Effect.Effect<ProviderTurnStartResult, ProviderAdapterError> => {
-      if (!sessions.has(input.threadId)) {
+      if (!sessions.has(input.workspaceId)) {
         return Effect.fail(
           new ProviderAdapterSessionNotFoundError({
             provider,
-            threadId: input.threadId,
+            workspaceId: input.workspaceId,
           }),
         );
       }
 
       return Effect.succeed({
-        threadId: input.threadId,
-        turnId: TurnId.makeUnsafe(`turn-${String(input.threadId)}`),
+        workspaceId: input.workspaceId,
+        turnId: TurnId.makeUnsafe(`turn-${String(input.workspaceId)}`),
       });
     },
   );
 
   const interruptTurn = vi.fn(
-    (_threadId: ThreadId, _turnId?: TurnId): Effect.Effect<void, ProviderAdapterError> =>
+    (_workspaceId: WorkspaceId, _turnId?: TurnId): Effect.Effect<void, ProviderAdapterError> =>
       Effect.void,
   );
 
   const respondToRequest = vi.fn(
     (
-      _threadId: ThreadId,
+      _workspaceId: WorkspaceId,
       _requestId: string,
       _decision: ProviderApprovalDecision,
     ): Effect.Effect<void, ProviderAdapterError> => Effect.void,
@@ -122,16 +122,16 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
 
   const respondToUserInput = vi.fn(
     (
-      _threadId: ThreadId,
+      _workspaceId: WorkspaceId,
       _requestId: string,
       _answers: Record<string, unknown>,
     ): Effect.Effect<void, ProviderAdapterError> => Effect.void,
   );
 
   const stopSession = vi.fn(
-    (threadId: ThreadId): Effect.Effect<void, ProviderAdapterError> =>
+    (workspaceId: WorkspaceId): Effect.Effect<void, ProviderAdapterError> =>
       Effect.sync(() => {
-        sessions.delete(threadId);
+        sessions.delete(workspaceId);
       }),
   );
 
@@ -141,31 +141,31 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
   );
 
   const hasSession = vi.fn(
-    (threadId: ThreadId): Effect.Effect<boolean> => Effect.succeed(sessions.has(threadId)),
+    (workspaceId: WorkspaceId): Effect.Effect<boolean> => Effect.succeed(sessions.has(workspaceId)),
   );
 
-  const readThread = vi.fn(
+  const readWorkspace = vi.fn(
     (
-      threadId: ThreadId,
+      workspaceId: WorkspaceId,
     ): Effect.Effect<
       {
-        threadId: ThreadId;
+        workspaceId: WorkspaceId;
         turns: ReadonlyArray<{ id: TurnId; items: readonly [] }>;
       },
       ProviderAdapterError
     > =>
       Effect.succeed({
-        threadId,
+        workspaceId,
         turns: [{ id: asTurnId("turn-1"), items: [] }],
       }),
   );
 
-  const rollbackThread = vi.fn(
+  const rollbackWorkspace = vi.fn(
     (
-      threadId: ThreadId,
+      workspaceId: WorkspaceId,
       _numTurns: number,
-    ): Effect.Effect<{ threadId: ThreadId; turns: readonly [] }, ProviderAdapterError> =>
-      Effect.succeed({ threadId, turns: [] }),
+    ): Effect.Effect<{ workspaceId: WorkspaceId; turns: readonly [] }, ProviderAdapterError> =>
+      Effect.succeed({ workspaceId, turns: [] }),
   );
 
   const stopAll = vi.fn(
@@ -188,8 +188,8 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
     stopSession,
     listSessions,
     hasSession,
-    readThread,
-    rollbackThread,
+    readWorkspace,
+    rollbackWorkspace,
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -201,14 +201,14 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
   };
 
   const updateSession = (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     update: (session: ProviderSession) => ProviderSession,
   ): void => {
-    const existing = sessions.get(threadId);
+    const existing = sessions.get(workspaceId);
     if (!existing) {
       return;
     }
-    sessions.set(threadId, update(existing));
+    sessions.set(workspaceId, update(existing));
   };
 
   return {
@@ -223,8 +223,8 @@ function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
     stopSession,
     listSessions,
     hasSession,
-    readThread,
-    rollbackThread,
+    readWorkspace,
+    rollbackWorkspace,
     stopAll,
   };
 }
@@ -319,9 +319,9 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
     const failure = yield* Effect.flip(
       Effect.gen(function* () {
         const provider = yield* ProviderService;
-        return yield* provider.startSession(asThreadId("thread-disabled"), {
+        return yield* provider.startSession(asWorkspaceId("workspace-disabled"), {
           provider: "claudeAgent",
-          threadId: asThreadId("thread-disabled"),
+          workspaceId: asWorkspaceId("workspace-disabled"),
           runtimeMode: "full-access",
         });
       }).pipe(Effect.provide(providerLayer)),
@@ -358,7 +358,7 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
       const directory = yield* ProviderSessionDirectory;
       yield* directory.upsert({
         provider: "codex",
-        threadId: ThreadId.makeUnsafe("thread-stale"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-stale"),
       });
     }).pipe(Effect.provide(directoryLayer));
 
@@ -375,13 +375,13 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
 
     const persistedProvider = yield* Effect.gen(function* () {
       const directory = yield* ProviderSessionDirectory;
-      return yield* directory.getProvider(asThreadId("thread-stale"));
+      return yield* directory.getProvider(asWorkspaceId("workspace-stale"));
     }).pipe(Effect.provide(directoryLayer));
     assert.equal(persistedProvider, "codex");
 
     const runtime = yield* Effect.gen(function* () {
       const repository = yield* ProviderSessionRuntimeRepository;
-      return yield* repository.getByThreadId({ threadId: asThreadId("thread-stale") });
+      return yield* repository.getByWorkspaceId({ workspaceId: asWorkspaceId("workspace-stale") });
     }).pipe(Effect.provide(runtimeRepositoryLayer));
     assert.equal(Option.isSome(runtime), true);
 
@@ -400,7 +400,7 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
 );
 
 it.effect(
-  "ProviderServiceLive restores rollback routing after restart using persisted thread mapping",
+  "ProviderServiceLive restores rollback routing after restart using persisted workspace mapping",
   () =>
     Effect.gen(function* () {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "matcha-provider-service-restart-"));
@@ -429,7 +429,7 @@ it.effect(
         Layer.provide(AnalyticsService.layerTest),
       );
       const updatedResumeCursor = {
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         resume: "resume-session-1",
         resumeSessionAt: "assistant-message-1",
         turnCount: 1,
@@ -437,14 +437,14 @@ it.effect(
 
       const startedSession = yield* Effect.gen(function* () {
         const provider = yield* ProviderService;
-        const threadId = asThreadId("thread-1");
-        const session = yield* provider.startSession(threadId, {
+        const workspaceId = asWorkspaceId("workspace-1");
+        const session = yield* provider.startSession(workspaceId, {
           provider: "codex",
           cwd: "/tmp/project",
           runtimeMode: "full-access",
-          threadId,
+          workspaceId,
         });
-        firstCodex.updateSession(threadId, (existing) => ({
+        firstCodex.updateSession(workspaceId, (existing) => ({
           ...existing,
           status: "ready",
           resumeCursor: updatedResumeCursor,
@@ -455,7 +455,7 @@ it.effect(
 
       const persistedAfterStopAll = yield* Effect.gen(function* () {
         const repository = yield* ProviderSessionRuntimeRepository;
-        return yield* repository.getByThreadId({ threadId: startedSession.threadId });
+        return yield* repository.getByWorkspaceId({ workspaceId: startedSession.workspaceId });
       }).pipe(Effect.provide(runtimeRepositoryLayer));
       assert.equal(Option.isSome(persistedAfterStopAll), true);
       if (Option.isSome(persistedAfterStopAll)) {
@@ -482,12 +482,12 @@ it.effect(
       );
 
       secondCodex.startSession.mockClear();
-      secondCodex.rollbackThread.mockClear();
+      secondCodex.rollbackWorkspace.mockClear();
 
       yield* Effect.gen(function* () {
         const provider = yield* ProviderService;
         yield* provider.rollbackConversation({
-          threadId: startedSession.threadId,
+          workspaceId: startedSession.workspaceId,
           numTurns: 1,
         });
       }).pipe(Effect.provide(secondProviderLayer));
@@ -500,15 +500,15 @@ it.effect(
           provider?: string;
           cwd?: string;
           resumeCursor?: unknown;
-          threadId?: string;
+          workspaceId?: string;
         };
         assert.equal(startPayload.provider, "codex");
         assert.equal(startPayload.cwd, "/tmp/project");
         assert.deepEqual(startPayload.resumeCursor, updatedResumeCursor);
-        assert.equal(startPayload.threadId, startedSession.threadId);
+        assert.equal(startPayload.workspaceId, startedSession.workspaceId);
       }
-      assert.equal(secondCodex.rollbackThread.mock.calls.length, 1);
-      const rollbackCall = secondCodex.rollbackThread.mock.calls[0];
+      assert.equal(secondCodex.rollbackWorkspace.mock.calls.length, 1);
+      const rollbackCall = secondCodex.rollbackWorkspace.mock.calls[0];
       assert.equal(typeof rollbackCall?.[0], "string");
       assert.equal(rollbackCall?.[1], 1);
 
@@ -521,9 +521,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      const session = yield* provider.startSession(asThreadId("thread-1"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         cwd: "/tmp/project",
         runtimeMode: "full-access",
       });
@@ -533,26 +533,26 @@ routing.layer("ProviderServiceLive routing", (it) => {
       assert.equal(sessions.length, 1);
 
       yield* provider.sendTurn({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         input: "hello",
         attachments: [],
       });
       assert.equal(routing.codex.sendTurn.mock.calls.length, 1);
 
-      yield* provider.interruptTurn({ threadId: session.threadId });
-      assert.deepEqual(routing.codex.interruptTurn.mock.calls, [[session.threadId, undefined]]);
+      yield* provider.interruptTurn({ workspaceId: session.workspaceId });
+      assert.deepEqual(routing.codex.interruptTurn.mock.calls, [[session.workspaceId, undefined]]);
 
       yield* provider.respondToRequest({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         requestId: asRequestId("req-1"),
         decision: "accept",
       });
       assert.deepEqual(routing.codex.respondToRequest.mock.calls, [
-        [session.threadId, asRequestId("req-1"), "accept"],
+        [session.workspaceId, asRequestId("req-1"), "accept"],
       ]);
 
       yield* provider.respondToUserInput({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         requestId: asRequestId("req-user-input-1"),
         answers: {
           sandbox_mode: "workspace-write",
@@ -560,7 +560,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       });
       assert.deepEqual(routing.codex.respondToUserInput.mock.calls, [
         [
-          session.threadId,
+          session.workspaceId,
           asRequestId("req-user-input-1"),
           {
             sandbox_mode: "workspace-write",
@@ -569,14 +569,14 @@ routing.layer("ProviderServiceLive routing", (it) => {
       ]);
 
       yield* provider.rollbackConversation({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         numTurns: 0,
       });
 
-      yield* provider.stopSession({ threadId: session.threadId });
+      yield* provider.stopSession({ workspaceId: session.workspaceId });
       const sendAfterStop = yield* Effect.result(
         provider.sendTurn({
-          threadId: session.threadId,
+          workspaceId: session.workspaceId,
           input: "after-stop",
           attachments: [],
         }),
@@ -585,28 +585,28 @@ routing.layer("ProviderServiceLive routing", (it) => {
         sendAfterStop,
         new ProviderValidationError({
           operation: "ProviderService.sendTurn",
-          issue: `Cannot route thread '${session.threadId}' because no persisted provider binding exists.`,
+          issue: `Cannot route workspace '${session.workspaceId}' because no persisted provider binding exists.`,
         }),
       );
     }),
   );
 
-  it.effect("recovers stale persisted sessions for rollback by resuming thread identity", () =>
+  it.effect("recovers stale persisted sessions for rollback by resuming workspace identity", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      const initial = yield* provider.startSession(asThreadId("thread-1"), {
+      const initial = yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         cwd: "/tmp/project",
         runtimeMode: "full-access",
       });
-      yield* routing.codex.stopSession(initial.threadId);
+      yield* routing.codex.stopSession(initial.workspaceId);
       routing.codex.startSession.mockClear();
-      routing.codex.rollbackThread.mockClear();
+      routing.codex.rollbackWorkspace.mockClear();
 
       yield* provider.rollbackConversation({
-        threadId: initial.threadId,
+        workspaceId: initial.workspaceId,
         numTurns: 1,
       });
 
@@ -618,15 +618,15 @@ routing.layer("ProviderServiceLive routing", (it) => {
           provider?: string;
           cwd?: string;
           resumeCursor?: unknown;
-          threadId?: string;
+          workspaceId?: string;
         };
         assert.equal(startPayload.provider, "codex");
         assert.equal(startPayload.cwd, "/tmp/project");
         assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
-        assert.equal(startPayload.threadId, initial.threadId);
+        assert.equal(startPayload.workspaceId, initial.workspaceId);
       }
-      assert.equal(routing.codex.rollbackThread.mock.calls.length, 1);
-      const rollbackCall = routing.codex.rollbackThread.mock.calls[0];
+      assert.equal(routing.codex.rollbackWorkspace.mock.calls.length, 1);
+      const rollbackCall = routing.codex.rollbackWorkspace.mock.calls[0];
       assert.equal(rollbackCall?.[1], 1);
     }),
   );
@@ -635,9 +635,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      const session = yield* provider.startSession(asThreadId("thread-claude"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-claude"), {
         provider: "claudeAgent",
-        threadId: asThreadId("thread-claude"),
+        workspaceId: asWorkspaceId("workspace-claude"),
         cwd: "/tmp/project-claude",
         runtimeMode: "full-access",
       });
@@ -658,9 +658,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      const initial = yield* provider.startSession(asThreadId("thread-1"), {
+      const initial = yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         cwd: "/tmp/project-send-turn",
         runtimeMode: "full-access",
       });
@@ -670,7 +670,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       routing.codex.sendTurn.mockClear();
 
       yield* provider.sendTurn({
-        threadId: initial.threadId,
+        workspaceId: initial.workspaceId,
         input: "resume",
         attachments: [],
       });
@@ -683,12 +683,12 @@ routing.layer("ProviderServiceLive routing", (it) => {
           provider?: string;
           cwd?: string;
           resumeCursor?: unknown;
-          threadId?: string;
+          workspaceId?: string;
         };
         assert.equal(startPayload.provider, "codex");
         assert.equal(startPayload.cwd, "/tmp/project-send-turn");
         assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
-        assert.equal(startPayload.threadId, initial.threadId);
+        assert.equal(startPayload.workspaceId, initial.workspaceId);
       }
       assert.equal(routing.codex.sendTurn.mock.calls.length, 1);
     }),
@@ -698,9 +698,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      const initial = yield* provider.startSession(asThreadId("thread-claude-send-turn"), {
+      const initial = yield* provider.startSession(asWorkspaceId("workspace-claude-send-turn"), {
         provider: "claudeAgent",
-        threadId: asThreadId("thread-claude-send-turn"),
+        workspaceId: asWorkspaceId("workspace-claude-send-turn"),
         cwd: "/tmp/project-claude-send-turn",
         modelSelection: {
           provider: "claudeAgent",
@@ -717,7 +717,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       routing.claude.sendTurn.mockClear();
 
       yield* provider.sendTurn({
-        threadId: initial.threadId,
+        workspaceId: initial.workspaceId,
         input: "resume with claude",
         attachments: [],
       });
@@ -731,7 +731,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           cwd?: string;
           modelSelection?: unknown;
           resumeCursor?: unknown;
-          threadId?: string;
+          workspaceId?: string;
         };
         assert.equal(startPayload.provider, "claudeAgent");
         assert.equal(startPayload.cwd, "/tmp/project-claude-send-turn");
@@ -743,7 +743,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           },
         });
         assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
-        assert.equal(startPayload.threadId, initial.threadId);
+        assert.equal(startPayload.workspaceId, initial.workspaceId);
       }
       assert.equal(routing.claude.sendTurn.mock.calls.length, 1);
     }),
@@ -753,14 +753,14 @@ routing.layer("ProviderServiceLive routing", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      yield* provider.startSession(asThreadId("thread-1"), {
+      yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         runtimeMode: "full-access",
       });
-      yield* provider.startSession(asThreadId("thread-2"), {
+      yield* provider.startSession(asWorkspaceId("workspace-2"), {
         provider: "codex",
-        threadId: asThreadId("thread-2"),
+        workspaceId: asWorkspaceId("workspace-2"),
         runtimeMode: "full-access",
       });
 
@@ -777,19 +777,19 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
 
-      const session = yield* provider.startSession(asThreadId("thread-1"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         runtimeMode: "full-access",
       });
       yield* provider.sendTurn({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         input: "hello",
         attachments: [],
       });
 
-      const runningRuntime = yield* runtimeRepository.getByThreadId({
-        threadId: session.threadId,
+      const runningRuntime = yield* runtimeRepository.getByWorkspaceId({
+        workspaceId: session.workspaceId,
       });
       assert.equal(Option.isSome(runningRuntime), true);
       if (Option.isSome(runningRuntime)) {
@@ -807,7 +807,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           };
           assert.equal(runtimePayload.cwd, process.cwd());
           assert.equal(runtimePayload.model, null);
-          assert.equal(runtimePayload.activeTurnId, `turn-${String(session.threadId)}`);
+          assert.equal(runtimePayload.activeTurnId, `turn-${String(session.workspaceId)}`);
           assert.equal(runtimePayload.lastError, null);
           assert.equal(runtimePayload.lastRuntimeEvent, "provider.sendTurn");
         }
@@ -844,9 +844,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
       const initial = yield* Effect.gen(function* () {
         const provider = yield* ProviderService;
-        return yield* provider.startSession(asThreadId("thread-claude-start"), {
+        return yield* provider.startSession(asWorkspaceId("workspace-claude-start"), {
           provider: "claudeAgent",
-          threadId: asThreadId("thread-claude-start"),
+          workspaceId: asWorkspaceId("workspace-claude-start"),
           cwd: "/tmp/project-claude-start",
           runtimeMode: "full-access",
         });
@@ -879,9 +879,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
       yield* Effect.gen(function* () {
         const provider = yield* ProviderService;
-        yield* provider.startSession(initial.threadId, {
+        yield* provider.startSession(initial.workspaceId, {
           provider: "claudeAgent",
-          threadId: initial.threadId,
+          workspaceId: initial.workspaceId,
           cwd: "/tmp/project-claude-start",
           runtimeMode: "full-access",
         });
@@ -895,12 +895,12 @@ routing.layer("ProviderServiceLive routing", (it) => {
           provider?: string;
           cwd?: string;
           resumeCursor?: unknown;
-          threadId?: string;
+          workspaceId?: string;
         };
         assert.equal(startPayload.provider, "claudeAgent");
         assert.equal(startPayload.cwd, "/tmp/project-claude-start");
         assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
-        assert.equal(startPayload.threadId, initial.threadId);
+        assert.equal(startPayload.workspaceId, initial.workspaceId);
       }
 
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -913,9 +913,9 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
   it.effect("fans out adapter turn completion events", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(asThreadId("thread-1"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         runtimeMode: "full-access",
       });
 
@@ -930,7 +930,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         eventId: asEventId("evt-1"),
         provider: "codex",
         createdAt: new Date().toISOString(),
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         turnId: asTurnId("turn-1"),
         status: "completed",
       };
@@ -951,9 +951,9 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
   it.effect("fans out canonical runtime events in emission order", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(asThreadId("thread-seq"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-seq"), {
         provider: "codex",
-        threadId: asThreadId("thread-seq"),
+        workspaceId: asWorkspaceId("workspace-seq"),
         runtimeMode: "full-access",
       });
 
@@ -969,7 +969,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         eventId: asEventId("evt-seq-1"),
         provider: "codex",
         createdAt: new Date().toISOString(),
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         turnId: asTurnId("turn-1"),
         toolKind: "command",
         title: "Ran command",
@@ -979,7 +979,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         eventId: asEventId("evt-seq-2"),
         provider: "codex",
         createdAt: new Date().toISOString(),
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         turnId: asTurnId("turn-1"),
         toolKind: "command",
         title: "Ran command",
@@ -989,7 +989,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         eventId: asEventId("evt-seq-3"),
         provider: "codex",
         createdAt: new Date().toISOString(),
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         turnId: asTurnId("turn-1"),
         status: "completed",
       });
@@ -1006,9 +1006,9 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
   it.effect("keeps subscriber delivery ordered and isolates failing subscribers", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(asThreadId("thread-1"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-1"), {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         runtimeMode: "full-access",
       });
 
@@ -1034,7 +1034,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
           eventId: asEventId("evt-ordered-1"),
           provider: "codex",
           createdAt: new Date().toISOString(),
-          threadId: session.threadId,
+          workspaceId: session.workspaceId,
           turnId: asTurnId("turn-1"),
           toolKind: "command",
           title: "Ran command",
@@ -1045,7 +1045,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
           eventId: asEventId("evt-ordered-2"),
           provider: "codex",
           createdAt: new Date().toISOString(),
-          threadId: session.threadId,
+          workspaceId: session.workspaceId,
           turnId: asTurnId("turn-1"),
           delta: "hello",
         },
@@ -1054,7 +1054,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
           eventId: asEventId("evt-ordered-3"),
           provider: "codex",
           createdAt: new Date().toISOString(),
-          threadId: session.threadId,
+          workspaceId: session.workspaceId,
           turnId: asTurnId("turn-1"),
           status: "completed",
         },
@@ -1078,31 +1078,31 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
-      const session = yield* provider.startSession(asThreadId("thread-metrics"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-metrics"), {
         provider: "claudeAgent",
-        threadId: asThreadId("thread-metrics"),
+        workspaceId: asWorkspaceId("workspace-metrics"),
         cwd: "/tmp/project",
         runtimeMode: "full-access",
       });
 
-      yield* provider.interruptTurn({ threadId: session.threadId });
+      yield* provider.interruptTurn({ workspaceId: session.workspaceId });
       yield* provider.respondToRequest({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         requestId: asRequestId("req-metrics-1"),
         decision: "accept",
       });
       yield* provider.respondToUserInput({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         requestId: asRequestId("req-metrics-2"),
         answers: {
           sandbox_mode: "workspace-write",
         },
       });
       yield* provider.rollbackConversation({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         numTurns: 1,
       });
-      yield* provider.stopSession({ threadId: session.threadId });
+      yield* provider.stopSession({ workspaceId: session.workspaceId });
 
       const snapshots = yield* Metric.snapshot;
 
@@ -1155,15 +1155,15 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       Effect.gen(function* () {
         const provider = yield* ProviderService;
 
-        const session = yield* provider.startSession(asThreadId("thread-send-metrics"), {
+        const session = yield* provider.startSession(asWorkspaceId("workspace-send-metrics"), {
           provider: "claudeAgent",
-          threadId: asThreadId("thread-send-metrics"),
+          workspaceId: asWorkspaceId("workspace-send-metrics"),
           cwd: "/tmp/project-send-metrics",
           runtimeMode: "full-access",
         });
 
         yield* provider.sendTurn({
-          threadId: session.threadId,
+          workspaceId: session.workspaceId,
           input: "hello",
           attachments: [],
         });
@@ -1196,8 +1196,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
       const provider = yield* ProviderService;
 
       const failure = yield* Effect.result(
-        provider.startSession(asThreadId("thread-validation"), {
-          threadId: asThreadId("thread-validation"),
+        provider.startSession(asWorkspaceId("workspace-validation"), {
+          workspaceId: asWorkspaceId("workspace-validation"),
           provider: "invalid-provider",
           runtimeMode: "full-access",
         } as never),
@@ -1216,7 +1216,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
     }),
   );
 
-  it.effect("accepts startSession when adapter has not emitted provider thread id yet", () =>
+  it.effect("accepts startSession when adapter has not emitted provider workspace id yet", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
@@ -1227,7 +1227,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
           return {
             provider: "codex",
             status: "ready",
-            threadId: input.threadId,
+            workspaceId: input.workspaceId,
             runtimeMode: input.runtimeMode,
             cwd: input.cwd ?? process.cwd(),
             createdAt: now,
@@ -1236,21 +1236,21 @@ validation.layer("ProviderServiceLive validation", (it) => {
         }),
       );
 
-      const session = yield* provider.startSession(asThreadId("thread-missing"), {
+      const session = yield* provider.startSession(asWorkspaceId("workspace-missing"), {
         provider: "codex",
-        threadId: asThreadId("thread-missing"),
+        workspaceId: asWorkspaceId("workspace-missing"),
         cwd: "/tmp/project",
         runtimeMode: "full-access",
       });
 
-      assert.equal(session.threadId, asThreadId("thread-missing"));
+      assert.equal(session.workspaceId, asWorkspaceId("workspace-missing"));
 
-      const runtime = yield* runtimeRepository.getByThreadId({
-        threadId: session.threadId,
+      const runtime = yield* runtimeRepository.getByWorkspaceId({
+        workspaceId: session.workspaceId,
       });
       assert.equal(Option.isSome(runtime), true);
       if (Option.isSome(runtime)) {
-        assert.equal(runtime.value.threadId, session.threadId);
+        assert.equal(runtime.value.workspaceId, session.workspaceId);
       }
     }),
   );

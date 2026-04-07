@@ -16,7 +16,7 @@ import {
   gitBranchSearchInfiniteQueryOptions,
   gitMutationKeys,
   gitQueryKeys,
-  gitPreparePullRequestThreadMutationOptions,
+  gitPreparePullRequestWorkspaceMutationOptions,
   gitPullMutationOptions,
   gitRunStackedActionMutationOptions,
   invalidateGitStatusQuery,
@@ -48,9 +48,9 @@ describe("gitMutationKeys", () => {
     expect(gitMutationKeys.pull("/repo/a")).not.toEqual(gitMutationKeys.pull("/repo/b"));
   });
 
-  it("scopes pull request thread preparation keys by cwd", () => {
-    expect(gitMutationKeys.preparePullRequestThread("/repo/a")).not.toEqual(
-      gitMutationKeys.preparePullRequestThread("/repo/b"),
+  it("scopes pull request workspace preparation keys by cwd", () => {
+    expect(gitMutationKeys.preparePullRequestWorkspace("/repo/a")).not.toEqual(
+      gitMutationKeys.preparePullRequestWorkspace("/repo/b"),
     );
   });
 });
@@ -71,12 +71,12 @@ describe("git mutation options", () => {
     expect(options.mutationKey).toEqual(gitMutationKeys.pull("/repo/a"));
   });
 
-  it("attaches cwd-scoped mutation key for preparePullRequestThread", () => {
-    const options = gitPreparePullRequestThreadMutationOptions({
+  it("attaches cwd-scoped mutation key for preparePullRequestWorkspace", () => {
+    const options = gitPreparePullRequestWorkspaceMutationOptions({
       cwd: "/repo/a",
       queryClient,
     });
-    expect(options.mutationKey).toEqual(gitMutationKeys.preparePullRequestThread("/repo/a"));
+    expect(options.mutationKey).toEqual(gitMutationKeys.preparePullRequestWorkspace("/repo/a"));
   });
 });
 

@@ -9,7 +9,7 @@ const decodeProviderSendTurnInput = Schema.decodeUnknownSync(ProviderSendTurnInp
 describe("ProviderSessionStartInput", () => {
   it("accepts codex-compatible payloads", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       provider: "codex",
       cwd: "/tmp/workspace",
       modelSelection: {
@@ -35,7 +35,7 @@ describe("ProviderSessionStartInput", () => {
   it("rejects payloads without runtime mode", () => {
     expect(() =>
       decodeProviderSessionStartInput({
-        threadId: "thread-1",
+        workspaceId: "workspace-1",
         provider: "codex",
       }),
     ).toThrow();
@@ -43,7 +43,7 @@ describe("ProviderSessionStartInput", () => {
 
   it("accepts claude runtime knobs", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       provider: "claudeAgent",
       cwd: "/tmp/workspace",
       modelSelection: {
@@ -73,7 +73,7 @@ describe("ProviderSessionStartInput", () => {
 describe("ProviderSendTurnInput", () => {
   it("accepts codex modelSelection", () => {
     const parsed = decodeProviderSendTurnInput({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       modelSelection: {
         provider: "codex",
         model: "gpt-5.3-codex",
@@ -95,7 +95,7 @@ describe("ProviderSendTurnInput", () => {
 
   it("accepts claude modelSelection including ultrathink", () => {
     const parsed = decodeProviderSendTurnInput({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-sonnet-4-6",

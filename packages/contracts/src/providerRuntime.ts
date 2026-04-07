@@ -8,7 +8,7 @@ import {
   RuntimeItemId,
   RuntimeRequestId,
   RuntimeTaskId,
-  ThreadId,
+  WorkspaceId,
   TrimmedNonEmptyString,
   TurnId,
 } from "./baseSchemas";
@@ -23,7 +23,7 @@ const RuntimeEventRawSource = Schema.Literals([
   "codex.eventmsg",
   "claude.sdk.message",
   "claude.sdk.permission",
-  "codex.sdk.thread-event",
+  "codex.sdk.workspace-event",
 ]);
 export type RuntimeEventRawSource = typeof RuntimeEventRawSource.Type;
 
@@ -55,7 +55,7 @@ const RuntimeSessionState = Schema.Literals([
 ]);
 export type RuntimeSessionState = typeof RuntimeSessionState.Type;
 
-const RuntimeThreadState = Schema.Literals([
+const RuntimeWorkspaceState = Schema.Literals([
   "active",
   "idle",
   "archived",
@@ -63,7 +63,7 @@ const RuntimeThreadState = Schema.Literals([
   "compacted",
   "error",
 ]);
-export type RuntimeThreadState = typeof RuntimeThreadState.Type;
+export type RuntimeWorkspaceState = typeof RuntimeWorkspaceState.Type;
 
 const RuntimeTurnState = Schema.Literals(["completed", "failed", "interrupted", "cancelled"]);
 export type RuntimeTurnState = typeof RuntimeTurnState.Type;
@@ -146,15 +146,15 @@ const ProviderRuntimeEventType = Schema.Literals([
   "session.configured",
   "session.state.changed",
   "session.exited",
-  "thread.started",
-  "thread.state.changed",
-  "thread.metadata.updated",
-  "thread.token-usage.updated",
-  "thread.realtime.started",
-  "thread.realtime.item-added",
-  "thread.realtime.audio.delta",
-  "thread.realtime.error",
-  "thread.realtime.closed",
+  "workspace.started",
+  "workspace.state.changed",
+  "workspace.metadata.updated",
+  "workspace.token-usage.updated",
+  "workspace.realtime.started",
+  "workspace.realtime.item-added",
+  "workspace.realtime.audio.delta",
+  "workspace.realtime.error",
+  "workspace.realtime.closed",
   "turn.started",
   "turn.completed",
   "turn.aborted",
@@ -196,15 +196,15 @@ const SessionStartedType = Schema.Literal("session.started");
 const SessionConfiguredType = Schema.Literal("session.configured");
 const SessionStateChangedType = Schema.Literal("session.state.changed");
 const SessionExitedType = Schema.Literal("session.exited");
-const ThreadStartedType = Schema.Literal("thread.started");
-const ThreadStateChangedType = Schema.Literal("thread.state.changed");
-const ThreadMetadataUpdatedType = Schema.Literal("thread.metadata.updated");
-const ThreadTokenUsageUpdatedType = Schema.Literal("thread.token-usage.updated");
-const ThreadRealtimeStartedType = Schema.Literal("thread.realtime.started");
-const ThreadRealtimeItemAddedType = Schema.Literal("thread.realtime.item-added");
-const ThreadRealtimeAudioDeltaType = Schema.Literal("thread.realtime.audio.delta");
-const ThreadRealtimeErrorType = Schema.Literal("thread.realtime.error");
-const ThreadRealtimeClosedType = Schema.Literal("thread.realtime.closed");
+const WorkspaceStartedType = Schema.Literal("workspace.started");
+const WorkspaceStateChangedType = Schema.Literal("workspace.state.changed");
+const WorkspaceMetadataUpdatedType = Schema.Literal("workspace.metadata.updated");
+const WorkspaceTokenUsageUpdatedType = Schema.Literal("workspace.token-usage.updated");
+const WorkspaceRealtimeStartedType = Schema.Literal("workspace.realtime.started");
+const WorkspaceRealtimeItemAddedType = Schema.Literal("workspace.realtime.item-added");
+const WorkspaceRealtimeAudioDeltaType = Schema.Literal("workspace.realtime.audio.delta");
+const WorkspaceRealtimeErrorType = Schema.Literal("workspace.realtime.error");
+const WorkspaceRealtimeClosedType = Schema.Literal("workspace.realtime.closed");
 const TurnStartedType = Schema.Literal("turn.started");
 const TurnCompletedType = Schema.Literal("turn.completed");
 const TurnAbortedType = Schema.Literal("turn.aborted");
@@ -243,7 +243,7 @@ const RuntimeErrorType = Schema.Literal("runtime.error");
 const ProviderRuntimeEventBase = Schema.Struct({
   eventId: EventId,
   provider: ProviderKind,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   createdAt: IsoDateTime,
   turnId: Schema.optional(TurnId),
   itemId: Schema.optional(RuntimeItemId),
@@ -278,24 +278,24 @@ const SessionExitedPayload = Schema.Struct({
 });
 export type SessionExitedPayload = typeof SessionExitedPayload.Type;
 
-const ThreadStartedPayload = Schema.Struct({
-  providerThreadId: Schema.optional(TrimmedNonEmptyStringSchema),
+const WorkspaceStartedPayload = Schema.Struct({
+  providerWorkspaceId: Schema.optional(TrimmedNonEmptyStringSchema),
 });
-export type ThreadStartedPayload = typeof ThreadStartedPayload.Type;
+export type WorkspaceStartedPayload = typeof WorkspaceStartedPayload.Type;
 
-const ThreadStateChangedPayload = Schema.Struct({
-  state: RuntimeThreadState,
+const WorkspaceStateChangedPayload = Schema.Struct({
+  state: RuntimeWorkspaceState,
   detail: Schema.optional(Schema.Unknown),
 });
-export type ThreadStateChangedPayload = typeof ThreadStateChangedPayload.Type;
+export type WorkspaceStateChangedPayload = typeof WorkspaceStateChangedPayload.Type;
 
-const ThreadMetadataUpdatedPayload = Schema.Struct({
+const WorkspaceMetadataUpdatedPayload = Schema.Struct({
   name: Schema.optional(TrimmedNonEmptyStringSchema),
   metadata: Schema.optional(UnknownRecordSchema),
 });
-export type ThreadMetadataUpdatedPayload = typeof ThreadMetadataUpdatedPayload.Type;
+export type WorkspaceMetadataUpdatedPayload = typeof WorkspaceMetadataUpdatedPayload.Type;
 
-export const ThreadTokenUsageSnapshot = Schema.Struct({
+export const WorkspaceTokenUsageSnapshot = Schema.Struct({
   usedTokens: NonNegativeInt,
   totalProcessedTokens: Schema.optional(NonNegativeInt),
   maxTokens: Schema.optional(PositiveInt),
@@ -312,37 +312,37 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
 });
-export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
+export type WorkspaceTokenUsageSnapshot = typeof WorkspaceTokenUsageSnapshot.Type;
 
-const ThreadTokenUsageUpdatedPayload = Schema.Struct({
-  usage: ThreadTokenUsageSnapshot,
+const WorkspaceTokenUsageUpdatedPayload = Schema.Struct({
+  usage: WorkspaceTokenUsageSnapshot,
 });
-export type ThreadTokenUsageUpdatedPayload = typeof ThreadTokenUsageUpdatedPayload.Type;
+export type WorkspaceTokenUsageUpdatedPayload = typeof WorkspaceTokenUsageUpdatedPayload.Type;
 
-const ThreadRealtimeStartedPayload = Schema.Struct({
+const WorkspaceRealtimeStartedPayload = Schema.Struct({
   realtimeSessionId: Schema.optional(TrimmedNonEmptyStringSchema),
 });
-export type ThreadRealtimeStartedPayload = typeof ThreadRealtimeStartedPayload.Type;
+export type WorkspaceRealtimeStartedPayload = typeof WorkspaceRealtimeStartedPayload.Type;
 
-const ThreadRealtimeItemAddedPayload = Schema.Struct({
+const WorkspaceRealtimeItemAddedPayload = Schema.Struct({
   item: Schema.Unknown,
 });
-export type ThreadRealtimeItemAddedPayload = typeof ThreadRealtimeItemAddedPayload.Type;
+export type WorkspaceRealtimeItemAddedPayload = typeof WorkspaceRealtimeItemAddedPayload.Type;
 
-const ThreadRealtimeAudioDeltaPayload = Schema.Struct({
+const WorkspaceRealtimeAudioDeltaPayload = Schema.Struct({
   audio: Schema.Unknown,
 });
-export type ThreadRealtimeAudioDeltaPayload = typeof ThreadRealtimeAudioDeltaPayload.Type;
+export type WorkspaceRealtimeAudioDeltaPayload = typeof WorkspaceRealtimeAudioDeltaPayload.Type;
 
-const ThreadRealtimeErrorPayload = Schema.Struct({
+const WorkspaceRealtimeErrorPayload = Schema.Struct({
   message: TrimmedNonEmptyStringSchema,
 });
-export type ThreadRealtimeErrorPayload = typeof ThreadRealtimeErrorPayload.Type;
+export type WorkspaceRealtimeErrorPayload = typeof WorkspaceRealtimeErrorPayload.Type;
 
-const ThreadRealtimeClosedPayload = Schema.Struct({
+const WorkspaceRealtimeClosedPayload = Schema.Struct({
   reason: Schema.optional(TrimmedNonEmptyStringSchema),
 });
-export type ThreadRealtimeClosedPayload = typeof ThreadRealtimeClosedPayload.Type;
+export type WorkspaceRealtimeClosedPayload = typeof WorkspaceRealtimeClosedPayload.Type;
 
 const TurnStartedPayload = Schema.Struct({
   model: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -624,76 +624,76 @@ const ProviderRuntimeSessionExitedEvent = Schema.Struct({
 });
 export type ProviderRuntimeSessionExitedEvent = typeof ProviderRuntimeSessionExitedEvent.Type;
 
-const ProviderRuntimeThreadStartedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadStartedType,
-  payload: ThreadStartedPayload,
+  type: WorkspaceStartedType,
+  payload: WorkspaceStartedPayload,
 });
-export type ProviderRuntimeThreadStartedEvent = typeof ProviderRuntimeThreadStartedEvent.Type;
+export type ProviderRuntimeWorkspaceStartedEvent = typeof ProviderRuntimeWorkspaceStartedEvent.Type;
 
-const ProviderRuntimeThreadStateChangedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceStateChangedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadStateChangedType,
-  payload: ThreadStateChangedPayload,
+  type: WorkspaceStateChangedType,
+  payload: WorkspaceStateChangedPayload,
 });
-export type ProviderRuntimeThreadStateChangedEvent =
-  typeof ProviderRuntimeThreadStateChangedEvent.Type;
+export type ProviderRuntimeWorkspaceStateChangedEvent =
+  typeof ProviderRuntimeWorkspaceStateChangedEvent.Type;
 
-const ProviderRuntimeThreadMetadataUpdatedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceMetadataUpdatedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadMetadataUpdatedType,
-  payload: ThreadMetadataUpdatedPayload,
+  type: WorkspaceMetadataUpdatedType,
+  payload: WorkspaceMetadataUpdatedPayload,
 });
-export type ProviderRuntimeThreadMetadataUpdatedEvent =
-  typeof ProviderRuntimeThreadMetadataUpdatedEvent.Type;
+export type ProviderRuntimeWorkspaceMetadataUpdatedEvent =
+  typeof ProviderRuntimeWorkspaceMetadataUpdatedEvent.Type;
 
-const ProviderRuntimeThreadTokenUsageUpdatedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceTokenUsageUpdatedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadTokenUsageUpdatedType,
-  payload: ThreadTokenUsageUpdatedPayload,
+  type: WorkspaceTokenUsageUpdatedType,
+  payload: WorkspaceTokenUsageUpdatedPayload,
 });
-export type ProviderRuntimeThreadTokenUsageUpdatedEvent =
-  typeof ProviderRuntimeThreadTokenUsageUpdatedEvent.Type;
+export type ProviderRuntimeWorkspaceTokenUsageUpdatedEvent =
+  typeof ProviderRuntimeWorkspaceTokenUsageUpdatedEvent.Type;
 
-const ProviderRuntimeThreadRealtimeStartedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceRealtimeStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadRealtimeStartedType,
-  payload: ThreadRealtimeStartedPayload,
+  type: WorkspaceRealtimeStartedType,
+  payload: WorkspaceRealtimeStartedPayload,
 });
-export type ProviderRuntimeThreadRealtimeStartedEvent =
-  typeof ProviderRuntimeThreadRealtimeStartedEvent.Type;
+export type ProviderRuntimeWorkspaceRealtimeStartedEvent =
+  typeof ProviderRuntimeWorkspaceRealtimeStartedEvent.Type;
 
-const ProviderRuntimeThreadRealtimeItemAddedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceRealtimeItemAddedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadRealtimeItemAddedType,
-  payload: ThreadRealtimeItemAddedPayload,
+  type: WorkspaceRealtimeItemAddedType,
+  payload: WorkspaceRealtimeItemAddedPayload,
 });
-export type ProviderRuntimeThreadRealtimeItemAddedEvent =
-  typeof ProviderRuntimeThreadRealtimeItemAddedEvent.Type;
+export type ProviderRuntimeWorkspaceRealtimeItemAddedEvent =
+  typeof ProviderRuntimeWorkspaceRealtimeItemAddedEvent.Type;
 
-const ProviderRuntimeThreadRealtimeAudioDeltaEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceRealtimeAudioDeltaEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadRealtimeAudioDeltaType,
-  payload: ThreadRealtimeAudioDeltaPayload,
+  type: WorkspaceRealtimeAudioDeltaType,
+  payload: WorkspaceRealtimeAudioDeltaPayload,
 });
-export type ProviderRuntimeThreadRealtimeAudioDeltaEvent =
-  typeof ProviderRuntimeThreadRealtimeAudioDeltaEvent.Type;
+export type ProviderRuntimeWorkspaceRealtimeAudioDeltaEvent =
+  typeof ProviderRuntimeWorkspaceRealtimeAudioDeltaEvent.Type;
 
-const ProviderRuntimeThreadRealtimeErrorEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceRealtimeErrorEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadRealtimeErrorType,
-  payload: ThreadRealtimeErrorPayload,
+  type: WorkspaceRealtimeErrorType,
+  payload: WorkspaceRealtimeErrorPayload,
 });
-export type ProviderRuntimeThreadRealtimeErrorEvent =
-  typeof ProviderRuntimeThreadRealtimeErrorEvent.Type;
+export type ProviderRuntimeWorkspaceRealtimeErrorEvent =
+  typeof ProviderRuntimeWorkspaceRealtimeErrorEvent.Type;
 
-const ProviderRuntimeThreadRealtimeClosedEvent = Schema.Struct({
+const ProviderRuntimeWorkspaceRealtimeClosedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
-  type: ThreadRealtimeClosedType,
-  payload: ThreadRealtimeClosedPayload,
+  type: WorkspaceRealtimeClosedType,
+  payload: WorkspaceRealtimeClosedPayload,
 });
-export type ProviderRuntimeThreadRealtimeClosedEvent =
-  typeof ProviderRuntimeThreadRealtimeClosedEvent.Type;
+export type ProviderRuntimeWorkspaceRealtimeClosedEvent =
+  typeof ProviderRuntimeWorkspaceRealtimeClosedEvent.Type;
 
 const ProviderRuntimeTurnStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
@@ -945,15 +945,15 @@ export const ProviderRuntimeEventV2 = Schema.Union([
   ProviderRuntimeSessionConfiguredEvent,
   ProviderRuntimeSessionStateChangedEvent,
   ProviderRuntimeSessionExitedEvent,
-  ProviderRuntimeThreadStartedEvent,
-  ProviderRuntimeThreadStateChangedEvent,
-  ProviderRuntimeThreadMetadataUpdatedEvent,
-  ProviderRuntimeThreadTokenUsageUpdatedEvent,
-  ProviderRuntimeThreadRealtimeStartedEvent,
-  ProviderRuntimeThreadRealtimeItemAddedEvent,
-  ProviderRuntimeThreadRealtimeAudioDeltaEvent,
-  ProviderRuntimeThreadRealtimeErrorEvent,
-  ProviderRuntimeThreadRealtimeClosedEvent,
+  ProviderRuntimeWorkspaceStartedEvent,
+  ProviderRuntimeWorkspaceStateChangedEvent,
+  ProviderRuntimeWorkspaceMetadataUpdatedEvent,
+  ProviderRuntimeWorkspaceTokenUsageUpdatedEvent,
+  ProviderRuntimeWorkspaceRealtimeStartedEvent,
+  ProviderRuntimeWorkspaceRealtimeItemAddedEvent,
+  ProviderRuntimeWorkspaceRealtimeAudioDeltaEvent,
+  ProviderRuntimeWorkspaceRealtimeErrorEvent,
+  ProviderRuntimeWorkspaceRealtimeClosedEvent,
   ProviderRuntimeTurnStartedEvent,
   ProviderRuntimeTurnCompletedEvent,
   ProviderRuntimeTurnAbortedEvent,

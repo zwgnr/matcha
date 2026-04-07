@@ -1,10 +1,10 @@
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-const THREAD_A = ThreadId.makeUnsafe("thread-a");
-const THREAD_B = ThreadId.makeUnsafe("thread-b");
+const WORKSPACE_A = WorkspaceId.makeUnsafe("workspace-a");
+const WORKSPACE_B = WorkspaceId.makeUnsafe("workspace-b");
 const GIT_CWD = "/repo/project";
 const BRANCH_NAME = "feature/toast-scope";
 
@@ -12,7 +12,7 @@ const {
   invalidateGitQueriesSpy,
   invalidateGitStatusQuerySpy,
   runStackedActionMutateAsyncSpy,
-  setThreadBranchSpy,
+  setWorkspaceBranchSpy,
   toastAddSpy,
   toastCloseSpy,
   toastPromiseSpy,
@@ -21,7 +21,7 @@ const {
   invalidateGitQueriesSpy: vi.fn(() => Promise.resolve()),
   invalidateGitStatusQuerySpy: vi.fn(() => Promise.resolve()),
   runStackedActionMutateAsyncSpy: vi.fn(() => new Promise<never>(() => undefined)),
-  setThreadBranchSpy: vi.fn(),
+  setWorkspaceBranchSpy: vi.fn(),
   toastAddSpy: vi.fn(() => "toast-1"),
   toastCloseSpy: vi.fn(),
   toastPromiseSpy: vi.fn(),
@@ -140,10 +140,10 @@ vi.mock("~/nativeApi", () => ({
 vi.mock("~/store", () => ({
   useStore: (selector: (state: unknown) => unknown) =>
     selector({
-      setThreadBranch: setThreadBranchSpy,
-      threads: [
-        { id: THREAD_A, branch: BRANCH_NAME, worktreePath: null },
-        { id: THREAD_B, branch: BRANCH_NAME, worktreePath: null },
+      setWorkspaceBranch: setWorkspaceBranchSpy,
+      workspaces: [
+        { id: WORKSPACE_A, branch: BRANCH_NAME, worktreePath: null },
+        { id: WORKSPACE_B, branch: BRANCH_NAME, worktreePath: null },
       ],
     }),
 }));
@@ -161,26 +161,26 @@ function findButtonByText(text: string): HTMLButtonElement | null {
 }
 
 function Harness() {
-  const [activeThreadId, setActiveThreadId] = useState(THREAD_A);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(WORKSPACE_A);
 
   return (
     <>
-      <button type="button" onClick={() => setActiveThreadId(THREAD_B)}>
-        Switch thread
+      <button type="button" onClick={() => setActiveWorkspaceId(WORKSPACE_B)}>
+        Switch workspace
       </button>
-      <GitActionsControl gitCwd={GIT_CWD} activeThreadId={activeThreadId} />
+      <GitActionsControl gitCwd={GIT_CWD} activeWorkspaceId={activeWorkspaceId} />
     </>
   );
 }
 
-describe("GitActionsControl thread-scoped progress toast", () => {
+describe("GitActionsControl workspace-scoped progress toast", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
     document.body.innerHTML = "";
   });
 
-  it("keeps an in-flight git action toast pinned to the thread that started it", async () => {
+  it("keeps an in-flight git action toast pinned to the workspace that started it", async () => {
     vi.useFakeTimers();
 
     const host = document.createElement("div");
@@ -197,7 +197,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
       expect(toastAddSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { threadId: THREAD_A },
+          data: { workspaceId: WORKSPACE_A },
           title: "Pushing...",
           type: "loading",
         }),
@@ -208,24 +208,27 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       expect(toastUpdateSpy).toHaveBeenLastCalledWith(
         "toast-1",
         expect.objectContaining({
-          data: { threadId: THREAD_A },
+          data: { workspaceId: WORKSPACE_A },
           title: "Pushing...",
           type: "loading",
         }),
       );
 
-      const switchThreadButton = findButtonByText("Switch thread");
-      expect(switchThreadButton, 'Unable to find button containing "Switch thread"').toBeTruthy();
-      if (!(switchThreadButton instanceof HTMLButtonElement)) {
-        throw new Error('Unable to find button containing "Switch thread"');
+      const switchWorkspaceButton = findButtonByText("Switch workspace");
+      expect(
+        switchWorkspaceButton,
+        'Unable to find button containing "Switch workspace"',
+      ).toBeTruthy();
+      if (!(switchWorkspaceButton instanceof HTMLButtonElement)) {
+        throw new Error('Unable to find button containing "Switch workspace"');
       }
-      switchThreadButton.click();
+      switchWorkspaceButton.click();
       await vi.advanceTimersByTimeAsync(1_000);
 
       expect(toastUpdateSpy).toHaveBeenLastCalledWith(
         "toast-1",
         expect.objectContaining({
-          data: { threadId: THREAD_A },
+          data: { workspaceId: WORKSPACE_A },
           title: "Pushing...",
           type: "loading",
         }),

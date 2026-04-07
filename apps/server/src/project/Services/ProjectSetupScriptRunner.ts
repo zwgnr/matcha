@@ -18,7 +18,7 @@ export type ProjectSetupScriptRunnerResult =
   | ProjectSetupScriptRunnerResultStarted;
 
 export interface ProjectSetupScriptRunnerInput {
-  readonly threadId: string;
+  readonly workspaceId: string;
   readonly projectId?: string;
   readonly projectCwd?: string;
   readonly worktreePath: string;
@@ -26,7 +26,7 @@ export interface ProjectSetupScriptRunnerInput {
 }
 
 export interface ProjectSetupScriptRunnerShape {
-  readonly runForThread: (
+  readonly runForWorkspace: (
     input: ProjectSetupScriptRunnerInput,
   ) => Effect.Effect<ProjectSetupScriptRunnerResult, Error>;
 }

@@ -23,13 +23,13 @@ const TerminalIdWithDefaultSchema = TerminalIdSchema.pipe(
   Schema.withDecodingDefault(() => DEFAULT_TERMINAL_ID),
 );
 
-export const TerminalThreadInput = Schema.Struct({
-  threadId: TrimmedNonEmptyStringSchema,
+export const TerminalWorkspaceInput = Schema.Struct({
+  workspaceId: TrimmedNonEmptyStringSchema,
 });
-export type TerminalThreadInput = typeof TerminalThreadInput.Type;
+export type TerminalWorkspaceInput = typeof TerminalWorkspaceInput.Type;
 
 const TerminalSessionInput = Schema.Struct({
-  ...TerminalThreadInput.fields,
+  ...TerminalWorkspaceInput.fields,
   terminalId: TerminalIdWithDefaultSchema,
 });
 export type TerminalSessionInput = Schema.Codec.Encoded<typeof TerminalSessionInput>;
@@ -71,7 +71,7 @@ export const TerminalRestartInput = Schema.Struct({
 export type TerminalRestartInput = Schema.Codec.Encoded<typeof TerminalRestartInput>;
 
 export const TerminalCloseInput = Schema.Struct({
-  ...TerminalThreadInput.fields,
+  ...TerminalWorkspaceInput.fields,
   terminalId: Schema.optional(TerminalIdSchema),
   deleteHistory: Schema.optional(Schema.Boolean),
 });
@@ -81,7 +81,7 @@ export const TerminalSessionStatus = Schema.Literals(["starting", "running", "ex
 export type TerminalSessionStatus = typeof TerminalSessionStatus.Type;
 
 export const TerminalSessionSnapshot = Schema.Struct({
-  threadId: Schema.String.check(Schema.isNonEmpty()),
+  workspaceId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
@@ -95,7 +95,7 @@ export const TerminalSessionSnapshot = Schema.Struct({
 export type TerminalSessionSnapshot = typeof TerminalSessionSnapshot.Type;
 
 const TerminalEventBaseSchema = Schema.Struct({
-  threadId: Schema.String.check(Schema.isNonEmpty()),
+  workspaceId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   createdAt: Schema.String,
 });
@@ -182,37 +182,37 @@ export class TerminalHistoryError extends Schema.TaggedErrorClass<TerminalHistor
   "TerminalHistoryError",
   {
     operation: Schema.Literals(["read", "truncate", "migrate"]),
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     terminalId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message() {
-    return `Failed to ${this.operation} terminal history for thread: ${this.threadId}, terminal: ${this.terminalId}`;
+    return `Failed to ${this.operation} terminal history for workspace: ${this.workspaceId}, terminal: ${this.terminalId}`;
   }
 }
 
 export class TerminalSessionLookupError extends Schema.TaggedErrorClass<TerminalSessionLookupError>()(
   "TerminalSessionLookupError",
   {
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     terminalId: Schema.String,
   },
 ) {
   override get message() {
-    return `Unknown terminal thread: ${this.threadId}, terminal: ${this.terminalId}`;
+    return `Unknown terminal workspace: ${this.workspaceId}, terminal: ${this.terminalId}`;
   }
 }
 
 export class TerminalNotRunningError extends Schema.TaggedErrorClass<TerminalNotRunningError>()(
   "TerminalNotRunningError",
   {
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     terminalId: Schema.String,
   },
 ) {
   override get message() {
-    return `Terminal is not running for thread: ${this.threadId}, terminal: ${this.terminalId}`;
+    return `Terminal is not running for workspace: ${this.workspaceId}, terminal: ${this.terminalId}`;
   }
 }
 

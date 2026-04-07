@@ -76,8 +76,8 @@ export interface WsRpcClient {
     readonly checkout: RpcUnaryMethod<typeof WS_METHODS.gitCheckout>;
     readonly init: RpcUnaryMethod<typeof WS_METHODS.gitInit>;
     readonly resolvePullRequest: RpcUnaryMethod<typeof WS_METHODS.gitResolvePullRequest>;
-    readonly preparePullRequestThread: RpcUnaryMethod<
-      typeof WS_METHODS.gitPreparePullRequestThread
+    readonly preparePullRequestWorkspace: RpcUnaryMethod<
+      typeof WS_METHODS.gitPreparePullRequestWorkspace
     >;
   };
   readonly server: {
@@ -95,7 +95,9 @@ export interface WsRpcClient {
     readonly getSnapshot: RpcUnaryNoArgMethod<typeof ORCHESTRATION_WS_METHODS.getSnapshot>;
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
-    readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
+    readonly getFullWorkspaceDiff: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getFullWorkspaceDiff
+    >;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
   };
@@ -181,8 +183,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       init: (input) => transport.request((client) => client[WS_METHODS.gitInit](input)),
       resolvePullRequest: (input) =>
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
-      preparePullRequestThread: (input) =>
-        transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      preparePullRequestWorkspace: (input) =>
+        transport.request((client) => client[WS_METHODS.gitPreparePullRequestWorkspace](input)),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
@@ -213,8 +215,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.dispatchCommand](input)),
       getTurnDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getTurnDiff](input)),
-      getFullThreadDiff: (input) =>
-        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullThreadDiff](input)),
+      getFullWorkspaceDiff: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullWorkspaceDiff](input)),
       replayEvents: (input) =>
         transport
           .request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input))

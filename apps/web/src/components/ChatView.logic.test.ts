@@ -1,15 +1,15 @@
-import { ProjectId, ThreadId, TurnId } from "@matcha/contracts";
+import { ProjectId, WorkspaceId, TurnId } from "@matcha/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../store";
 
 import {
-  MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
+  MAX_HIDDEN_MOUNTED_TERMINAL_WORKSPACES,
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
-  reconcileMountedTerminalThreadIds,
-  waitForStartedServerThread,
+  reconcileMountedTerminalWorkspaceIds,
+  waitForStartedServerWorkspace,
 } from "./ChatView.logic";
 
 describe("deriveComposerSendState", () => {
@@ -20,7 +20,7 @@ describe("deriveComposerSendState", () => {
       terminalContexts: [
         {
           id: "ctx-expired",
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 4,
@@ -44,7 +44,7 @@ describe("deriveComposerSendState", () => {
       terminalContexts: [
         {
           id: "ctx-expired",
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 4,
@@ -77,100 +77,106 @@ describe("buildExpiredTerminalContextToastCopy", () => {
   });
 });
 
-describe("reconcileMountedTerminalThreadIds", () => {
-  it("keeps previously mounted open threads and adds the active open thread", () => {
+describe("reconcileMountedTerminalWorkspaceIds", () => {
+  it("keeps previously mounted open workspaces and adds the active open workspace", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-hidden"),
-          ThreadId.makeUnsafe("thread-stale"),
+      reconcileMountedTerminalWorkspaceIds({
+        currentWorkspaceIds: [
+          WorkspaceId.makeUnsafe("workspace-hidden"),
+          WorkspaceId.makeUnsafe("workspace-stale"),
         ],
-        openThreadIds: [ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")],
-        activeThreadId: ThreadId.makeUnsafe("thread-active"),
-        activeThreadTerminalOpen: true,
+        openWorkspaceIds: [
+          WorkspaceId.makeUnsafe("workspace-hidden"),
+          WorkspaceId.makeUnsafe("workspace-active"),
+        ],
+        activeWorkspaceId: WorkspaceId.makeUnsafe("workspace-active"),
+        activeWorkspaceTerminalOpen: true,
       }),
-    ).toEqual([ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")]);
+    ).toEqual([
+      WorkspaceId.makeUnsafe("workspace-hidden"),
+      WorkspaceId.makeUnsafe("workspace-active"),
+    ]);
   });
 
-  it("drops mounted threads once their terminal drawer is no longer open", () => {
+  it("drops mounted workspaces once their terminal drawer is no longer open", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [ThreadId.makeUnsafe("thread-closed")],
-        openThreadIds: [],
-        activeThreadId: ThreadId.makeUnsafe("thread-closed"),
-        activeThreadTerminalOpen: false,
+      reconcileMountedTerminalWorkspaceIds({
+        currentWorkspaceIds: [WorkspaceId.makeUnsafe("workspace-closed")],
+        openWorkspaceIds: [],
+        activeWorkspaceId: WorkspaceId.makeUnsafe("workspace-closed"),
+        activeWorkspaceTerminalOpen: false,
       }),
     ).toEqual([]);
   });
 
-  it("keeps only the most recently active hidden terminal threads", () => {
+  it("keeps only the most recently active hidden terminal workspaces", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-1"),
-          ThreadId.makeUnsafe("thread-2"),
-          ThreadId.makeUnsafe("thread-3"),
+      reconcileMountedTerminalWorkspaceIds({
+        currentWorkspaceIds: [
+          WorkspaceId.makeUnsafe("workspace-1"),
+          WorkspaceId.makeUnsafe("workspace-2"),
+          WorkspaceId.makeUnsafe("workspace-3"),
         ],
-        openThreadIds: [
-          ThreadId.makeUnsafe("thread-1"),
-          ThreadId.makeUnsafe("thread-2"),
-          ThreadId.makeUnsafe("thread-3"),
-          ThreadId.makeUnsafe("thread-4"),
+        openWorkspaceIds: [
+          WorkspaceId.makeUnsafe("workspace-1"),
+          WorkspaceId.makeUnsafe("workspace-2"),
+          WorkspaceId.makeUnsafe("workspace-3"),
+          WorkspaceId.makeUnsafe("workspace-4"),
         ],
-        activeThreadId: ThreadId.makeUnsafe("thread-4"),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
+        activeWorkspaceId: WorkspaceId.makeUnsafe("workspace-4"),
+        activeWorkspaceTerminalOpen: true,
+        maxHiddenWorkspaceCount: 2,
       }),
     ).toEqual([
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-3"),
-      ThreadId.makeUnsafe("thread-4"),
+      WorkspaceId.makeUnsafe("workspace-2"),
+      WorkspaceId.makeUnsafe("workspace-3"),
+      WorkspaceId.makeUnsafe("workspace-4"),
     ]);
   });
 
-  it("moves the active thread to the end so it is treated as most recently used", () => {
+  it("moves the active workspace to the end so it is treated as most recently used", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-a"),
-          ThreadId.makeUnsafe("thread-b"),
-          ThreadId.makeUnsafe("thread-c"),
+      reconcileMountedTerminalWorkspaceIds({
+        currentWorkspaceIds: [
+          WorkspaceId.makeUnsafe("workspace-a"),
+          WorkspaceId.makeUnsafe("workspace-b"),
+          WorkspaceId.makeUnsafe("workspace-c"),
         ],
-        openThreadIds: [
-          ThreadId.makeUnsafe("thread-a"),
-          ThreadId.makeUnsafe("thread-b"),
-          ThreadId.makeUnsafe("thread-c"),
+        openWorkspaceIds: [
+          WorkspaceId.makeUnsafe("workspace-a"),
+          WorkspaceId.makeUnsafe("workspace-b"),
+          WorkspaceId.makeUnsafe("workspace-c"),
         ],
-        activeThreadId: ThreadId.makeUnsafe("thread-a"),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
+        activeWorkspaceId: WorkspaceId.makeUnsafe("workspace-a"),
+        activeWorkspaceTerminalOpen: true,
+        maxHiddenWorkspaceCount: 2,
       }),
     ).toEqual([
-      ThreadId.makeUnsafe("thread-b"),
-      ThreadId.makeUnsafe("thread-c"),
-      ThreadId.makeUnsafe("thread-a"),
+      WorkspaceId.makeUnsafe("workspace-b"),
+      WorkspaceId.makeUnsafe("workspace-c"),
+      WorkspaceId.makeUnsafe("workspace-a"),
     ]);
   });
 
   it("defaults to the hidden mounted terminal cap", () => {
-    const currentThreadIds = Array.from(
-      { length: MAX_HIDDEN_MOUNTED_TERMINAL_THREADS + 2 },
-      (_, index) => ThreadId.makeUnsafe(`thread-${index + 1}`),
+    const currentWorkspaceIds = Array.from(
+      { length: MAX_HIDDEN_MOUNTED_TERMINAL_WORKSPACES + 2 },
+      (_, index) => WorkspaceId.makeUnsafe(`workspace-${index + 1}`),
     );
 
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds,
-        openThreadIds: currentThreadIds,
-        activeThreadId: null,
-        activeThreadTerminalOpen: false,
+      reconcileMountedTerminalWorkspaceIds({
+        currentWorkspaceIds,
+        openWorkspaceIds: currentWorkspaceIds,
+        activeWorkspaceId: null,
+        activeWorkspaceTerminalOpen: false,
       }),
-    ).toEqual(currentThreadIds.slice(-MAX_HIDDEN_MOUNTED_TERMINAL_THREADS));
+    ).toEqual(currentWorkspaceIds.slice(-MAX_HIDDEN_MOUNTED_TERMINAL_WORKSPACES));
   });
 });
 
-const makeThread = (input?: {
-  id?: ThreadId;
+const makeWorkspace = (input?: {
+  id?: WorkspaceId;
   latestTurn?: {
     turnId: TurnId;
     state: "running" | "completed";
@@ -179,10 +185,10 @@ const makeThread = (input?: {
     completedAt: string | null;
   } | null;
 }) => ({
-  id: input?.id ?? ThreadId.makeUnsafe("thread-1"),
-  codexThreadId: null,
+  id: input?.id ?? WorkspaceId.makeUnsafe("workspace-1"),
+  codexWorkspaceId: null,
   projectId: ProjectId.makeUnsafe("project-1"),
-  title: "Thread",
+  title: "Workspace",
   modelSelection: { provider: "codex" as const, model: "gpt-5.4" },
   runtimeMode: "full-access" as const,
   interactionMode: "default" as const,
@@ -211,19 +217,19 @@ afterEach(() => {
   useStore.setState((state) => ({
     ...state,
     projects: [],
-    threads: [],
+    workspaces: [],
     bootstrapComplete: true,
   }));
 });
 
-describe("waitForStartedServerThread", () => {
-  it("resolves immediately when the thread is already started", async () => {
-    const threadId = ThreadId.makeUnsafe("thread-started");
+describe("waitForStartedServerWorkspace", () => {
+  it("resolves immediately when the workspace is already started", async () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-started");
     useStore.setState((state) => ({
       ...state,
-      threads: [
-        makeThread({
-          id: threadId,
+      workspaces: [
+        makeWorkspace({
+          id: workspaceId,
           latestTurn: {
             turnId: TurnId.makeUnsafe("turn-started"),
             state: "running",
@@ -235,23 +241,23 @@ describe("waitForStartedServerThread", () => {
       ],
     }));
 
-    await expect(waitForStartedServerThread(threadId)).resolves.toBe(true);
+    await expect(waitForStartedServerWorkspace(workspaceId)).resolves.toBe(true);
   });
 
-  it("waits for the thread to start via subscription updates", async () => {
-    const threadId = ThreadId.makeUnsafe("thread-wait");
+  it("waits for the workspace to start via subscription updates", async () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-wait");
     useStore.setState((state) => ({
       ...state,
-      threads: [makeThread({ id: threadId })],
+      workspaces: [makeWorkspace({ id: workspaceId })],
     }));
 
-    const promise = waitForStartedServerThread(threadId, 500);
+    const promise = waitForStartedServerWorkspace(workspaceId, 500);
 
     useStore.setState((state) => ({
       ...state,
-      threads: [
-        makeThread({
-          id: threadId,
+      workspaces: [
+        makeWorkspace({
+          id: workspaceId,
           latestTurn: {
             turnId: TurnId.makeUnsafe("turn-started"),
             state: "running",
@@ -266,11 +272,11 @@ describe("waitForStartedServerThread", () => {
     await expect(promise).resolves.toBe(true);
   });
 
-  it("handles the thread starting between the initial read and subscription setup", async () => {
-    const threadId = ThreadId.makeUnsafe("thread-race");
+  it("handles the workspace starting between the initial read and subscription setup", async () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-race");
     useStore.setState((state) => ({
       ...state,
-      threads: [makeThread({ id: threadId })],
+      workspaces: [makeWorkspace({ id: workspaceId })],
     }));
 
     const originalSubscribe = useStore.subscribe.bind(useStore);
@@ -280,9 +286,9 @@ describe("waitForStartedServerThread", () => {
         raced = true;
         useStore.setState((state) => ({
           ...state,
-          threads: [
-            makeThread({
-              id: threadId,
+          workspaces: [
+            makeWorkspace({
+              id: workspaceId,
               latestTurn: {
                 turnId: TurnId.makeUnsafe("turn-race"),
                 state: "running",
@@ -297,18 +303,18 @@ describe("waitForStartedServerThread", () => {
       return originalSubscribe(listener);
     });
 
-    await expect(waitForStartedServerThread(threadId, 500)).resolves.toBe(true);
+    await expect(waitForStartedServerWorkspace(workspaceId, 500)).resolves.toBe(true);
   });
 
-  it("returns false after the timeout when the thread never starts", async () => {
+  it("returns false after the timeout when the workspace never starts", async () => {
     vi.useFakeTimers();
 
-    const threadId = ThreadId.makeUnsafe("thread-timeout");
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-timeout");
     useStore.setState((state) => ({
       ...state,
-      threads: [makeThread({ id: threadId })],
+      workspaces: [makeWorkspace({ id: workspaceId })],
     }));
-    const promise = waitForStartedServerThread(threadId, 500);
+    const promise = waitForStartedServerWorkspace(workspaceId, 500);
 
     await vi.advanceTimersByTimeAsync(500);
 
@@ -337,10 +343,10 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
 
   it("does not clear local dispatch before server state changes", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.makeUnsafe("thread-1"),
-      codexThreadId: null,
+      id: WorkspaceId.makeUnsafe("workspace-1"),
+      codexWorkspaceId: null,
       projectId,
-      title: "Thread",
+      title: "Workspace",
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -366,17 +372,17 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         session: previousSession,
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        workspaceError: null,
       }),
     ).toBe(false);
   });
 
   it("clears local dispatch when a new turn is already settled", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.makeUnsafe("thread-1"),
-      codexThreadId: null,
+      id: WorkspaceId.makeUnsafe("workspace-1"),
+      codexWorkspaceId: null,
       projectId,
-      title: "Thread",
+      title: "Workspace",
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -411,17 +417,17 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        workspaceError: null,
       }),
     ).toBe(true);
   });
 
   it("clears local dispatch when the session changes without an observed running phase", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.makeUnsafe("thread-1"),
-      codexThreadId: null,
+      id: WorkspaceId.makeUnsafe("workspace-1"),
+      codexWorkspaceId: null,
       projectId,
-      title: "Thread",
+      title: "Workspace",
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -450,7 +456,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        workspaceError: null,
       }),
     ).toBe(true);
   });

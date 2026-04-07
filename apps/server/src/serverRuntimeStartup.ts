@@ -3,7 +3,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type ModelSelection,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import {
   Data,
@@ -121,13 +121,13 @@ export const recordStartupHeartbeat = Effect.gen(function* () {
   const analytics = yield* AnalyticsService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
 
-  const { threadCount, projectCount } = yield* projectionSnapshotQuery.getCounts().pipe(
+  const { workspaceCount, projectCount } = yield* projectionSnapshotQuery.getCounts().pipe(
     Effect.catch((cause) =>
       Effect.logWarning("failed to gather startup projection counts for telemetry", {
         cause,
       }).pipe(
         Effect.as({
-          threadCount: 0,
+          workspaceCount: 0,
           projectCount: 0,
         }),
       ),
@@ -135,7 +135,7 @@ export const recordStartupHeartbeat = Effect.gen(function* () {
   );
 
   yield* analytics.record("server.boot.heartbeat", {
-    threadCount,
+    workspaceCount,
     projectCount,
   });
 });
@@ -155,7 +155,7 @@ const autoBootstrapWelcome = Effect.gen(function* () {
   const path = yield* Path.Path;
 
   let bootstrapProjectId: ProjectId | undefined;
-  let bootstrapThreadId: ThreadId | undefined;
+  let bootstrapWorkspaceId: WorkspaceId | undefined;
 
   if (serverConfig.autoBootstrapProjectFromCwd) {
     yield* Effect.gen(function* () {
@@ -190,17 +190,17 @@ const autoBootstrapWelcome = Effect.gen(function* () {
         };
       }
 
-      const existingThreadId =
-        yield* projectionReadModelQuery.getFirstActiveThreadIdByProjectId(nextProjectId);
-      if (Option.isNone(existingThreadId)) {
+      const existingWorkspaceId =
+        yield* projectionReadModelQuery.getFirstActiveWorkspaceIdByProjectId(nextProjectId);
+      if (Option.isNone(existingWorkspaceId)) {
         const createdAt = new Date().toISOString();
-        const createdThreadId = ThreadId.makeUnsafe(crypto.randomUUID());
+        const createdWorkspaceId = WorkspaceId.makeUnsafe(crypto.randomUUID());
         yield* orchestrationEngine.dispatch({
-          type: "thread.create",
+          type: "workspace.create",
           commandId: CommandId.makeUnsafe(crypto.randomUUID()),
-          threadId: createdThreadId,
+          workspaceId: createdWorkspaceId,
           projectId: nextProjectId,
-          title: "New thread",
+          title: "New workspace",
           modelSelection: nextProjectDefaultModelSelection,
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "full-access",
@@ -209,10 +209,10 @@ const autoBootstrapWelcome = Effect.gen(function* () {
           createdAt,
         });
         bootstrapProjectId = nextProjectId;
-        bootstrapThreadId = createdThreadId;
+        bootstrapWorkspaceId = createdWorkspaceId;
       } else {
         bootstrapProjectId = nextProjectId;
-        bootstrapThreadId = existingThreadId.value;
+        bootstrapWorkspaceId = existingWorkspaceId.value;
       }
     });
   }
@@ -224,7 +224,7 @@ const autoBootstrapWelcome = Effect.gen(function* () {
     cwd: serverConfig.cwd,
     projectName,
     ...(bootstrapProjectId ? { bootstrapProjectId } : {}),
-    ...(bootstrapThreadId ? { bootstrapThreadId } : {}),
+    ...(bootstrapWorkspaceId ? { bootstrapWorkspaceId } : {}),
   } as const;
 });
 
@@ -312,7 +312,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       cwd: welcome.cwd,
       projectName: welcome.projectName,
       bootstrapProjectId: welcome.bootstrapProjectId,
-      bootstrapThreadId: welcome.bootstrapThreadId,
+      bootstrapWorkspaceId: welcome.bootstrapWorkspaceId,
     });
     yield* runStartupPhase(
       "welcome.publish",

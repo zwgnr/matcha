@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_BY_PROVIDER, ModelSelection, ThreadId } from "@matcha/contracts";
+import { DEFAULT_MODEL_BY_PROVIDER, ModelSelection, WorkspaceId } from "@matcha/contracts";
 import "../../index.css";
 
 import { page } from "vitest/browser";
@@ -10,14 +10,14 @@ import { TraitsMenuContent } from "./TraitsPicker";
 import { useComposerDraftStore } from "../../composerDraftStore";
 
 async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: string }) {
-  const threadId = ThreadId.makeUnsafe("thread-compact-menu");
+  const workspaceId = WorkspaceId.makeUnsafe("workspace-compact-menu");
   const provider = props?.modelSelection?.provider ?? "claudeAgent";
-  const draftsByThreadId = {} as ReturnType<
+  const draftsByWorkspaceId = {} as ReturnType<
     typeof useComposerDraftStore.getState
-  >["draftsByThreadId"];
+  >["draftsByWorkspaceId"];
   const model = props?.modelSelection?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider];
 
-  draftsByThreadId[threadId] = {
+  draftsByWorkspaceId[workspaceId] = {
     prompt: props?.prompt ?? "",
     images: [],
     nonPersistedImageIds: [],
@@ -35,9 +35,9 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
     interactionMode: null,
   };
   useComposerDraftStore.setState({
-    draftsByThreadId,
-    draftThreadsByThreadId: {},
-    projectDraftThreadIdByProjectId: {},
+    draftsByWorkspaceId,
+    draftWorkspacesByWorkspaceId: {},
+    projectDraftWorkspaceIdByProjectId: {},
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -121,7 +121,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
         <TraitsMenuContent
           provider={provider}
           models={models}
-          threadId={threadId}
+          workspaceId={workspaceId}
           model={model}
           prompt={props?.prompt ?? ""}
           modelOptions={providerOptions}
@@ -150,9 +150,9 @@ describe("CompactComposerControlsMenu", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByWorkspaceId: {},
+      draftWorkspacesByWorkspaceId: {},
+      projectDraftWorkspaceIdByProjectId: {},
       stickyModelSelectionByProvider: {},
     });
   });

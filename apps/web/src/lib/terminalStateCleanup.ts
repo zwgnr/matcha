@@ -1,35 +1,37 @@
-import type { ThreadId } from "@matcha/contracts";
+import type { WorkspaceId } from "@matcha/contracts";
 
-interface TerminalRetentionThread {
-  id: ThreadId;
+interface TerminalRetentionWorkspace {
+  id: WorkspaceId;
   deletedAt: string | null;
   archivedAt: string | null;
 }
 
-interface CollectActiveTerminalThreadIdsInput {
-  snapshotThreads: readonly TerminalRetentionThread[];
-  draftThreadIds: Iterable<ThreadId>;
+interface CollectActiveTerminalWorkspaceIdsInput {
+  snapshotWorkspaces: readonly TerminalRetentionWorkspace[];
+  draftWorkspaceIds: Iterable<WorkspaceId>;
 }
 
-export function collectActiveTerminalThreadIds(
-  input: CollectActiveTerminalThreadIdsInput,
-): Set<ThreadId> {
-  const activeThreadIds = new Set<ThreadId>();
-  const snapshotThreadById = new Map(input.snapshotThreads.map((thread) => [thread.id, thread]));
-  for (const thread of input.snapshotThreads) {
-    if (thread.deletedAt !== null) continue;
-    if (thread.archivedAt !== null) continue;
-    activeThreadIds.add(thread.id);
+export function collectActiveTerminalWorkspaceIds(
+  input: CollectActiveTerminalWorkspaceIdsInput,
+): Set<WorkspaceId> {
+  const activeWorkspaceIds = new Set<WorkspaceId>();
+  const snapshotWorkspaceById = new Map(
+    input.snapshotWorkspaces.map((workspace) => [workspace.id, workspace]),
+  );
+  for (const workspace of input.snapshotWorkspaces) {
+    if (workspace.deletedAt !== null) continue;
+    if (workspace.archivedAt !== null) continue;
+    activeWorkspaceIds.add(workspace.id);
   }
-  for (const draftThreadId of input.draftThreadIds) {
-    const snapshotThread = snapshotThreadById.get(draftThreadId);
+  for (const draftWorkspaceId of input.draftWorkspaceIds) {
+    const snapshotWorkspace = snapshotWorkspaceById.get(draftWorkspaceId);
     if (
-      snapshotThread &&
-      (snapshotThread.deletedAt !== null || snapshotThread.archivedAt !== null)
+      snapshotWorkspace &&
+      (snapshotWorkspace.deletedAt !== null || snapshotWorkspace.archivedAt !== null)
     ) {
       continue;
     }
-    activeThreadIds.add(draftThreadId);
+    activeWorkspaceIds.add(draftWorkspaceId);
   }
-  return activeThreadIds;
+  return activeWorkspaceIds;
 }

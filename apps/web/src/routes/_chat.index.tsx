@@ -13,7 +13,7 @@ function ChatIndexRouteView() {
         <header className="border-b border-border px-3 py-2 md:hidden">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="size-7 shrink-0" />
-            <span className="text-sm font-medium text-foreground">Threads</span>
+            <span className="text-sm font-medium text-foreground">Workspaces</span>
           </div>
         </header>
       )}
@@ -23,13 +23,13 @@ function ChatIndexRouteView() {
           className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5"
           style={sidebarOpen ? undefined : ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE}
         >
-          <span className="text-xs text-muted-foreground/50">No active thread</span>
+          <span className="text-xs text-muted-foreground/50">No active workspace</span>
         </div>
       )}
 
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <p className="text-sm">Select a thread or create a new one to get started.</p>
+          <p className="text-sm">Select a workspace or create a new one to get started.</p>
         </div>
       </div>
     </div>

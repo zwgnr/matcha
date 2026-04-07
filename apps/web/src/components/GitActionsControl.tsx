@@ -3,7 +3,7 @@ import type {
   GitRunStackedActionResult,
   GitStackedAction,
   GitStatusResult,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -18,9 +18,9 @@ import {
   type DefaultBranchConfirmableAction,
   requiresDefaultBranchConfirmation,
   resolveDefaultBranchActionDialogCopy,
-  resolveLiveThreadBranchUpdate,
+  resolveLiveWorkspaceBranchUpdate,
   resolveQuickAction,
-  resolveThreadBranchUpdate,
+  resolveWorkspaceBranchUpdate,
 } from "./GitActionsControl.logic";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -38,7 +38,7 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Textarea } from "~/components/ui/textarea";
-import { toastManager, type ThreadToastData } from "~/components/ui/toast";
+import { toastManager, type WorkspaceToastData } from "~/components/ui/toast";
 import { openInPreferredEditor } from "~/editorPreferences";
 import {
   gitInitMutationOptions,
@@ -55,7 +55,7 @@ import { useStore } from "~/store";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
-  activeThreadId: ThreadId | null;
+  activeWorkspaceId: WorkspaceId | null;
 }
 
 interface PendingDefaultBranchAction {
@@ -71,7 +71,7 @@ type GitActionToastId = ReturnType<typeof toastManager.add>;
 
 interface ActiveGitActionProgress {
   toastId: GitActionToastId;
-  toastData: ThreadToastData | undefined;
+  toastData: WorkspaceToastData | undefined;
   actionId: string;
   title: string;
   phaseStartedAtMs: number | null;
@@ -205,15 +205,17 @@ function GitQuickActionIcon({ quickAction }: { quickAction: GitQuickAction }) {
   return <InfoIcon className={iconClassName} />;
 }
 
-export default function GitActionsControl({ gitCwd, activeThreadId }: GitActionsControlProps) {
-  const threadToastData = useMemo(
-    () => (activeThreadId ? { threadId: activeThreadId } : undefined),
-    [activeThreadId],
+export default function GitActionsControl({ gitCwd, activeWorkspaceId }: GitActionsControlProps) {
+  const workspaceToastData = useMemo(
+    () => (activeWorkspaceId ? { workspaceId: activeWorkspaceId } : undefined),
+    [activeWorkspaceId],
   );
-  const activeServerThread = useStore((store) =>
-    activeThreadId ? store.threads.find((thread) => thread.id === activeThreadId) : undefined,
+  const activeServerWorkspace = useStore((store) =>
+    activeWorkspaceId
+      ? store.workspaces.find((workspace) => workspace.id === activeWorkspaceId)
+      : undefined,
   );
-  const setThreadBranch = useStore((store) => store.setThreadBranch);
+  const setWorkspaceBranch = useStore((store) => store.setWorkspaceBranch);
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [dialogCommitMessage, setDialogCommitMessage] = useState("");
@@ -238,41 +240,41 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     });
   }, []);
 
-  const persistThreadBranchSync = useCallback(
+  const persistWorkspaceBranchSync = useCallback(
     (branch: string | null) => {
-      if (!activeThreadId || !activeServerThread || activeServerThread.branch === branch) {
+      if (!activeWorkspaceId || !activeServerWorkspace || activeServerWorkspace.branch === branch) {
         return;
       }
 
-      const worktreePath = activeServerThread.worktreePath;
+      const worktreePath = activeServerWorkspace.worktreePath;
       const api = readNativeApi();
       if (api) {
         void api.orchestration
           .dispatchCommand({
-            type: "thread.meta.update",
+            type: "workspace.meta.update",
             commandId: newCommandId(),
-            threadId: activeThreadId,
+            workspaceId: activeWorkspaceId,
             branch,
             worktreePath,
           })
           .catch(() => undefined);
       }
 
-      setThreadBranch(activeThreadId, branch, worktreePath);
+      setWorkspaceBranch(activeWorkspaceId, branch, worktreePath);
     },
-    [activeServerThread, activeThreadId, setThreadBranch],
+    [activeServerWorkspace, activeWorkspaceId, setWorkspaceBranch],
   );
 
-  const syncThreadBranchAfterGitAction = useCallback(
+  const syncWorkspaceBranchAfterGitAction = useCallback(
     (result: GitRunStackedActionResult) => {
-      const branchUpdate = resolveThreadBranchUpdate(result);
+      const branchUpdate = resolveWorkspaceBranchUpdate(result);
       if (!branchUpdate) {
         return;
       }
 
-      persistThreadBranchSync(branchUpdate.branch);
+      persistWorkspaceBranchSync(branchUpdate.branch);
     },
-    [persistThreadBranchSync],
+    [persistWorkspaceBranchSync],
   );
 
   const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
@@ -306,20 +308,20 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       return;
     }
 
-    const branchUpdate = resolveLiveThreadBranchUpdate({
-      threadBranch: activeServerThread?.branch ?? null,
+    const branchUpdate = resolveLiveWorkspaceBranchUpdate({
+      workspaceBranch: activeServerWorkspace?.branch ?? null,
       gitStatus: gitStatusForActions,
     });
     if (!branchUpdate) {
       return;
     }
 
-    persistThreadBranchSync(branchUpdate.branch);
+    persistWorkspaceBranchSync(branchUpdate.branch);
   }, [
-    activeServerThread?.branch,
+    activeServerWorkspace?.branch,
     gitStatusForActions,
     isGitActionRunning,
-    persistThreadBranchSync,
+    persistWorkspaceBranchSync,
   ]);
 
   const isDefaultBranch = useMemo(() => {
@@ -365,7 +367,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       toastManager.add({
         type: "error",
         title: "Link opening is unavailable.",
-        data: threadToastData,
+        data: workspaceToastData,
       });
       return;
     }
@@ -374,7 +376,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       toastManager.add({
         type: "error",
         title: "No open PR found.",
-        data: threadToastData,
+        data: workspaceToastData,
       });
       return;
     }
@@ -383,10 +385,10 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         type: "error",
         title: "Unable to open PR link",
         description: err instanceof Error ? err.message : "An error occurred.",
-        data: threadToastData,
+        data: workspaceToastData,
       });
     });
-  }, [gitStatusForActions, threadToastData]);
+  }, [gitStatusForActions, workspaceToastData]);
 
   runGitActionWithToast = useEffectEvent(
     async ({
@@ -441,7 +443,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           action === "create_pr" &&
           (!actionStatus?.hasUpstream || (actionStatus?.aheadCount ?? 0) > 0),
       });
-      const scopedToastData = threadToastData ? { ...threadToastData } : undefined;
+      const scopedToastData = workspaceToastData ? { ...workspaceToastData } : undefined;
       const actionId = randomUUID();
       const resolvedProgressToastId =
         progressToastId ??
@@ -543,7 +545,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       try {
         const result = await promise;
         activeGitActionProgressRef.current = null;
-        syncThreadBranchAfterGitAction(result);
+        syncWorkspaceBranchAfterGitAction(result);
         const closeResultToast = () => {
           toastManager.close(resolvedProgressToastId);
         };
@@ -659,19 +661,19 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     if (quickAction.kind === "run_pull") {
       const promise = pullMutation.mutateAsync();
       toastManager.promise(promise, {
-        loading: { title: "Pulling...", data: threadToastData },
+        loading: { title: "Pulling...", data: workspaceToastData },
         success: (result) => ({
           title: result.status === "pulled" ? "Pulled" : "Already up to date",
           description:
             result.status === "pulled"
               ? `Updated ${result.branch} from ${result.upstreamBranch ?? "upstream"}`
               : `${result.branch} is already synchronized.`,
-          data: threadToastData,
+          data: workspaceToastData,
         }),
         error: (err) => ({
           title: "Pull failed",
           description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
+          data: workspaceToastData,
         }),
       });
       void promise.catch(() => undefined);
@@ -682,7 +684,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         type: "info",
         title: quickAction.label,
         description: quickAction.hint,
-        data: threadToastData,
+        data: workspaceToastData,
       });
       return;
     }
@@ -731,7 +733,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         toastManager.add({
           type: "error",
           title: "Editor opening is unavailable.",
-          data: threadToastData,
+          data: workspaceToastData,
         });
         return;
       }
@@ -741,11 +743,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           type: "error",
           title: "Unable to open file",
           description: error instanceof Error ? error.message : "An error occurred.",
-          data: threadToastData,
+          data: workspaceToastData,
         });
       });
     },
-    [gitCwd, threadToastData],
+    [gitCwd, workspaceToastData],
   );
 
   if (!gitCwd) return null;

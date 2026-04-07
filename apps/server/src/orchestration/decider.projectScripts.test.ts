@@ -4,7 +4,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
@@ -94,7 +94,7 @@ describe("decider project scripts", () => {
     expect((event.payload as { scripts?: unknown[] }).scripts).toEqual(scripts);
   });
 
-  it("emits user message and turn-start-requested events for thread.turn.start", async () => {
+  it("emits user message and turn-start-requested events for workspace.turn.start", async () => {
     const now = new Date().toISOString();
     const initial = createEmptyReadModel(now);
     const withProject = await Effect.runPromise(
@@ -123,19 +123,19 @@ describe("decider project scripts", () => {
     const readModel = await Effect.runPromise(
       projectEvent(withProject, {
         sequence: 2,
-        eventId: asEventId("evt-thread-create"),
-        aggregateKind: "thread",
-        aggregateId: ThreadId.makeUnsafe("thread-1"),
-        type: "thread.created",
+        eventId: asEventId("evt-workspace-create"),
+        aggregateKind: "workspace",
+        aggregateId: WorkspaceId.makeUnsafe("workspace-1"),
+        type: "workspace.created",
         occurredAt: now,
-        commandId: CommandId.makeUnsafe("cmd-thread-create"),
+        commandId: CommandId.makeUnsafe("cmd-workspace-create"),
         causationEventId: null,
-        correlationId: CommandId.makeUnsafe("cmd-thread-create"),
+        correlationId: CommandId.makeUnsafe("cmd-workspace-create"),
         metadata: {},
         payload: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread",
+          title: "Workspace",
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -153,9 +153,9 @@ describe("decider project scripts", () => {
     const result = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {
-          type: "thread.turn.start",
+          type: "workspace.turn.start",
           commandId: CommandId.makeUnsafe("cmd-turn-start"),
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           message: {
             messageId: asMessageId("message-user-1"),
             role: "user",
@@ -181,15 +181,15 @@ describe("decider project scripts", () => {
     expect(Array.isArray(result)).toBe(true);
     const events = Array.isArray(result) ? result : [result];
     expect(events).toHaveLength(2);
-    expect(events[0]?.type).toBe("thread.message-sent");
+    expect(events[0]?.type).toBe("workspace.message-sent");
     const turnStartEvent = events[1];
-    expect(turnStartEvent?.type).toBe("thread.turn-start-requested");
+    expect(turnStartEvent?.type).toBe("workspace.turn-start-requested");
     expect(turnStartEvent?.causationEventId).toBe(events[0]?.eventId ?? null);
-    if (turnStartEvent?.type !== "thread.turn-start-requested") {
+    if (turnStartEvent?.type !== "workspace.turn-start-requested") {
       return;
     }
     expect(turnStartEvent.payload).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       messageId: asMessageId("message-user-1"),
       modelSelection: {
         provider: "codex",
@@ -203,7 +203,7 @@ describe("decider project scripts", () => {
     });
   });
 
-  it("emits thread.runtime-mode-set from thread.runtime-mode.set", async () => {
+  it("emits workspace.runtime-mode-set from workspace.runtime-mode.set", async () => {
     const now = new Date().toISOString();
     const initial = createEmptyReadModel(now);
     const withProject = await Effect.runPromise(
@@ -232,19 +232,19 @@ describe("decider project scripts", () => {
     const readModel = await Effect.runPromise(
       projectEvent(withProject, {
         sequence: 2,
-        eventId: asEventId("evt-thread-create"),
-        aggregateKind: "thread",
-        aggregateId: ThreadId.makeUnsafe("thread-1"),
-        type: "thread.created",
+        eventId: asEventId("evt-workspace-create"),
+        aggregateKind: "workspace",
+        aggregateId: WorkspaceId.makeUnsafe("workspace-1"),
+        type: "workspace.created",
         occurredAt: now,
-        commandId: CommandId.makeUnsafe("cmd-thread-create"),
+        commandId: CommandId.makeUnsafe("cmd-workspace-create"),
         causationEventId: null,
-        correlationId: CommandId.makeUnsafe("cmd-thread-create"),
+        correlationId: CommandId.makeUnsafe("cmd-workspace-create"),
         metadata: {},
         payload: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread",
+          title: "Workspace",
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -262,9 +262,9 @@ describe("decider project scripts", () => {
     const result = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {
-          type: "thread.runtime-mode.set",
+          type: "workspace.runtime-mode.set",
           commandId: CommandId.makeUnsafe("cmd-runtime-mode-set"),
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           runtimeMode: "approval-required",
           createdAt: now,
         },
@@ -277,15 +277,15 @@ describe("decider project scripts", () => {
       throw new Error("Expected a single runtime-mode-set event.");
     }
     expect(singleResult).toMatchObject({
-      type: "thread.runtime-mode-set",
+      type: "workspace.runtime-mode-set",
       payload: {
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         runtimeMode: "approval-required",
       },
     });
   });
 
-  it("emits thread.interaction-mode-set from thread.interaction-mode.set", async () => {
+  it("emits workspace.interaction-mode-set from workspace.interaction-mode.set", async () => {
     const now = new Date().toISOString();
     const initial = createEmptyReadModel(now);
     const withProject = await Effect.runPromise(
@@ -314,19 +314,19 @@ describe("decider project scripts", () => {
     const readModel = await Effect.runPromise(
       projectEvent(withProject, {
         sequence: 2,
-        eventId: asEventId("evt-thread-create"),
-        aggregateKind: "thread",
-        aggregateId: ThreadId.makeUnsafe("thread-1"),
-        type: "thread.created",
+        eventId: asEventId("evt-workspace-create"),
+        aggregateKind: "workspace",
+        aggregateId: WorkspaceId.makeUnsafe("workspace-1"),
+        type: "workspace.created",
         occurredAt: now,
-        commandId: CommandId.makeUnsafe("cmd-thread-create"),
+        commandId: CommandId.makeUnsafe("cmd-workspace-create"),
         causationEventId: null,
-        correlationId: CommandId.makeUnsafe("cmd-thread-create"),
+        correlationId: CommandId.makeUnsafe("cmd-workspace-create"),
         metadata: {},
         payload: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread",
+          title: "Workspace",
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -344,9 +344,9 @@ describe("decider project scripts", () => {
     const result = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {
-          type: "thread.interaction-mode.set",
+          type: "workspace.interaction-mode.set",
           commandId: CommandId.makeUnsafe("cmd-interaction-mode-set"),
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           interactionMode: "plan",
           createdAt: now,
         },
@@ -359,9 +359,9 @@ describe("decider project scripts", () => {
       throw new Error("Expected a single interaction-mode-set event.");
     }
     expect(singleResult).toMatchObject({
-      type: "thread.interaction-mode-set",
+      type: "workspace.interaction-mode-set",
       payload: {
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         interactionMode: "plan",
       },
     });

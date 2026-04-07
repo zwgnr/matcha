@@ -8,7 +8,7 @@ import {
   type ProjectId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
-  type ThreadId,
+  type WorkspaceId,
   WS_METHODS,
 } from "@matcha/contracts";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
@@ -23,7 +23,7 @@ import { getRouter } from "../router";
 import { useStore } from "../store";
 import { BrowserWsRpcHarness } from "../../test/wsRpcHarness";
 
-const THREAD_ID = "thread-kb-toast-test" as ThreadId;
+const WORKSPACE_ID = "workspace-kb-toast-test" as WorkspaceId;
 const PROJECT_ID = "project-1" as ProjectId;
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 
@@ -66,7 +66,7 @@ function createBaseServerConfig(): ServerConfig {
     settings: {
       ...DEFAULT_SERVER_SETTINGS,
       enableAssistantStreaming: false,
-      defaultThreadEnvMode: "local" as const,
+      defaultWorkspaceEnvMode: "local" as const,
       textGenerationModelSelection: { provider: "codex" as const, model: "gpt-5.4-mini" },
       providers: {
         codex: { enabled: true, binaryPath: "", homePath: "", customModels: [] },
@@ -94,11 +94,11 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         deletedAt: null,
       },
     ],
-    threads: [
+    workspaces: [
       {
-        id: THREAD_ID,
+        id: WORKSPACE_ID,
         projectId: PROJECT_ID,
-        title: "Test thread",
+        title: "Test workspace",
         modelSelection: {
           provider: "codex",
           model: "gpt-5",
@@ -127,7 +127,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         proposedPlans: [],
         checkpoints: [],
         session: {
-          threadId: THREAD_ID,
+          workspaceId: WORKSPACE_ID,
           status: "ready",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -149,7 +149,7 @@ function buildFixture(): TestFixture {
       cwd: "/repo/project",
       projectName: "Project",
       bootstrapProjectId: PROJECT_ID,
-      bootstrapThreadId: THREAD_ID,
+      bootstrapWorkspaceId: WORKSPACE_ID,
     },
   };
 }
@@ -268,7 +268,7 @@ async function mountApp(): Promise<{ cleanup: () => Promise<void> }> {
   host.style.overflow = "hidden";
   document.body.append(host);
 
-  const router = getRouter(createMemoryHistory({ initialEntries: [`/${THREAD_ID}`] }));
+  const router = getRouter(createMemoryHistory({ initialEntries: [`/${WORKSPACE_ID}`] }));
 
   const screen = await render(<RouterProvider router={router} />, { container: host });
   await waitForComposerEditor();
@@ -326,13 +326,13 @@ describe("Keybindings update toast", () => {
     localStorage.clear();
     document.body.innerHTML = "";
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByWorkspaceId: {},
+      draftWorkspacesByWorkspaceId: {},
+      projectDraftWorkspaceIdByProjectId: {},
     });
     useStore.setState({
       projects: [],
-      threads: [],
+      workspaces: [],
       bootstrapComplete: false,
     });
   });

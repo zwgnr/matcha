@@ -1,4 +1,4 @@
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
@@ -24,7 +24,7 @@ const ProviderSessionRuntimeDbRowSchema = ProviderSessionRuntime.mapFields(
 const decodeRuntime = Schema.decodeUnknownEffect(ProviderSessionRuntime);
 
 const GetRuntimeRequestSchema = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 });
 
 const DeleteRuntimeRequestSchema = GetRuntimeRequestSchema;
@@ -44,7 +44,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
     execute: (runtime) =>
       sql`
         INSERT INTO provider_session_runtime (
-          thread_id,
+          workspace_id,
           provider_name,
           adapter_key,
           runtime_mode,
@@ -54,7 +54,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
           runtime_payload_json
         )
         VALUES (
-          ${runtime.threadId},
+          ${runtime.workspaceId},
           ${runtime.providerName},
           ${runtime.adapterKey},
           ${runtime.runtimeMode},
@@ -63,7 +63,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
           ${runtime.resumeCursor},
           ${runtime.runtimePayload}
         )
-        ON CONFLICT (thread_id)
+        ON CONFLICT (workspace_id)
         DO UPDATE SET
           provider_name = excluded.provider_name,
           adapter_key = excluded.adapter_key,
@@ -75,13 +75,13 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       `,
   });
 
-  const getRuntimeRowByThreadId = SqlSchema.findOneOption({
+  const getRuntimeRowByWorkspaceId = SqlSchema.findOneOption({
     Request: GetRuntimeRequestSchema,
     Result: ProviderSessionRuntimeDbRowSchema,
-    execute: ({ threadId }) =>
+    execute: ({ workspaceId }) =>
       sql`
         SELECT
-          thread_id AS "threadId",
+          workspace_id AS "workspaceId",
           provider_name AS "providerName",
           adapter_key AS "adapterKey",
           runtime_mode AS "runtimeMode",
@@ -90,7 +90,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
           resume_cursor_json AS "resumeCursor",
           runtime_payload_json AS "runtimePayload"
         FROM provider_session_runtime
-        WHERE thread_id = ${threadId}
+        WHERE workspace_id = ${workspaceId}
       `,
   });
 
@@ -100,7 +100,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
     execute: () =>
       sql`
         SELECT
-          thread_id AS "threadId",
+          workspace_id AS "workspaceId",
           provider_name AS "providerName",
           adapter_key AS "adapterKey",
           runtime_mode AS "runtimeMode",
@@ -109,16 +109,16 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
           resume_cursor_json AS "resumeCursor",
           runtime_payload_json AS "runtimePayload"
         FROM provider_session_runtime
-        ORDER BY last_seen_at ASC, thread_id ASC
+        ORDER BY last_seen_at ASC, workspace_id ASC
       `,
   });
 
-  const deleteRuntimeByThreadId = SqlSchema.void({
+  const deleteRuntimeByWorkspaceId = SqlSchema.void({
     Request: DeleteRuntimeRequestSchema,
-    execute: ({ threadId }) =>
+    execute: ({ workspaceId }) =>
       sql`
         DELETE FROM provider_session_runtime
-        WHERE thread_id = ${threadId}
+        WHERE workspace_id = ${workspaceId}
       `,
   });
 
@@ -132,12 +132,12 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       ),
     );
 
-  const getByThreadId: ProviderSessionRuntimeRepositoryShape["getByThreadId"] = (input) =>
-    getRuntimeRowByThreadId(input).pipe(
+  const getByWorkspaceId: ProviderSessionRuntimeRepositoryShape["getByWorkspaceId"] = (input) =>
+    getRuntimeRowByWorkspaceId(input).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
-          "ProviderSessionRuntimeRepository.getByThreadId:query",
-          "ProviderSessionRuntimeRepository.getByThreadId:decodeRow",
+          "ProviderSessionRuntimeRepository.getByWorkspaceId:query",
+          "ProviderSessionRuntimeRepository.getByWorkspaceId:decodeRow",
         ),
       ),
       Effect.flatMap((runtimeRowOption) =>
@@ -147,7 +147,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
             decodeRuntime(row).pipe(
               Effect.mapError(
                 toPersistenceDecodeError(
-                  "ProviderSessionRuntimeRepository.getByThreadId:rowToRuntime",
+                  "ProviderSessionRuntimeRepository.getByWorkspaceId:rowToRuntime",
                 ),
               ),
               Effect.map((runtime) => Option.some(runtime)),
@@ -178,18 +178,20 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       ),
     );
 
-  const deleteByThreadId: ProviderSessionRuntimeRepositoryShape["deleteByThreadId"] = (input) =>
-    deleteRuntimeByThreadId(input).pipe(
+  const deleteByWorkspaceId: ProviderSessionRuntimeRepositoryShape["deleteByWorkspaceId"] = (
+    input,
+  ) =>
+    deleteRuntimeByWorkspaceId(input).pipe(
       Effect.mapError(
-        toPersistenceSqlError("ProviderSessionRuntimeRepository.deleteByThreadId:query"),
+        toPersistenceSqlError("ProviderSessionRuntimeRepository.deleteByWorkspaceId:query"),
       ),
     );
 
   return {
     upsert,
-    getByThreadId,
+    getByWorkspaceId,
     list,
-    deleteByThreadId,
+    deleteByWorkspaceId,
   } satisfies ProviderSessionRuntimeRepositoryShape;
 });
 

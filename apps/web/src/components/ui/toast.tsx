@@ -3,7 +3,7 @@
 import { Toast } from "@base-ui/react/toast";
 import { useEffect, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -19,17 +19,17 @@ import { buttonVariants } from "~/components/ui/button";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
 
-export type ThreadToastData = {
-  threadId?: ThreadId | null;
+export type WorkspaceToastData = {
+  workspaceId?: WorkspaceId | null;
   tooltipStyle?: boolean;
   dismissAfterVisibleMs?: number;
   hideCopyButton?: boolean;
 };
 
-const toastManager = Toast.createToastManager<ThreadToastData>();
-const anchoredToastManager = Toast.createToastManager<ThreadToastData>();
+const toastManager = Toast.createToastManager<WorkspaceToastData>();
+const anchoredToastManager = Toast.createToastManager<WorkspaceToastData>();
 type ToastId = ReturnType<typeof toastManager.add>;
-const threadToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
+const workspaceToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
 
 const TOAST_ICONS = {
   error: CircleAlertIcon,
@@ -70,24 +70,24 @@ interface ToastProviderProps extends Toast.Provider.Props {
   position?: ToastPosition;
 }
 
-function shouldRenderForActiveThread(
-  data: ThreadToastData | undefined,
-  activeThreadId: ThreadId | null,
+function shouldRenderForActiveWorkspace(
+  data: WorkspaceToastData | undefined,
+  activeWorkspaceId: WorkspaceId | null,
 ): boolean {
-  const toastThreadId = data?.threadId;
-  if (!toastThreadId) return true;
-  return toastThreadId === activeThreadId;
+  const toastWorkspaceId = data?.workspaceId;
+  if (!toastWorkspaceId) return true;
+  return toastWorkspaceId === activeWorkspaceId;
 }
 
-function useActiveThreadIdFromRoute(): ThreadId | null {
+function useActiveWorkspaceIdFromRoute(): WorkspaceId | null {
   return useParams({
     strict: false,
     select: (params) =>
-      typeof params.threadId === "string" ? ThreadId.makeUnsafe(params.threadId) : null,
+      typeof params.workspaceId === "string" ? WorkspaceId.makeUnsafe(params.workspaceId) : null,
   });
 }
 
-function ThreadToastVisibleAutoDismiss({
+function WorkspaceToastVisibleAutoDismiss({
   toastId,
   dismissAfterVisibleMs,
 }: {
@@ -98,7 +98,7 @@ function ThreadToastVisibleAutoDismiss({
     if (!dismissAfterVisibleMs || dismissAfterVisibleMs <= 0) return;
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
-    let remainingMs = threadToastVisibleTimeoutRemainingMs.get(toastId) ?? dismissAfterVisibleMs;
+    let remainingMs = workspaceToastVisibleTimeoutRemainingMs.get(toastId) ?? dismissAfterVisibleMs;
     let startedAtMs: number | null = null;
     let timeoutId: number | null = null;
     let closed = false;
@@ -112,7 +112,7 @@ function ThreadToastVisibleAutoDismiss({
     const closeToast = () => {
       if (closed) return;
       closed = true;
-      threadToastVisibleTimeoutRemainingMs.delete(toastId);
+      workspaceToastVisibleTimeoutRemainingMs.delete(toastId);
       toastManager.close(toastId);
     };
 
@@ -121,7 +121,7 @@ function ThreadToastVisibleAutoDismiss({
       remainingMs = Math.max(0, remainingMs - (Date.now() - startedAtMs));
       startedAtMs = null;
       clearTimer();
-      threadToastVisibleTimeoutRemainingMs.set(toastId, remainingMs);
+      workspaceToastVisibleTimeoutRemainingMs.set(toastId, remainingMs);
     };
 
     const start = () => {
@@ -175,19 +175,19 @@ function ToastProvider({ children, position = "top-right", ...props }: ToastProv
 }
 
 function Toasts({ position = "top-right" }: { position: ToastPosition }) {
-  const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadId = useActiveThreadIdFromRoute();
+  const { toasts } = Toast.useToastManager<WorkspaceToastData>();
+  const activeWorkspaceId = useActiveWorkspaceIdFromRoute();
   const isTop = position.startsWith("top");
   const visibleToasts = toasts.filter((toast) =>
-    shouldRenderForActiveThread(toast.data, activeThreadId),
+    shouldRenderForActiveWorkspace(toast.data, activeWorkspaceId),
   );
   const visibleToastLayout = buildVisibleToastLayout(visibleToasts);
 
   useEffect(() => {
     const activeToastIds = new Set(toasts.map((toast) => toast.id));
-    for (const toastId of threadToastVisibleTimeoutRemainingMs.keys()) {
+    for (const toastId of workspaceToastVisibleTimeoutRemainingMs.keys()) {
       if (!activeToastIds.has(toastId)) {
-        threadToastVisibleTimeoutRemainingMs.delete(toastId);
+        workspaceToastVisibleTimeoutRemainingMs.delete(toastId);
       }
     }
   }, [toasts]);
@@ -285,7 +285,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
               }
               toast={toast}
             >
-              <ThreadToastVisibleAutoDismiss
+              <WorkspaceToastVisibleAutoDismiss
                 dismissAfterVisibleMs={toast.data?.dismissAfterVisibleMs}
                 toastId={toast.id}
               />
@@ -349,14 +349,14 @@ function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
 }
 
 function AnchoredToasts() {
-  const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadId = useActiveThreadIdFromRoute();
+  const { toasts } = Toast.useToastManager<WorkspaceToastData>();
+  const activeWorkspaceId = useActiveWorkspaceIdFromRoute();
 
   return (
     <Toast.Portal data-slot="toast-portal-anchored">
       <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
         {toasts
-          .filter((toast) => shouldRenderForActiveThread(toast.data, activeThreadId))
+          .filter((toast) => shouldRenderForActiveWorkspace(toast.data, activeWorkspaceId))
           .map((toast) => {
             const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
             const tooltipStyle = toast.data?.tooltipStyle ?? false;

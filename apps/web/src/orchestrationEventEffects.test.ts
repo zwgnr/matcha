@@ -3,7 +3,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   TurnId,
   type OrchestrationEvent,
 } from "@matcha/contracts";
@@ -20,10 +20,10 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
   return {
     sequence,
     eventId: EventId.makeUnsafe(`event-${sequence}`),
-    aggregateKind: "thread",
+    aggregateKind: "workspace",
     aggregateId:
-      "threadId" in payload
-        ? payload.threadId
+      "workspaceId" in payload
+        ? payload.workspaceId
         : "projectId" in payload
           ? payload.projectId
           : ProjectId.makeUnsafe("project-1"),
@@ -39,16 +39,16 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
 }
 
 describe("deriveOrchestrationBatchEffects", () => {
-  it("targets draft promotion and terminal cleanup from thread lifecycle events", () => {
-    const createdThreadId = ThreadId.makeUnsafe("thread-created");
-    const deletedThreadId = ThreadId.makeUnsafe("thread-deleted");
-    const archivedThreadId = ThreadId.makeUnsafe("thread-archived");
+  it("targets draft promotion and terminal cleanup from workspace lifecycle events", () => {
+    const createdWorkspaceId = WorkspaceId.makeUnsafe("workspace-created");
+    const deletedWorkspaceId = WorkspaceId.makeUnsafe("workspace-deleted");
+    const archivedWorkspaceId = WorkspaceId.makeUnsafe("workspace-archived");
 
     const effects = deriveOrchestrationBatchEffects([
-      makeEvent("thread.created", {
-        threadId: createdThreadId,
+      makeEvent("workspace.created", {
+        workspaceId: createdWorkspaceId,
         projectId: ProjectId.makeUnsafe("project-1"),
-        title: "Created thread",
+        title: "Created workspace",
         modelSelection: { provider: "codex", model: "gpt-5-codex" },
         runtimeMode: "full-access",
         interactionMode: "default",
@@ -57,35 +57,38 @@ describe("deriveOrchestrationBatchEffects", () => {
         createdAt: "2026-02-27T00:00:00.000Z",
         updatedAt: "2026-02-27T00:00:00.000Z",
       }),
-      makeEvent("thread.deleted", {
-        threadId: deletedThreadId,
+      makeEvent("workspace.deleted", {
+        workspaceId: deletedWorkspaceId,
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
-      makeEvent("thread.archived", {
-        threadId: archivedThreadId,
+      makeEvent("workspace.archived", {
+        workspaceId: archivedWorkspaceId,
         archivedAt: "2026-02-27T00:00:02.000Z",
         updatedAt: "2026-02-27T00:00:02.000Z",
       }),
     ]);
 
-    expect(effects.clearPromotedDraftThreadIds).toEqual([createdThreadId]);
-    expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([deletedThreadId, archivedThreadId]);
+    expect(effects.clearPromotedDraftWorkspaceIds).toEqual([createdWorkspaceId]);
+    expect(effects.clearDeletedWorkspaceIds).toEqual([deletedWorkspaceId]);
+    expect(effects.removeTerminalStateWorkspaceIds).toEqual([
+      deletedWorkspaceId,
+      archivedWorkspaceId,
+    ]);
     expect(effects.needsProviderInvalidation).toBe(false);
   });
 
-  it("keeps only the final lifecycle outcome for a thread within one batch", () => {
-    const threadId = ThreadId.makeUnsafe("thread-1");
+  it("keeps only the final lifecycle outcome for a workspace within one batch", () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-1");
 
     const effects = deriveOrchestrationBatchEffects([
-      makeEvent("thread.deleted", {
-        threadId,
+      makeEvent("workspace.deleted", {
+        workspaceId,
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
-      makeEvent("thread.created", {
-        threadId,
+      makeEvent("workspace.created", {
+        workspaceId,
         projectId: ProjectId.makeUnsafe("project-1"),
-        title: "Recreated thread",
+        title: "Recreated workspace",
         modelSelection: { provider: "codex", model: "gpt-5-codex" },
         runtimeMode: "full-access",
         interactionMode: "default",
@@ -94,8 +97,8 @@ describe("deriveOrchestrationBatchEffects", () => {
         createdAt: "2026-02-27T00:00:02.000Z",
         updatedAt: "2026-02-27T00:00:02.000Z",
       }),
-      makeEvent("thread.turn-diff-completed", {
-        threadId,
+      makeEvent("workspace.turn-diff-completed", {
+        workspaceId,
         turnId: TurnId.makeUnsafe("turn-1"),
         checkpointTurnCount: 1,
         checkpointRef: CheckpointRef.makeUnsafe("checkpoint-1"),
@@ -106,29 +109,29 @@ describe("deriveOrchestrationBatchEffects", () => {
       }),
     ]);
 
-    expect(effects.clearPromotedDraftThreadIds).toEqual([threadId]);
-    expect(effects.clearDeletedThreadIds).toEqual([]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.clearPromotedDraftWorkspaceIds).toEqual([workspaceId]);
+    expect(effects.clearDeletedWorkspaceIds).toEqual([]);
+    expect(effects.removeTerminalStateWorkspaceIds).toEqual([]);
     expect(effects.needsProviderInvalidation).toBe(true);
   });
 
-  it("does not retain archive cleanup when a thread is unarchived later in the same batch", () => {
-    const threadId = ThreadId.makeUnsafe("thread-1");
+  it("does not retain archive cleanup when a workspace is unarchived later in the same batch", () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-1");
 
     const effects = deriveOrchestrationBatchEffects([
-      makeEvent("thread.archived", {
-        threadId,
+      makeEvent("workspace.archived", {
+        workspaceId,
         archivedAt: "2026-02-27T00:00:01.000Z",
         updatedAt: "2026-02-27T00:00:01.000Z",
       }),
-      makeEvent("thread.unarchived", {
-        threadId,
+      makeEvent("workspace.unarchived", {
+        workspaceId,
         updatedAt: "2026-02-27T00:00:02.000Z",
       }),
     ]);
 
-    expect(effects.clearPromotedDraftThreadIds).toEqual([]);
-    expect(effects.clearDeletedThreadIds).toEqual([]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.clearPromotedDraftWorkspaceIds).toEqual([]);
+    expect(effects.clearDeletedWorkspaceIds).toEqual([]);
+    expect(effects.removeTerminalStateWorkspaceIds).toEqual([]);
   });
 });

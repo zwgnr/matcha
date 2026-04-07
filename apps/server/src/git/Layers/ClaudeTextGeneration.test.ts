@@ -5,7 +5,7 @@ import { expect } from "vitest";
 
 import { ServerConfig } from "../../config.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
-import { sanitizeThreadTitle } from "../Utils.ts";
+import { sanitizeWorkspaceTitle } from "../Utils.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 
@@ -249,7 +249,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("generates thread titles through the Claude provider", () =>
+  it.effect("generates workspace titles through the Claude provider", () =>
     withFakeClaudeEnv(
       {
         output: JSON.stringify({
@@ -258,12 +258,12 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
               '  "Reconnect failures after restart because the session state does not recover"  ',
           },
         }),
-        stdinMustContain: "You write concise thread titles for coding conversations.",
+        stdinMustContain: "You write concise workspace titles for coding conversations.",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
-        const generated = yield* textGeneration.generateThreadTitle({
+        const generated = yield* textGeneration.generateWorkspaceTitle({
           cwd: process.cwd(),
           message: "Please investigate reconnect failures after restarting the session.",
           modelSelection: {
@@ -273,7 +273,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
         });
 
         expect(generated.title).toBe(
-          sanitizeThreadTitle(
+          sanitizeWorkspaceTitle(
             '"Reconnect failures after restart because the session state does not recover"',
           ),
         );
@@ -281,7 +281,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("falls back when Claude thread title normalization becomes whitespace-only", () =>
+  it.effect("falls back when Claude workspace title normalization becomes whitespace-only", () =>
     withFakeClaudeEnv(
       {
         output: JSON.stringify({
@@ -293,16 +293,16 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
-        const generated = yield* textGeneration.generateThreadTitle({
+        const generated = yield* textGeneration.generateWorkspaceTitle({
           cwd: process.cwd(),
-          message: "Name this thread.",
+          message: "Name this workspace.",
           modelSelection: {
             provider: "claudeAgent",
             model: "claude-sonnet-4-6",
           },
         });
 
-        expect(generated.title).toBe("New thread");
+        expect(generated.title).toBe("New workspace");
       }),
     ),
   );

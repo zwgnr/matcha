@@ -4,18 +4,18 @@ import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   type OrchestrationCommand,
   type OrchestrationReadModel,
 } from "@matcha/contracts";
 import { Effect } from "effect";
 
 import {
-  findThreadById,
-  listThreadsByProjectId,
+  findWorkspaceById,
+  listWorkspacesByProjectId,
   requireNonNegativeInteger,
-  requireThread,
-  requireThreadAbsent,
+  requireWorkspace,
+  requireWorkspaceAbsent,
 } from "./commandInvariants.ts";
 
 const now = new Date().toISOString();
@@ -51,11 +51,11 @@ const readModel: OrchestrationReadModel = {
       deletedAt: null,
     },
   ],
-  threads: [
+  workspaces: [
     {
-      id: ThreadId.makeUnsafe("thread-1"),
+      id: WorkspaceId.makeUnsafe("workspace-1"),
       projectId: ProjectId.makeUnsafe("project-a"),
-      title: "Thread A",
+      title: "Workspace A",
       modelSelection: {
         provider: "codex",
         model: "gpt-5-codex",
@@ -76,9 +76,9 @@ const readModel: OrchestrationReadModel = {
       deletedAt: null,
     },
     {
-      id: ThreadId.makeUnsafe("thread-2"),
+      id: WorkspaceId.makeUnsafe("workspace-2"),
       projectId: ProjectId.makeUnsafe("project-b"),
-      title: "Thread B",
+      title: "Workspace B",
       modelSelection: {
         provider: "codex",
         model: "gpt-5-codex",
@@ -102,9 +102,9 @@ const readModel: OrchestrationReadModel = {
 };
 
 const messageSendCommand: OrchestrationCommand = {
-  type: "thread.turn.start",
+  type: "workspace.turn.start",
   commandId: CommandId.makeUnsafe("cmd-1"),
-  threadId: ThreadId.makeUnsafe("thread-1"),
+  workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
   message: {
     messageId: MessageId.makeUnsafe("msg-1"),
     role: "user",
@@ -117,45 +117,47 @@ const messageSendCommand: OrchestrationCommand = {
 };
 
 describe("commandInvariants", () => {
-  it("finds threads by id and project", () => {
-    expect(findThreadById(readModel, ThreadId.makeUnsafe("thread-1"))?.projectId).toBe("project-a");
-    expect(findThreadById(readModel, ThreadId.makeUnsafe("missing"))).toBeUndefined();
+  it("finds workspaces by id and project", () => {
+    expect(findWorkspaceById(readModel, WorkspaceId.makeUnsafe("workspace-1"))?.projectId).toBe(
+      "project-a",
+    );
+    expect(findWorkspaceById(readModel, WorkspaceId.makeUnsafe("missing"))).toBeUndefined();
     expect(
-      listThreadsByProjectId(readModel, ProjectId.makeUnsafe("project-b")).map(
-        (thread) => thread.id,
+      listWorkspacesByProjectId(readModel, ProjectId.makeUnsafe("project-b")).map(
+        (workspace) => workspace.id,
       ),
-    ).toEqual([ThreadId.makeUnsafe("thread-2")]);
+    ).toEqual([WorkspaceId.makeUnsafe("workspace-2")]);
   });
 
-  it("requires existing thread", async () => {
-    const thread = await Effect.runPromise(
-      requireThread({
+  it("requires existing workspace", async () => {
+    const workspace = await Effect.runPromise(
+      requireWorkspace({
         readModel,
         command: messageSendCommand,
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       }),
     );
-    expect(thread.id).toBe(ThreadId.makeUnsafe("thread-1"));
+    expect(workspace.id).toBe(WorkspaceId.makeUnsafe("workspace-1"));
 
     await expect(
       Effect.runPromise(
-        requireThread({
+        requireWorkspace({
           readModel,
           command: messageSendCommand,
-          threadId: ThreadId.makeUnsafe("missing"),
+          workspaceId: WorkspaceId.makeUnsafe("missing"),
         }),
       ),
     ).rejects.toThrow("does not exist");
   });
 
-  it("requires missing thread for create flows", async () => {
+  it("requires missing workspace for create flows", async () => {
     await Effect.runPromise(
-      requireThreadAbsent({
+      requireWorkspaceAbsent({
         readModel,
         command: {
-          type: "thread.create",
+          type: "workspace.create",
           commandId: CommandId.makeUnsafe("cmd-2"),
-          threadId: ThreadId.makeUnsafe("thread-3"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-3"),
           projectId: ProjectId.makeUnsafe("project-a"),
           title: "new",
           modelSelection: {
@@ -168,18 +170,18 @@ describe("commandInvariants", () => {
           worktreePath: null,
           createdAt: now,
         },
-        threadId: ThreadId.makeUnsafe("thread-3"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-3"),
       }),
     );
 
     await expect(
       Effect.runPromise(
-        requireThreadAbsent({
+        requireWorkspaceAbsent({
           readModel,
           command: {
-            type: "thread.create",
+            type: "workspace.create",
             commandId: CommandId.makeUnsafe("cmd-3"),
-            threadId: ThreadId.makeUnsafe("thread-1"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
             projectId: ProjectId.makeUnsafe("project-a"),
             title: "dup",
             modelSelection: {
@@ -192,7 +194,7 @@ describe("commandInvariants", () => {
             worktreePath: null,
             createdAt: now,
           },
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         }),
       ),
     ).rejects.toThrow("already exists");
@@ -201,7 +203,7 @@ describe("commandInvariants", () => {
   it("requires non-negative integers", async () => {
     await Effect.runPromise(
       requireNonNegativeInteger({
-        commandType: "thread.checkpoint.revert",
+        commandType: "workspace.checkpoint.revert",
         field: "turnCount",
         value: 0,
       }),
@@ -210,7 +212,7 @@ describe("commandInvariants", () => {
     await expect(
       Effect.runPromise(
         requireNonNegativeInteger({
-          commandType: "thread.checkpoint.revert",
+          commandType: "workspace.checkpoint.revert",
           field: "turnCount",
           value: -1,
         }),

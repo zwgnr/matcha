@@ -8,8 +8,8 @@
  */
 import {
   GitActionProgressEvent,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
+  GitPreparePullRequestWorkspaceInput,
+  GitPreparePullRequestWorkspaceResult,
   GitPullRequestRefInput,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
@@ -49,11 +49,11 @@ export interface GitManagerShape {
   ) => Effect.Effect<GitResolvePullRequestResult, GitManagerServiceError>;
 
   /**
-   * Prepare a new thread workspace from a pull request in local or worktree mode.
+   * Prepare a new workspace from a pull request in local or worktree mode.
    */
-  readonly preparePullRequestThread: (
-    input: GitPreparePullRequestThreadInput,
-  ) => Effect.Effect<GitPreparePullRequestThreadResult, GitManagerServiceError>;
+  readonly preparePullRequestWorkspace: (
+    input: GitPreparePullRequestWorkspaceInput,
+  ) => Effect.Effect<GitPreparePullRequestWorkspaceResult, GitManagerServiceError>;
 
   /**
    * Run a Git action (`commit`, `push`, `create_pr`, `commit_push`, `commit_push_pr`).

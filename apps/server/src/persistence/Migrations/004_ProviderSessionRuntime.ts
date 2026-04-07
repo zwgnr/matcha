@@ -6,7 +6,7 @@ export default Effect.gen(function* () {
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS provider_session_runtime (
-      thread_id TEXT PRIMARY KEY,
+      workspace_id TEXT PRIMARY KEY,
       provider_name TEXT NOT NULL,
       adapter_key TEXT NOT NULL,
       runtime_mode TEXT NOT NULL DEFAULT 'full-access',

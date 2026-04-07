@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCollapsedProposedPlanPreviewMarkdown,
-  buildPlanImplementationThreadTitle,
+  buildPlanImplementationWorkspaceTitle,
   buildPlanImplementationPrompt,
   buildProposedPlanMarkdownFilename,
   proposedPlanTitle,
@@ -89,15 +89,15 @@ describe("resolvePlanFollowUpSubmission", () => {
   });
 });
 
-describe("buildPlanImplementationThreadTitle", () => {
-  it("uses the plan heading when building the implementation thread title", () => {
-    expect(buildPlanImplementationThreadTitle("# Integrate RPC\n\nBody")).toBe(
+describe("buildPlanImplementationWorkspaceTitle", () => {
+  it("uses the plan heading when building the implementation workspace title", () => {
+    expect(buildPlanImplementationWorkspaceTitle("# Integrate RPC\n\nBody")).toBe(
       "Implement Integrate RPC",
     );
   });
 
   it("falls back when the plan has no markdown heading", () => {
-    expect(buildPlanImplementationThreadTitle("- step 1")).toBe("Implement plan");
+    expect(buildPlanImplementationWorkspaceTitle("- step 1")).toBe("Implement plan");
   });
 });
 

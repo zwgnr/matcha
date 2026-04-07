@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ApprovalRequestId, ThreadId } from "@matcha/contracts";
+import { ApprovalRequestId, WorkspaceId } from "@matcha/contracts";
 
 import {
   buildCodexInitializeParams,
@@ -11,13 +11,13 @@ import {
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
   CodexAppServerManager,
   classifyCodexStderrLine,
-  isRecoverableThreadResumeError,
+  isRecoverableWorkspaceResumeError,
   normalizeCodexModelSlug,
   readCodexAccountSnapshot,
   resolveCodexModelForAccount,
 } from "./codexAppServerManager";
 
-const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
+const asWorkspaceId = (value: string): WorkspaceId => WorkspaceId.makeUnsafe(value);
 
 function createSendTurnHarness() {
   const manager = new CodexAppServerManager();
@@ -25,10 +25,10 @@ function createSendTurnHarness() {
     session: {
       provider: "codex",
       status: "ready",
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       runtimeMode: "full-access",
       model: "gpt-5.3-codex",
-      resumeCursor: { threadId: "thread_1" },
+      resumeCursor: { workspaceId: "workspace_1" },
       createdAt: "2026-02-10T00:00:00.000Z",
       updatedAt: "2026-02-10T00:00:00.000Z",
     },
@@ -63,16 +63,16 @@ function createSendTurnHarness() {
   return { manager, context, requireSession, sendRequest, updateSession };
 }
 
-function createThreadControlHarness() {
+function createWorkspaceControlHarness() {
   const manager = new CodexAppServerManager();
   const context = {
     session: {
       provider: "codex",
       status: "ready",
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       runtimeMode: "full-access",
       model: "gpt-5.3-codex",
-      resumeCursor: { threadId: "thread_1" },
+      resumeCursor: { workspaceId: "workspace_1" },
       createdAt: "2026-02-10T00:00:00.000Z",
       updatedAt: "2026-02-10T00:00:00.000Z",
     },
@@ -102,10 +102,10 @@ function createPendingUserInputHarness() {
     session: {
       provider: "codex",
       status: "ready",
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       runtimeMode: "full-access",
       model: "gpt-5.3-codex",
-      resumeCursor: { threadId: "thread_1" },
+      resumeCursor: { workspaceId: "workspace_1" },
       createdAt: "2026-02-10T00:00:00.000Z",
       updatedAt: "2026-02-10T00:00:00.000Z",
     },
@@ -115,7 +115,7 @@ function createPendingUserInputHarness() {
         {
           requestId: ApprovalRequestId.makeUnsafe("req-user-input-1"),
           jsonRpcId: 42,
-          threadId: asThreadId("thread_1"),
+          workspaceId: asWorkspaceId("workspace_1"),
         },
       ],
     ]),
@@ -144,11 +144,11 @@ function createCollabNotificationHarness() {
     session: {
       provider: "codex",
       status: "running",
-      threadId: asThreadId("thread_1"),
+      workspaceId: asWorkspaceId("workspace_1"),
       runtimeMode: "full-access",
       model: "gpt-5.3-codex",
       activeTurnId: "turn_parent",
-      resumeCursor: { threadId: "provider_parent" },
+      resumeCursor: { workspaceId: "provider_parent" },
       createdAt: "2026-02-10T00:00:00.000Z",
       updatedAt: "2026-02-10T00:00:00.000Z",
     },
@@ -188,7 +188,7 @@ describe("classifyCodexStderrLine", () => {
 
   it("ignores known benign rollout path errors", () => {
     const line =
-      "\u001b[2m2026-02-08T04:24:20.085687Z\u001b[0m \u001b[31mERROR\u001b[0m \u001b[2mcodex_core::rollout::list\u001b[0m: state db missing rollout path for thread 019c3b6c-46b8-7b70-ad23-82f824d161fb";
+      "\u001b[2m2026-02-08T04:24:20.085687Z\u001b[0m \u001b[31mERROR\u001b[0m \u001b[2mcodex_core::rollout::list\u001b[0m: state db missing rollout path for workspace 019c3b6c-46b8-7b70-ad23-82f824d161fb";
     expect(classifyCodexStderrLine(line)).toBeNull();
   });
 
@@ -217,7 +217,7 @@ describe("process stderr events", () => {
     (
       manager as unknown as {
         emitNotificationEvent: (
-          context: { session: { threadId: ThreadId } },
+          context: { session: { workspaceId: WorkspaceId } },
           method: string,
           message: string,
         ) => void;
@@ -225,7 +225,7 @@ describe("process stderr events", () => {
     ).emitNotificationEvent(
       {
         session: {
-          threadId: asThreadId("thread-1"),
+          workspaceId: asWorkspaceId("workspace-1"),
         },
       },
       "process/stderr",
@@ -236,7 +236,7 @@ describe("process stderr events", () => {
       expect.objectContaining({
         kind: "notification",
         method: "process/stderr",
-        threadId: "thread-1",
+        workspaceId: "workspace-1",
         message: "fatal: permission denied",
       }),
     );
@@ -259,22 +259,22 @@ describe("normalizeCodexModelSlug", () => {
   });
 });
 
-describe("isRecoverableThreadResumeError", () => {
+describe("isRecoverableWorkspaceResumeError", () => {
   it("matches not-found resume errors", () => {
     expect(
-      isRecoverableThreadResumeError(new Error("thread/resume failed: thread not found")),
+      isRecoverableWorkspaceResumeError(new Error("thread/resume failed: thread not found")),
     ).toBe(true);
   });
 
   it("ignores non-resume errors", () => {
     expect(
-      isRecoverableThreadResumeError(new Error("thread/start failed: permission denied")),
+      isRecoverableWorkspaceResumeError(new Error("thread/start failed: permission denied")),
     ).toBe(false);
   });
 
   it("ignores non-recoverable resume errors", () => {
     expect(
-      isRecoverableThreadResumeError(
+      isRecoverableWorkspaceResumeError(
         new Error("thread/resume failed: timed out waiting for server"),
       ),
     ).toBe(false);
@@ -399,7 +399,7 @@ describe("startSession", () => {
     try {
       await expect(
         manager.startSession({
-          threadId: asThreadId("thread-1"),
+          workspaceId: asWorkspaceId("workspace-1"),
           provider: "codex",
           binaryPath: "codex",
           runtimeMode: "full-access",
@@ -448,7 +448,7 @@ describe("startSession", () => {
     try {
       await expect(
         manager.startSession({
-          threadId: asThreadId("thread-1"),
+          workspaceId: asWorkspaceId("workspace-1"),
           provider: "codex",
           binaryPath: "codex",
           runtimeMode: "full-access",
@@ -478,7 +478,7 @@ describe("sendTurn", () => {
       createSendTurnHarness();
 
     const result = await manager.sendTurn({
-      threadId: asThreadId("thread_1"),
+      workspaceId: asWorkspaceId("workspace_1"),
       input: "Inspect this image",
       attachments: [
         {
@@ -492,13 +492,13 @@ describe("sendTurn", () => {
     });
 
     expect(result).toEqual({
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       turnId: "turn_1",
-      resumeCursor: { threadId: "thread_1" },
+      resumeCursor: { workspaceId: "workspace_1" },
     });
-    expect(requireSession).toHaveBeenCalledWith("thread_1");
+    expect(requireSession).toHaveBeenCalledWith("workspace_1");
     expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       input: [
         {
           type: "text",
@@ -517,7 +517,7 @@ describe("sendTurn", () => {
     expect(updateSession).toHaveBeenCalledWith(context, {
       status: "running",
       activeTurnId: "turn_1",
-      resumeCursor: { threadId: "thread_1" },
+      resumeCursor: { workspaceId: "workspace_1" },
     });
   });
 
@@ -525,7 +525,7 @@ describe("sendTurn", () => {
     const { manager, context, sendRequest } = createSendTurnHarness();
 
     await manager.sendTurn({
-      threadId: asThreadId("thread_1"),
+      workspaceId: asWorkspaceId("workspace_1"),
       attachments: [
         {
           type: "image",
@@ -535,7 +535,7 @@ describe("sendTurn", () => {
     });
 
     expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       input: [
         {
           type: "image",
@@ -550,13 +550,13 @@ describe("sendTurn", () => {
     const { manager, context, sendRequest } = createSendTurnHarness();
 
     await manager.sendTurn({
-      threadId: asThreadId("thread_1"),
+      workspaceId: asWorkspaceId("workspace_1"),
       input: "Plan the work",
       interactionMode: "plan",
     });
 
     expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       input: [
         {
           type: "text",
@@ -580,13 +580,13 @@ describe("sendTurn", () => {
     const { manager, context, sendRequest } = createSendTurnHarness();
 
     await manager.sendTurn({
-      threadId: asThreadId("thread_1"),
+      workspaceId: asWorkspaceId("workspace_1"),
       input: "PLEASE IMPLEMENT THIS PLAN:\n- step 1",
       interactionMode: "default",
     });
 
     expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       input: [
         {
           type: "text",
@@ -611,13 +611,13 @@ describe("sendTurn", () => {
     context.session.model = "gpt-5.2-codex";
 
     await manager.sendTurn({
-      threadId: asThreadId("thread_1"),
+      workspaceId: asWorkspaceId("workspace_1"),
       input: "Plan this with my current session model",
       interactionMode: "plan",
     });
 
     expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       input: [
         {
           type: "text",
@@ -642,18 +642,18 @@ describe("sendTurn", () => {
 
     await expect(
       manager.sendTurn({
-        threadId: asThreadId("thread_1"),
+        workspaceId: asWorkspaceId("workspace_1"),
       }),
     ).rejects.toThrow("Turn input must include text or attachments.");
   });
 });
 
-describe("thread checkpoint control", () => {
-  it("reads thread turns from thread/read", async () => {
-    const { manager, context, requireSession, sendRequest } = createThreadControlHarness();
+describe("workspace checkpoint control", () => {
+  it("reads workspace turns from thread/read", async () => {
+    const { manager, context, requireSession, sendRequest } = createWorkspaceControlHarness();
     sendRequest.mockResolvedValue({
       thread: {
-        id: "thread_1",
+        id: "workspace_1",
         turns: [
           {
             id: "turn_1",
@@ -663,15 +663,15 @@ describe("thread checkpoint control", () => {
       },
     });
 
-    const result = await manager.readThread(asThreadId("thread_1"));
+    const result = await manager.readWorkspace(asWorkspaceId("workspace_1"));
 
-    expect(requireSession).toHaveBeenCalledWith("thread_1");
+    expect(requireSession).toHaveBeenCalledWith("workspace_1");
     expect(sendRequest).toHaveBeenCalledWith(context, "thread/read", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       includeTurns: true,
     });
     expect(result).toEqual({
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       turns: [
         {
           id: "turn_1",
@@ -681,10 +681,10 @@ describe("thread checkpoint control", () => {
     });
   });
 
-  it("reads thread turns from flat thread/read responses", async () => {
-    const { manager, context, sendRequest } = createThreadControlHarness();
+  it("reads workspace turns from flat thread/read responses", async () => {
+    const { manager, context, sendRequest } = createWorkspaceControlHarness();
     sendRequest.mockResolvedValue({
-      threadId: "thread_1",
+      threadId: "workspace_1",
       turns: [
         {
           id: "turn_1",
@@ -693,14 +693,14 @@ describe("thread checkpoint control", () => {
       ],
     });
 
-    const result = await manager.readThread(asThreadId("thread_1"));
+    const result = await manager.readWorkspace(asWorkspaceId("workspace_1"));
 
     expect(sendRequest).toHaveBeenCalledWith(context, "thread/read", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       includeTurns: true,
     });
     expect(result).toEqual({
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       turns: [
         {
           id: "turn_1",
@@ -711,18 +711,18 @@ describe("thread checkpoint control", () => {
   });
 
   it("rolls back turns via thread/rollback and resets session running state", async () => {
-    const { manager, context, sendRequest, updateSession } = createThreadControlHarness();
+    const { manager, context, sendRequest, updateSession } = createWorkspaceControlHarness();
     sendRequest.mockResolvedValue({
       thread: {
-        id: "thread_1",
+        id: "workspace_1",
         turns: [],
       },
     });
 
-    const result = await manager.rollbackThread(asThreadId("thread_1"), 2);
+    const result = await manager.rollbackWorkspace(asWorkspaceId("workspace_1"), 2);
 
     expect(sendRequest).toHaveBeenCalledWith(context, "thread/rollback", {
-      threadId: "thread_1",
+      threadId: "workspace_1",
       numTurns: 2,
     });
     expect(updateSession).toHaveBeenCalledWith(context, {
@@ -730,7 +730,7 @@ describe("thread checkpoint control", () => {
       activeTurnId: undefined,
     });
     expect(result).toEqual({
-      threadId: "thread_1",
+      workspaceId: "workspace_1",
       turns: [],
     });
   });
@@ -742,7 +742,7 @@ describe("respondToUserInput", () => {
       createPendingUserInputHarness();
 
     await manager.respondToUserInput(
-      asThreadId("thread_1"),
+      asWorkspaceId("workspace_1"),
       ApprovalRequestId.makeUnsafe("req-user-input-1"),
       {
         scope: "All request methods",
@@ -750,7 +750,7 @@ describe("respondToUserInput", () => {
       },
     );
 
-    expect(requireSession).toHaveBeenCalledWith("thread_1");
+    expect(requireSession).toHaveBeenCalledWith("workspace_1");
     expect(writeMessage).toHaveBeenCalledWith(context, {
       id: 42,
       result: {
@@ -779,14 +779,14 @@ describe("respondToUserInput", () => {
       createPendingUserInputHarness();
 
     await manager.respondToUserInput(
-      asThreadId("thread_1"),
+      asWorkspaceId("workspace_1"),
       ApprovalRequestId.makeUnsafe("req-user-input-1"),
       {
         scope: [],
       },
     );
 
-    expect(requireSession).toHaveBeenCalledWith("thread_1");
+    expect(requireSession).toHaveBeenCalledWith("workspace_1");
     expect(writeMessage).toHaveBeenCalledWith(context, {
       id: 42,
       result: {
@@ -815,8 +815,8 @@ describe("respondToUserInput", () => {
         sessionId: "sess_1",
         provider: "codex",
         status: "ready",
-        threadId: asThreadId("thread_1"),
-        resumeCursor: { threadId: "thread_1" },
+        workspaceId: asWorkspaceId("workspace_1"),
+        resumeCursor: { workspaceId: "workspace_1" },
         createdAt: "2026-02-10T00:00:00.000Z",
         updatedAt: "2026-02-10T00:00:00.000Z",
       },
@@ -864,9 +864,9 @@ describe("collab child conversation routing", () => {
         item: {
           type: "collabAgentToolCall",
           id: "call_collab_1",
-          receiverThreadIds: ["child_provider_1"],
+          receiverWorkspaceIds: ["child_provider_1"],
         },
-        threadId: "provider_parent",
+        workspaceId: "provider_parent",
         turnId: "turn_parent",
       },
     });
@@ -878,7 +878,7 @@ describe("collab child conversation routing", () => {
     ).handleServerNotification(context, {
       method: "item/agentMessage/delta",
       params: {
-        threadId: "child_provider_1",
+        workspaceId: "child_provider_1",
         turnId: "turn_child_1",
         itemId: "msg_child_1",
         delta: "working",
@@ -907,9 +907,9 @@ describe("collab child conversation routing", () => {
         item: {
           type: "collabAgentToolCall",
           id: "call_collab_1",
-          receiverThreadIds: ["child_provider_1"],
+          receiverWorkspaceIds: ["child_provider_1"],
         },
-        threadId: "provider_parent",
+        workspaceId: "provider_parent",
         turnId: "turn_parent",
       },
     });
@@ -923,7 +923,7 @@ describe("collab child conversation routing", () => {
     ).handleServerNotification(context, {
       method: "turn/started",
       params: {
-        threadId: "child_provider_1",
+        workspaceId: "child_provider_1",
         turn: { id: "turn_child_1" },
       },
     });
@@ -935,7 +935,7 @@ describe("collab child conversation routing", () => {
     ).handleServerNotification(context, {
       method: "turn/completed",
       params: {
-        threadId: "child_provider_1",
+        workspaceId: "child_provider_1",
         turn: { id: "turn_child_1", status: "completed" },
       },
     });
@@ -957,9 +957,9 @@ describe("collab child conversation routing", () => {
         item: {
           type: "collabAgentToolCall",
           id: "call_collab_1",
-          receiverThreadIds: ["child_provider_1"],
+          receiverWorkspaceIds: ["child_provider_1"],
         },
-        threadId: "provider_parent",
+        workspaceId: "provider_parent",
         turnId: "turn_parent",
       },
     });
@@ -973,7 +973,7 @@ describe("collab child conversation routing", () => {
       id: 42,
       method: "item/commandExecution/requestApproval",
       params: {
-        threadId: "child_provider_1",
+        workspaceId: "child_provider_1",
         turnId: "turn_child_1",
         itemId: "call_child_1",
         command: "bun install",
@@ -997,7 +997,7 @@ describe("collab child conversation routing", () => {
 });
 
 describe.skipIf(!process.env.CODEX_BINARY_PATH)("startSession live Codex resume", () => {
-  it("keeps prior thread history when resuming with a changed runtime mode", async () => {
+  it("keeps prior workspace history when resuming with a changed runtime mode", async () => {
     const workspaceDir = mkdtempSync(path.join(os.tmpdir(), "codex-live-resume-"));
     writeFileSync(path.join(workspaceDir, "README.md"), "hello\n", "utf8");
 
@@ -1005,7 +1005,7 @@ describe.skipIf(!process.env.CODEX_BINARY_PATH)("startSession live Codex resume"
 
     try {
       const firstSession = await manager.startSession({
-        threadId: asThreadId("thread-live"),
+        workspaceId: asWorkspaceId("workspace-live"),
         provider: "codex",
         cwd: workspaceDir,
         runtimeMode: "full-access",
@@ -1014,28 +1014,28 @@ describe.skipIf(!process.env.CODEX_BINARY_PATH)("startSession live Codex resume"
       });
 
       const firstTurn = await manager.sendTurn({
-        threadId: firstSession.threadId,
+        workspaceId: firstSession.workspaceId,
         input: `Reply with exactly the word ALPHA ${randomUUID()}`,
       });
 
-      expect(firstTurn.threadId).toBe(firstSession.threadId);
+      expect(firstTurn.workspaceId).toBe(firstSession.workspaceId);
 
       await vi.waitFor(
         async () => {
-          const snapshot = await manager.readThread(firstSession.threadId);
+          const snapshot = await manager.readWorkspace(firstSession.workspaceId);
           expect(snapshot.turns.length).toBeGreaterThan(0);
         },
         { timeout: 120_000, interval: 1_000 },
       );
 
-      const firstSnapshot = await manager.readThread(firstSession.threadId);
-      const originalThreadId = firstSnapshot.threadId;
+      const firstSnapshot = await manager.readWorkspace(firstSession.workspaceId);
+      const originalWorkspaceId = firstSnapshot.workspaceId;
       const originalTurnCount = firstSnapshot.turns.length;
 
-      manager.stopSession(firstSession.threadId);
+      manager.stopSession(firstSession.workspaceId);
 
       const resumedSession = await manager.startSession({
-        threadId: firstSession.threadId,
+        workspaceId: firstSession.workspaceId,
         provider: "codex",
         cwd: workspaceDir,
         runtimeMode: "approval-required",
@@ -1044,20 +1044,20 @@ describe.skipIf(!process.env.CODEX_BINARY_PATH)("startSession live Codex resume"
         ...(process.env.CODEX_HOME_PATH ? { homePath: process.env.CODEX_HOME_PATH } : {}),
       });
 
-      expect(resumedSession.threadId).toBe(originalThreadId);
+      expect(resumedSession.workspaceId).toBe(originalWorkspaceId);
 
-      const resumedSnapshotBeforeTurn = await manager.readThread(resumedSession.threadId);
-      expect(resumedSnapshotBeforeTurn.threadId).toBe(originalThreadId);
+      const resumedSnapshotBeforeTurn = await manager.readWorkspace(resumedSession.workspaceId);
+      expect(resumedSnapshotBeforeTurn.workspaceId).toBe(originalWorkspaceId);
       expect(resumedSnapshotBeforeTurn.turns.length).toBeGreaterThanOrEqual(originalTurnCount);
 
       await manager.sendTurn({
-        threadId: resumedSession.threadId,
+        workspaceId: resumedSession.workspaceId,
         input: `Reply with exactly the word BETA ${randomUUID()}`,
       });
 
       await vi.waitFor(
         async () => {
-          const snapshot = await manager.readThread(resumedSession.threadId);
+          const snapshot = await manager.readWorkspace(resumedSession.workspaceId);
           expect(snapshot.turns.length).toBeGreaterThan(originalTurnCount);
         },
         { timeout: 120_000, interval: 1_000 },

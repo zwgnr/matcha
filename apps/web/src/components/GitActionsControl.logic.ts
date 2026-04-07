@@ -326,7 +326,7 @@ export function resolveDefaultBranchActionDialogCopy(input: {
   };
 }
 
-export function resolveThreadBranchUpdate(
+export function resolveWorkspaceBranchUpdate(
   result: GitRunStackedActionResult,
 ): { branch: string } | null {
   if (result.branch.status !== "created" || !result.branch.name) {
@@ -338,19 +338,19 @@ export function resolveThreadBranchUpdate(
   };
 }
 
-export function resolveLiveThreadBranchUpdate(input: {
-  threadBranch: string | null;
+export function resolveLiveWorkspaceBranchUpdate(input: {
+  workspaceBranch: string | null;
   gitStatus: GitStatusResult | null;
 }): { branch: string | null } | null {
   if (!input.gitStatus) {
     return null;
   }
 
-  if (input.gitStatus.branch === null && input.threadBranch !== null) {
+  if (input.gitStatus.branch === null && input.workspaceBranch !== null) {
     return null;
   }
 
-  if (input.threadBranch === input.gitStatus.branch) {
+  if (input.workspaceBranch === input.gitStatus.branch) {
     return null;
   }
 

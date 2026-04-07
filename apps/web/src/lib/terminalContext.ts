@@ -1,4 +1,4 @@
-import { type ThreadId } from "@matcha/contracts";
+import { type WorkspaceId } from "@matcha/contracts";
 
 export interface TerminalContextSelection {
   terminalId: string;
@@ -10,7 +10,7 @@ export interface TerminalContextSelection {
 
 export interface TerminalContextDraft extends TerminalContextSelection {
   id: string;
-  threadId: ThreadId;
+  workspaceId: WorkspaceId;
   createdAt: string;
 }
 

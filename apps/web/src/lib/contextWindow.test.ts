@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { EventId, type OrchestrationThreadActivity, TurnId } from "@matcha/contracts";
+import { EventId, type OrchestrationWorkspaceActivity, TurnId } from "@matcha/contracts";
 
 import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "./contextWindow";
 
-function makeActivity(id: string, kind: string, payload: unknown): OrchestrationThreadActivity {
+function makeActivity(id: string, kind: string, payload: unknown): OrchestrationWorkspaceActivity {
   return {
     id: EventId.makeUnsafe(id),
     tone: "info",

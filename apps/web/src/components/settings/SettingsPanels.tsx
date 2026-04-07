@@ -16,7 +16,7 @@ import {
   type ProviderKind,
   type ServerProvider,
   type ServerProviderModel,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@matcha/contracts/settings";
 import { normalizeModelSlug } from "@matcha/shared/model";
@@ -35,7 +35,7 @@ import { resolveAndPersistPreferredEditor } from "../../editorPreferences";
 import { isElectron } from "../../env";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
-import { useThreadActions } from "../../hooks/useThreadActions";
+import { useWorkspaceActions } from "../../hooks/useWorkspaceActions";
 import {
   setDesktopUpdateStateQueryData,
   useDesktopUpdateState,
@@ -469,13 +469,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
         ? ["Assistant output"]
         : []),
-      ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
-        ? ["New thread mode"]
+      ...(settings.defaultWorkspaceEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultWorkspaceEnvMode
+        ? ["New workspace mode"]
         : []),
-      ...(settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive
+      ...(settings.confirmWorkspaceArchive !== DEFAULT_UNIFIED_SETTINGS.confirmWorkspaceArchive
         ? ["Archive confirmation"]
         : []),
-      ...(settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete
+      ...(settings.confirmWorkspaceDelete !== DEFAULT_UNIFIED_SETTINGS.confirmWorkspaceDelete
         ? ["Delete confirmation"]
         : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
@@ -484,9 +484,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     [
       areProviderSettingsDirty,
       isGitWritingModelDirty,
-      settings.confirmThreadArchive,
-      settings.confirmThreadDelete,
-      settings.defaultThreadEnvMode,
+      settings.confirmWorkspaceArchive,
+      settings.confirmWorkspaceDelete,
+      settings.defaultWorkspaceEnvMode,
       settings.diffWordWrap,
       settings.enableAssistantStreaming,
       settings.timestampFormat,
@@ -906,15 +906,16 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
-          title="New threads"
-          description="Pick the default workspace mode for newly created draft threads."
+          title="New workspaces"
+          description="Pick the default workspace mode for newly created draft workspaces."
           resetAction={
-            settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode ? (
+            settings.defaultWorkspaceEnvMode !==
+            DEFAULT_UNIFIED_SETTINGS.defaultWorkspaceEnvMode ? (
               <SettingResetButton
-                label="new threads"
+                label="new workspaces"
                 onClick={() =>
                   updateSettings({
-                    defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
+                    defaultWorkspaceEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultWorkspaceEnvMode,
                   })
                 }
               />
@@ -922,16 +923,16 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Select
-              value={settings.defaultThreadEnvMode}
+              value={settings.defaultWorkspaceEnvMode}
               onValueChange={(value) => {
                 if (value === "local" || value === "worktree") {
-                  updateSettings({ defaultThreadEnvMode: value });
+                  updateSettings({ defaultWorkspaceEnvMode: value });
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-44" aria-label="Default thread mode">
+              <SelectTrigger className="w-full sm:w-44" aria-label="Default workspace mode">
                 <SelectValue>
-                  {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
+                  {settings.defaultWorkspaceEnvMode === "worktree" ? "New worktree" : "Local"}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -948,14 +949,15 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           title="Archive confirmation"
-          description="Require a second click on the inline archive action before a thread is archived."
+          description="Require a second click on the inline archive action before a workspace is archived."
           resetAction={
-            settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive ? (
+            settings.confirmWorkspaceArchive !==
+            DEFAULT_UNIFIED_SETTINGS.confirmWorkspaceArchive ? (
               <SettingResetButton
                 label="archive confirmation"
                 onClick={() =>
                   updateSettings({
-                    confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
+                    confirmWorkspaceArchive: DEFAULT_UNIFIED_SETTINGS.confirmWorkspaceArchive,
                   })
                 }
               />
@@ -963,25 +965,25 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.confirmThreadArchive}
+              checked={settings.confirmWorkspaceArchive}
               onCheckedChange={(checked) =>
-                updateSettings({ confirmThreadArchive: Boolean(checked) })
+                updateSettings({ confirmWorkspaceArchive: Boolean(checked) })
               }
-              aria-label="Confirm thread archiving"
+              aria-label="Confirm workspace archiving"
             />
           }
         />
 
         <SettingsRow
           title="Delete confirmation"
-          description="Ask before deleting a thread and its chat history."
+          description="Ask before deleting a workspace and its chat history."
           resetAction={
-            settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete ? (
+            settings.confirmWorkspaceDelete !== DEFAULT_UNIFIED_SETTINGS.confirmWorkspaceDelete ? (
               <SettingResetButton
                 label="delete confirmation"
                 onClick={() =>
                   updateSettings({
-                    confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
+                    confirmWorkspaceDelete: DEFAULT_UNIFIED_SETTINGS.confirmWorkspaceDelete,
                   })
                 }
               />
@@ -989,11 +991,11 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.confirmThreadDelete}
+              checked={settings.confirmWorkspaceDelete}
               onCheckedChange={(checked) =>
-                updateSettings({ confirmThreadDelete: Boolean(checked) })
+                updateSettings({ confirmWorkspaceDelete: Boolean(checked) })
               }
-              aria-label="Confirm thread deletion"
+              aria-label="Confirm workspace deletion"
             />
           }
         />
@@ -1478,28 +1480,30 @@ export function GeneralSettingsPanel() {
   );
 }
 
-export function ArchivedThreadsPanel() {
+export function ArchivedWorkspacesPanel() {
   const projects = useStore((store) => store.projects);
-  const threads = useStore((store) => store.threads);
-  const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const workspaces = useStore((store) => store.workspaces);
+  const { unarchiveWorkspace, confirmAndDeleteWorkspace } = useWorkspaceActions();
   const archivedGroups = useMemo(() => {
     const projectById = new Map(projects.map((project) => [project.id, project] as const));
     return [...projectById.values()]
       .map((project) => ({
         project,
-        threads: threads
-          .filter((thread) => thread.projectId === project.id && thread.archivedAt !== null)
+        workspaces: workspaces
+          .filter(
+            (workspace) => workspace.projectId === project.id && workspace.archivedAt !== null,
+          )
           .toSorted((left, right) => {
             const leftKey = left.archivedAt ?? left.createdAt;
             const rightKey = right.archivedAt ?? right.createdAt;
             return rightKey.localeCompare(leftKey) || right.id.localeCompare(left.id);
           }),
       }))
-      .filter((group) => group.threads.length > 0);
-  }, [projects, threads]);
+      .filter((group) => group.workspaces.length > 0);
+  }, [projects, workspaces]);
 
-  const handleArchivedThreadContextMenu = useCallback(
-    async (threadId: ThreadId, position: { x: number; y: number }) => {
+  const handleArchivedWorkspaceContextMenu = useCallback(
+    async (workspaceId: WorkspaceId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
@@ -1512,11 +1516,11 @@ export function ArchivedThreadsPanel() {
 
       if (clicked === "unarchive") {
         try {
-          await unarchiveThread(threadId);
+          await unarchiveWorkspace(workspaceId);
         } catch (error) {
           toastManager.add({
             type: "error",
-            title: "Failed to unarchive thread",
+            title: "Failed to unarchive workspace",
             description: error instanceof Error ? error.message : "An error occurred.",
           });
         }
@@ -1524,51 +1528,53 @@ export function ArchivedThreadsPanel() {
       }
 
       if (clicked === "delete") {
-        await confirmAndDeleteThread(threadId);
+        await confirmAndDeleteWorkspace(workspaceId);
       }
     },
-    [confirmAndDeleteThread, unarchiveThread],
+    [confirmAndDeleteWorkspace, unarchiveWorkspace],
   );
 
   return (
     <SettingsPageContainer>
       {archivedGroups.length === 0 ? (
-        <SettingsSection title="Archived threads">
+        <SettingsSection title="Archived workspaces">
           <Empty className="min-h-88">
             <EmptyMedia variant="icon">
               <ArchiveIcon />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle>No archived threads</EmptyTitle>
-              <EmptyDescription>Archived threads will appear here.</EmptyDescription>
+              <EmptyTitle>No archived workspaces</EmptyTitle>
+              <EmptyDescription>Archived workspaces will appear here.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         </SettingsSection>
       ) : (
-        archivedGroups.map(({ project, threads: projectThreads }) => (
+        archivedGroups.map(({ project, workspaces: projectWorkspaces }) => (
           <SettingsSection
             key={project.id}
             title={project.name}
             icon={<ProjectFavicon cwd={project.cwd} />}
           >
-            {projectThreads.map((thread) => (
+            {projectWorkspaces.map((workspace) => (
               <div
-                key={thread.id}
+                key={workspace.id}
                 className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0 sm:px-5"
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  void handleArchivedThreadContextMenu(thread.id, {
+                  void handleArchivedWorkspaceContextMenu(workspace.id, {
                     x: event.clientX,
                     y: event.clientY,
                   });
                 }}
               >
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-medium text-foreground">{thread.title}</h3>
+                  <h3 className="truncate text-sm font-medium text-foreground">
+                    {workspace.title}
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
+                    Archived {formatRelativeTimeLabel(workspace.archivedAt ?? workspace.createdAt)}
                     {" \u00b7 Created "}
-                    {formatRelativeTimeLabel(thread.createdAt)}
+                    {formatRelativeTimeLabel(workspace.createdAt)}
                   </p>
                 </div>
                 <Button
@@ -1577,10 +1583,10 @@ export function ArchivedThreadsPanel() {
                   size="sm"
                   className="h-7 shrink-0 cursor-pointer gap-1.5 px-2.5"
                   onClick={() =>
-                    void unarchiveThread(thread.id).catch((error) => {
+                    void unarchiveWorkspace(workspace.id).catch((error) => {
                       toastManager.add({
                         type: "error",
-                        title: "Failed to unarchive thread",
+                        title: "Failed to unarchive workspace",
                         description: error instanceof Error ? error.message : "An error occurred.",
                       });
                     })

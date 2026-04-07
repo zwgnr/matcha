@@ -1,26 +1,28 @@
-import { type ThreadId } from "@matcha/contracts";
+import { type WorkspaceId } from "@matcha/contracts";
 import { useMemo } from "react";
 import {
   selectProjectById,
-  selectSidebarThreadSummaryById,
-  selectThreadById,
+  selectSidebarWorkspaceSummaryById,
+  selectWorkspaceById,
   useStore,
 } from "./store";
-import { type Project, type SidebarThreadSummary, type Thread } from "./types";
+import { type Project, type SidebarWorkspaceSummary, type Workspace } from "./types";
 
 export function useProjectById(projectId: Project["id"] | null | undefined): Project | undefined {
   const selector = useMemo(() => selectProjectById(projectId), [projectId]);
   return useStore(selector);
 }
 
-export function useThreadById(threadId: ThreadId | null | undefined): Thread | undefined {
-  const selector = useMemo(() => selectThreadById(threadId), [threadId]);
+export function useWorkspaceById(
+  workspaceId: WorkspaceId | null | undefined,
+): Workspace | undefined {
+  const selector = useMemo(() => selectWorkspaceById(workspaceId), [workspaceId]);
   return useStore(selector);
 }
 
-export function useSidebarThreadSummaryById(
-  threadId: ThreadId | null | undefined,
-): SidebarThreadSummary | undefined {
-  const selector = useMemo(() => selectSidebarThreadSummaryById(threadId), [threadId]);
+export function useSidebarWorkspaceSummaryById(
+  workspaceId: WorkspaceId | null | undefined,
+): SidebarWorkspaceSummary | undefined {
+  const selector = useMemo(() => selectSidebarWorkspaceSummaryById(workspaceId), [workspaceId]);
   return useStore(selector);
 }

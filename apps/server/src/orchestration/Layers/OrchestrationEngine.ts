@@ -2,7 +2,7 @@ import type {
   OrchestrationEvent,
   OrchestrationReadModel,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { OrchestrationCommand } from "@matcha/contracts";
 import {
@@ -51,8 +51,8 @@ interface CommandEnvelope {
 }
 
 function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "project" | "thread";
-  readonly aggregateId: ProjectId | ThreadId;
+  readonly aggregateKind: "project" | "workspace";
+  readonly aggregateId: ProjectId | WorkspaceId;
 } {
   switch (command.type) {
     case "project.create":
@@ -64,8 +64,8 @@ function commandToAggregateRef(command: OrchestrationCommand): {
       };
     default:
       return {
-        aggregateKind: "thread",
-        aggregateId: command.threadId,
+        aggregateKind: "workspace",
+        aggregateId: command.workspaceId,
       };
   }
 }

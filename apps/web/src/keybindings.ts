@@ -3,8 +3,8 @@ import {
   type KeybindingShortcut,
   type KeybindingWhenNode,
   type ResolvedKeybindingsConfig,
-  THREAD_JUMP_KEYBINDING_COMMANDS,
-  type ThreadJumpKeybindingCommand,
+  WORKSPACE_JUMP_KEYBINDING_COMMANDS,
+  type WorkspaceJumpKeybindingCommand,
 } from "@matcha/contracts";
 import { isMacPlatform } from "./lib/utils";
 
@@ -247,31 +247,33 @@ export function shortcutLabelForCommand(
   return shortcut ? formatShortcutLabel(shortcut, platform) : null;
 }
 
-export function threadJumpCommandForIndex(index: number): ThreadJumpKeybindingCommand | null {
-  return THREAD_JUMP_KEYBINDING_COMMANDS[index] ?? null;
+export function workspaceJumpCommandForIndex(index: number): WorkspaceJumpKeybindingCommand | null {
+  return WORKSPACE_JUMP_KEYBINDING_COMMANDS[index] ?? null;
 }
 
-export function threadJumpIndexFromCommand(command: string): number | null {
-  const index = THREAD_JUMP_KEYBINDING_COMMANDS.indexOf(command as ThreadJumpKeybindingCommand);
+export function workspaceJumpIndexFromCommand(command: string): number | null {
+  const index = WORKSPACE_JUMP_KEYBINDING_COMMANDS.indexOf(
+    command as WorkspaceJumpKeybindingCommand,
+  );
   return index === -1 ? null : index;
 }
 
-export function threadTraversalDirectionFromCommand(
+export function workspaceTraversalDirectionFromCommand(
   command: string | null,
 ): "previous" | "next" | null {
-  if (command === "thread.previous") return "previous";
-  if (command === "thread.next") return "next";
+  if (command === "workspace.previous") return "previous";
+  if (command === "workspace.next") return "next";
   return null;
 }
 
-export function shouldShowThreadJumpHints(
+export function shouldShowWorkspaceJumpHints(
   event: ShortcutEventLike,
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): boolean {
   const platform = resolvePlatform(options);
 
-  for (const command of THREAD_JUMP_KEYBINDING_COMMANDS) {
+  for (const command of WORKSPACE_JUMP_KEYBINDING_COMMANDS) {
     const shortcut = findEffectiveShortcutForCommand(keybindings, command, options);
     if (!shortcut) continue;
     if (matchesShortcutModifiers(event, shortcut, platform)) {

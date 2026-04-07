@@ -8,7 +8,7 @@ import {
   type ProviderSession,
   type ProviderTurnStartResult,
   type ProviderUserInputAnswers,
-  ThreadId,
+  WorkspaceId,
   TurnId,
 } from "@matcha/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -28,7 +28,7 @@ import { CodexAdapter } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { makeCodexAdapterLive } from "./CodexAdapter.ts";
 
-const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
+const asWorkspaceId = (value: string): WorkspaceId => WorkspaceId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 const asItemId = (value: string): ProviderItemId => ProviderItemId.makeUnsafe(value);
@@ -41,7 +41,7 @@ class FakeCodexManager extends CodexAppServerManager {
         provider: "codex",
         status: "ready",
         runtimeMode: input.runtimeMode,
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         cwd: input.cwd,
         createdAt: now,
         updatedAt: now,
@@ -51,28 +51,28 @@ class FakeCodexManager extends CodexAppServerManager {
 
   public sendTurnImpl = vi.fn(
     async (_input: CodexAppServerSendTurnInput): Promise<ProviderTurnStartResult> => ({
-      threadId: asThreadId("thread-1"),
+      workspaceId: asWorkspaceId("workspace-1"),
       turnId: asTurnId("turn-1"),
     }),
   );
 
   public interruptTurnImpl = vi.fn(
-    async (_threadId: ThreadId, _turnId?: TurnId): Promise<void> => undefined,
+    async (_workspaceId: WorkspaceId, _turnId?: TurnId): Promise<void> => undefined,
   );
 
-  public readThreadImpl = vi.fn(async (_threadId: ThreadId) => ({
-    threadId: asThreadId("thread-1"),
+  public readWorkspaceImpl = vi.fn(async (_workspaceId: WorkspaceId) => ({
+    workspaceId: asWorkspaceId("workspace-1"),
     turns: [],
   }));
 
-  public rollbackThreadImpl = vi.fn(async (_threadId: ThreadId, _numTurns: number) => ({
-    threadId: asThreadId("thread-1"),
+  public rollbackWorkspaceImpl = vi.fn(async (_workspaceId: WorkspaceId, _numTurns: number) => ({
+    workspaceId: asWorkspaceId("workspace-1"),
     turns: [],
   }));
 
   public respondToRequestImpl = vi.fn(
     async (
-      _threadId: ThreadId,
+      _workspaceId: WorkspaceId,
       _requestId: ApprovalRequestId,
       _decision: ProviderApprovalDecision,
     ): Promise<void> => undefined,
@@ -80,7 +80,7 @@ class FakeCodexManager extends CodexAppServerManager {
 
   public respondToUserInputImpl = vi.fn(
     async (
-      _threadId: ThreadId,
+      _workspaceId: WorkspaceId,
       _requestId: ApprovalRequestId,
       _answers: ProviderUserInputAnswers,
     ): Promise<void> => undefined,
@@ -96,41 +96,41 @@ class FakeCodexManager extends CodexAppServerManager {
     return this.sendTurnImpl(input);
   }
 
-  override interruptTurn(threadId: ThreadId, turnId?: TurnId): Promise<void> {
-    return this.interruptTurnImpl(threadId, turnId);
+  override interruptTurn(workspaceId: WorkspaceId, turnId?: TurnId): Promise<void> {
+    return this.interruptTurnImpl(workspaceId, turnId);
   }
 
-  override readThread(threadId: ThreadId) {
-    return this.readThreadImpl(threadId);
+  override readWorkspace(workspaceId: WorkspaceId) {
+    return this.readWorkspaceImpl(workspaceId);
   }
 
-  override rollbackThread(threadId: ThreadId, numTurns: number) {
-    return this.rollbackThreadImpl(threadId, numTurns);
+  override rollbackWorkspace(workspaceId: WorkspaceId, numTurns: number) {
+    return this.rollbackWorkspaceImpl(workspaceId, numTurns);
   }
 
   override respondToRequest(
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
   ): Promise<void> {
-    return this.respondToRequestImpl(threadId, requestId, decision);
+    return this.respondToRequestImpl(workspaceId, requestId, decision);
   }
 
   override respondToUserInput(
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     requestId: ApprovalRequestId,
     answers: ProviderUserInputAnswers,
   ): Promise<void> {
-    return this.respondToUserInputImpl(threadId, requestId, answers);
+    return this.respondToUserInputImpl(workspaceId, requestId, answers);
   }
 
-  override stopSession(_threadId: ThreadId): void {}
+  override stopSession(_workspaceId: WorkspaceId): void {}
 
   override listSessions(): ProviderSession[] {
     return [];
   }
 
-  override hasSession(_threadId: ThreadId): boolean {
+  override hasSession(_workspaceId: WorkspaceId): boolean {
     return false;
   }
 
@@ -145,7 +145,7 @@ const providerSessionDirectoryTestLayer = Layer.succeed(ProviderSessionDirectory
     Effect.die(new Error("ProviderSessionDirectory.getProvider is not used in test")),
   getBinding: () => Effect.succeed(Option.none()),
   remove: () => Effect.void,
-  listThreadIds: () => Effect.succeed([]),
+  listWorkspaceIds: () => Effect.succeed([]),
 });
 
 const validationManager = new FakeCodexManager();
@@ -165,7 +165,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
       const result = yield* adapter
         .startSession({
           provider: "claudeAgent",
-          threadId: asThreadId("thread-1"),
+          workspaceId: asWorkspaceId("workspace-1"),
           runtimeMode: "full-access",
         })
         .pipe(Effect.result);
@@ -189,7 +189,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
 
       yield* adapter.startSession({
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         modelSelection: {
           provider: "codex",
           model: "gpt-5.3-codex",
@@ -202,7 +202,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
 
       assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         binaryPath: "codex",
         model: "gpt-5.3-codex",
         serviceTier: "fast",
@@ -231,7 +231,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       const adapter = yield* CodexAdapter;
       const result = yield* adapter
         .sendTurn({
-          threadId: asThreadId("sess-missing"),
+          workspaceId: asWorkspaceId("sess-missing"),
           input: "hello",
           attachments: [],
         })
@@ -247,7 +247,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         return;
       }
       assert.equal(result.failure.provider, "codex");
-      assert.equal(result.failure.threadId, "sess-missing");
+      assert.equal(result.failure.workspaceId, "sess-missing");
       assert.equal(result.failure.cause instanceof Error, true);
     }),
   );
@@ -259,7 +259,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
 
       yield* Effect.ignore(
         adapter.sendTurn({
-          threadId: asThreadId("sess-missing"),
+          workspaceId: asWorkspaceId("sess-missing"),
           input: "hello",
           modelSelection: {
             provider: "codex",
@@ -274,7 +274,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       );
 
       assert.deepStrictEqual(sessionErrorManager.sendTurnImpl.mock.calls[0]?.[0], {
-        threadId: asThreadId("sess-missing"),
+        workspaceId: asWorkspaceId("sess-missing"),
         input: "hello",
         model: "gpt-5.3-codex",
         effort: "high",
@@ -306,7 +306,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         provider: "codex",
         createdAt: new Date().toISOString(),
         method: "item/completed",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         turnId: asTurnId("turn-1"),
         itemId: asItemId("msg_1"),
         payload: {
@@ -345,7 +345,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         provider: "codex",
         createdAt: new Date().toISOString(),
         method: "item/completed",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         turnId: asTurnId("turn-1"),
         itemId: asItemId("plan_1"),
         payload: {
@@ -384,7 +384,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         provider: "codex",
         createdAt: new Date().toISOString(),
         method: "item/plan/delta",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         turnId: asTurnId("turn-1"),
         itemId: asItemId("plan_1"),
         payload: {
@@ -416,7 +416,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-session-closed"),
         kind: "session",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "session/closed",
         message: "Session stopped",
@@ -433,7 +433,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       if (firstEvent.value.type !== "session.exited") {
         return;
       }
-      assert.equal(firstEvent.value.threadId, "thread-1");
+      assert.equal(firstEvent.value.workspaceId, "workspace-1");
       assert.equal(firstEvent.value.payload.reason, "Session stopped");
     }),
   );
@@ -447,7 +447,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-retryable-error"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "error",
         turnId: asTurnId("turn-1"),
@@ -483,7 +483,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-process-stderr"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "process/stderr",
         turnId: asTurnId("turn-1"),
@@ -517,7 +517,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-process-stderr-websocket"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "process/stderr",
         turnId: asTurnId("turn-1"),
@@ -553,7 +553,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-request-resolved"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "serverRequest/resolved",
         requestId: ApprovalRequestId.makeUnsafe("req-1"),
@@ -589,7 +589,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-file-read-request-resolved"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "serverRequest/resolved",
         requestId: ApprovalRequestId.makeUnsafe("req-file-read-1"),
@@ -625,7 +625,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-user-input-empty"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "item/tool/requestUserInput/answered",
         payload: {
@@ -663,7 +663,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-windows-sandbox-failed"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "windowsSandbox/setupCompleted",
         message: "Sandbox setup failed",
@@ -707,7 +707,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
           id: asEventId("evt-user-input-requested"),
           kind: "request",
           provider: "codex",
-          threadId: asThreadId("thread-1"),
+          workspaceId: asWorkspaceId("workspace-1"),
           createdAt: new Date().toISOString(),
           method: "item/tool/requestUserInput",
           requestId: ApprovalRequestId.makeUnsafe("req-user-input-1"),
@@ -731,7 +731,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
           id: asEventId("evt-user-input-resolved"),
           kind: "notification",
           provider: "codex",
-          threadId: asThreadId("thread-1"),
+          workspaceId: asWorkspaceId("workspace-1"),
           createdAt: new Date().toISOString(),
           method: "item/tool/requestUserInput/answered",
           requestId: ApprovalRequestId.makeUnsafe("req-user-input-1"),
@@ -772,7 +772,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-codex-task-started"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "codex/event/task_started",
         payload: {
@@ -789,7 +789,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-codex-agent-reasoning"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "codex/event/agent_reasoning",
         payload: {
@@ -805,7 +805,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-codex-reasoning-delta"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "codex/event/reasoning_content_delta",
         payload: {
@@ -824,7 +824,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-codex-task-complete"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         createdAt: new Date().toISOString(),
         method: "codex/event/task_complete",
         payload: {
@@ -887,7 +887,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         id: asEventId("evt-codex-task-started-parent-turn"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         turnId: asTurnId("turn-parent"),
         createdAt: new Date().toISOString(),
         method: "codex/event/task_started",
@@ -898,7 +898,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
             turn_id: "turn-child",
             collaboration_mode_kind: "default",
           },
-          conversationId: "child-provider-thread",
+          conversationId: "child-provider-workspace",
         },
       } satisfies ProviderEvent);
 
@@ -923,15 +923,15 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
 
       lifecycleManager.emit("event", {
-        id: asEventId("evt-codex-thread-token-usage-updated"),
+        id: asEventId("evt-codex-workspace-token-usage-updated"),
         kind: "notification",
         provider: "codex",
-        threadId: asThreadId("thread-1"),
+        workspaceId: asWorkspaceId("workspace-1"),
         turnId: asTurnId("turn-1"),
         createdAt: new Date().toISOString(),
-        method: "thread/tokenUsage/updated",
+        method: "workspace/tokenUsage/updated",
         payload: {
-          threadId: "thread-1",
+          workspaceId: "workspace-1",
           turnId: "turn-1",
           tokenUsage: {
             total: {
@@ -958,8 +958,8 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       if (firstEvent._tag !== "Some") {
         return;
       }
-      assert.equal(firstEvent.value.type, "thread.token-usage.updated");
-      if (firstEvent.value.type !== "thread.token-usage.updated") {
+      assert.equal(firstEvent.value.type, "workspace.token-usage.updated");
+      if (firstEvent.value.type !== "workspace.token-usage.updated") {
         return;
       }
 

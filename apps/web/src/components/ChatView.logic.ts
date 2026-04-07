@@ -1,7 +1,12 @@
-import { ProjectId, type ModelSelection, type ThreadId, type TurnId } from "@matcha/contracts";
-import { type ChatMessage, type SessionPhase, type Thread, type ThreadSession } from "../types";
+import { ProjectId, type ModelSelection, type WorkspaceId, type TurnId } from "@matcha/contracts";
+import {
+  type ChatMessage,
+  type SessionPhase,
+  type Workspace,
+  type WorkspaceSession,
+} from "../types";
 import { randomUUID } from "~/lib/utils";
-import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
+import { type ComposerImageAttachment, type DraftWorkspaceState } from "../composerDraftStore";
 import { Schema } from "effect";
 import { useStore } from "../store";
 import {
@@ -11,68 +16,68 @@ import {
 } from "../lib/terminalContext";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "matcha:last-invoked-script-by-project";
-export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
+export const MAX_HIDDEN_MOUNTED_TERMINAL_WORKSPACES = 10;
 const WORKTREE_BRANCH_PREFIX = "matcha";
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
-export function buildLocalDraftThread(
-  threadId: ThreadId,
-  draftThread: DraftThreadState,
+export function buildLocalDraftWorkspace(
+  workspaceId: WorkspaceId,
+  draftWorkspace: DraftWorkspaceState,
   fallbackModelSelection: ModelSelection,
   error: string | null,
-): Thread {
+): Workspace {
   return {
-    id: threadId,
-    codexThreadId: null,
-    projectId: draftThread.projectId,
-    title: "New thread",
+    id: workspaceId,
+    codexWorkspaceId: null,
+    projectId: draftWorkspace.projectId,
+    title: "New workspace",
     modelSelection: fallbackModelSelection,
-    runtimeMode: draftThread.runtimeMode,
-    interactionMode: draftThread.interactionMode,
+    runtimeMode: draftWorkspace.runtimeMode,
+    interactionMode: draftWorkspace.interactionMode,
     session: null,
     messages: [],
     error,
-    createdAt: draftThread.createdAt,
+    createdAt: draftWorkspace.createdAt,
     archivedAt: null,
     latestTurn: null,
-    branch: draftThread.branch,
-    worktreePath: draftThread.worktreePath,
+    branch: draftWorkspace.branch,
+    worktreePath: draftWorkspace.worktreePath,
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],
   };
 }
 
-export function reconcileMountedTerminalThreadIds(input: {
-  currentThreadIds: ReadonlyArray<ThreadId>;
-  openThreadIds: ReadonlyArray<ThreadId>;
-  activeThreadId: ThreadId | null;
-  activeThreadTerminalOpen: boolean;
-  maxHiddenThreadCount?: number;
-}): ThreadId[] {
-  const openThreadIdSet = new Set(input.openThreadIds);
-  const hiddenThreadIds = input.currentThreadIds.filter(
-    (threadId) => threadId !== input.activeThreadId && openThreadIdSet.has(threadId),
+export function reconcileMountedTerminalWorkspaceIds(input: {
+  currentWorkspaceIds: ReadonlyArray<WorkspaceId>;
+  openWorkspaceIds: ReadonlyArray<WorkspaceId>;
+  activeWorkspaceId: WorkspaceId | null;
+  activeWorkspaceTerminalOpen: boolean;
+  maxHiddenWorkspaceCount?: number;
+}): WorkspaceId[] {
+  const openWorkspaceIdSet = new Set(input.openWorkspaceIds);
+  const hiddenWorkspaceIds = input.currentWorkspaceIds.filter(
+    (workspaceId) => workspaceId !== input.activeWorkspaceId && openWorkspaceIdSet.has(workspaceId),
   );
-  const maxHiddenThreadCount = Math.max(
+  const maxHiddenWorkspaceCount = Math.max(
     0,
-    input.maxHiddenThreadCount ?? MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
+    input.maxHiddenWorkspaceCount ?? MAX_HIDDEN_MOUNTED_TERMINAL_WORKSPACES,
   );
-  const nextThreadIds =
-    hiddenThreadIds.length > maxHiddenThreadCount
-      ? hiddenThreadIds.slice(-maxHiddenThreadCount)
-      : hiddenThreadIds;
+  const nextWorkspaceIds =
+    hiddenWorkspaceIds.length > maxHiddenWorkspaceCount
+      ? hiddenWorkspaceIds.slice(-maxHiddenWorkspaceCount)
+      : hiddenWorkspaceIds;
 
   if (
-    input.activeThreadId &&
-    input.activeThreadTerminalOpen &&
-    !nextThreadIds.includes(input.activeThreadId)
+    input.activeWorkspaceId &&
+    input.activeWorkspaceTerminalOpen &&
+    !nextWorkspaceIds.includes(input.activeWorkspaceId)
   ) {
-    nextThreadIds.push(input.activeThreadId);
+    nextWorkspaceIds.push(input.activeWorkspaceId);
   }
 
-  return nextThreadIds;
+  return nextWorkspaceIds;
 }
 
 export function revokeBlobPreviewUrl(previewUrl: string | undefined): void {
@@ -192,20 +197,22 @@ export function buildExpiredTerminalContextToastCopy(
   };
 }
 
-export function threadHasStarted(thread: Thread | null | undefined): boolean {
+export function workspaceHasStarted(workspace: Workspace | null | undefined): boolean {
   return Boolean(
-    thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),
+    workspace &&
+    (workspace.latestTurn !== null || workspace.messages.length > 0 || workspace.session !== null),
   );
 }
 
-export async function waitForStartedServerThread(
-  threadId: ThreadId,
+export async function waitForStartedServerWorkspace(
+  workspaceId: WorkspaceId,
   timeoutMs = 1_000,
 ): Promise<boolean> {
-  const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
-  const thread = getThread();
+  const getWorkspace = () =>
+    useStore.getState().workspaces.find((workspace) => workspace.id === workspaceId);
+  const workspace = getWorkspace();
 
-  if (threadHasStarted(thread)) {
+  if (workspaceHasStarted(workspace)) {
     return true;
   }
 
@@ -225,13 +232,15 @@ export async function waitForStartedServerThread(
     };
 
     const unsubscribe = useStore.subscribe((state) => {
-      if (!threadHasStarted(state.threads.find((thread) => thread.id === threadId))) {
+      if (
+        !workspaceHasStarted(state.workspaces.find((workspace) => workspace.id === workspaceId))
+      ) {
         return;
       }
       finish(true);
     });
 
-    if (threadHasStarted(getThread())) {
+    if (workspaceHasStarted(getWorkspace())) {
       finish(true);
       return;
     }
@@ -249,16 +258,16 @@ export interface LocalDispatchSnapshot {
   latestTurnRequestedAt: string | null;
   latestTurnStartedAt: string | null;
   latestTurnCompletedAt: string | null;
-  sessionOrchestrationStatus: ThreadSession["orchestrationStatus"] | null;
+  sessionOrchestrationStatus: WorkspaceSession["orchestrationStatus"] | null;
   sessionUpdatedAt: string | null;
 }
 
 export function createLocalDispatchSnapshot(
-  activeThread: Thread | undefined,
+  activeWorkspace: Workspace | undefined,
   options?: { preparingWorktree?: boolean },
 ): LocalDispatchSnapshot {
-  const latestTurn = activeThread?.latestTurn ?? null;
-  const session = activeThread?.session ?? null;
+  const latestTurn = activeWorkspace?.latestTurn ?? null;
+  const session = activeWorkspace?.session ?? null;
   return {
     startedAt: new Date().toISOString(),
     preparingWorktree: Boolean(options?.preparingWorktree),
@@ -274,11 +283,11 @@ export function createLocalDispatchSnapshot(
 export function hasServerAcknowledgedLocalDispatch(input: {
   localDispatch: LocalDispatchSnapshot | null;
   phase: SessionPhase;
-  latestTurn: Thread["latestTurn"] | null;
-  session: Thread["session"] | null;
+  latestTurn: Workspace["latestTurn"] | null;
+  session: Workspace["session"] | null;
   hasPendingApproval: boolean;
   hasPendingUserInput: boolean;
-  threadError: string | null | undefined;
+  workspaceError: string | null | undefined;
 }): boolean {
   if (!input.localDispatch) {
     return false;
@@ -287,7 +296,7 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     input.phase === "running" ||
     input.hasPendingApproval ||
     input.hasPendingUserInput ||
-    Boolean(input.threadError)
+    Boolean(input.workspaceError)
   ) {
     return true;
   }

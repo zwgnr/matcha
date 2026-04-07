@@ -7,8 +7,8 @@
  * @module CheckpointDiffQuery
  */
 import type {
-  OrchestrationGetFullThreadDiffInput,
-  OrchestrationGetFullThreadDiffResult,
+  OrchestrationGetFullWorkspaceDiffInput,
+  OrchestrationGetFullWorkspaceDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
 } from "@matcha/contracts";
@@ -31,13 +31,13 @@ export interface CheckpointDiffQueryShape {
   ) => Effect.Effect<OrchestrationGetTurnDiffResult, CheckpointServiceError>;
 
   /**
-   * Read the full patch diff across a thread range of checkpoints.
+   * Read the full patch diff across a workspace range of checkpoints.
    *
    * Delegates to turn diff with `fromTurnCount = 0`.
    */
-  readonly getFullThreadDiff: (
-    input: OrchestrationGetFullThreadDiffInput,
-  ) => Effect.Effect<OrchestrationGetFullThreadDiffResult, CheckpointServiceError>;
+  readonly getFullWorkspaceDiff: (
+    input: OrchestrationGetFullWorkspaceDiffInput,
+  ) => Effect.Effect<OrchestrationGetFullWorkspaceDiffResult, CheckpointServiceError>;
 }
 
 /**

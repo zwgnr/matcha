@@ -3,15 +3,15 @@ import { Schema } from "effect";
 
 import {
   GitCreateWorktreeInput,
-  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestWorkspaceInput,
   GitRunStackedActionResult,
   GitRunStackedActionInput,
   GitResolvePullRequestResult,
 } from "./git";
 
 const decodeCreateWorktreeInput = Schema.decodeUnknownSync(GitCreateWorktreeInput);
-const decodePreparePullRequestThreadInput = Schema.decodeUnknownSync(
-  GitPreparePullRequestThreadInput,
+const decodePreparePullRequestWorkspaceInput = Schema.decodeUnknownSync(
+  GitPreparePullRequestWorkspaceInput,
 );
 const decodeRunStackedActionInput = Schema.decodeUnknownSync(GitRunStackedActionInput);
 const decodeRunStackedActionResult = Schema.decodeUnknownSync(GitRunStackedActionResult);
@@ -30,9 +30,9 @@ describe("GitCreateWorktreeInput", () => {
   });
 });
 
-describe("GitPreparePullRequestThreadInput", () => {
+describe("GitPreparePullRequestWorkspaceInput", () => {
   it("accepts pull request references and mode", () => {
-    const parsed = decodePreparePullRequestThreadInput({
+    const parsed = decodePreparePullRequestWorkspaceInput({
       cwd: "/repo",
       reference: "#42",
       mode: "worktree",
@@ -48,16 +48,16 @@ describe("GitResolvePullRequestResult", () => {
     const parsed = decodeResolvePullRequestResult({
       pullRequest: {
         number: 42,
-        title: "PR threads",
+        title: "PR workspaces",
         url: "https://github.com/pingdotgg/codething-mvp/pull/42",
         baseBranch: "main",
-        headBranch: "feature/pr-threads",
+        headBranch: "feature/pr-workspaces",
         state: "open",
       },
     });
 
     expect(parsed.pullRequest.number).toBe(42);
-    expect(parsed.pullRequest.headBranch).toBe("feature/pr-threads");
+    expect(parsed.pullRequest.headBranch).toBe("feature/pr-workspaces");
   });
 });
 

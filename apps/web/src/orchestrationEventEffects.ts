@@ -1,20 +1,20 @@
-import type { OrchestrationEvent, ThreadId } from "@matcha/contracts";
+import type { OrchestrationEvent, WorkspaceId } from "@matcha/contracts";
 
 export interface OrchestrationBatchEffects {
-  clearPromotedDraftThreadIds: ThreadId[];
-  clearDeletedThreadIds: ThreadId[];
-  removeTerminalStateThreadIds: ThreadId[];
+  clearPromotedDraftWorkspaceIds: WorkspaceId[];
+  clearDeletedWorkspaceIds: WorkspaceId[];
+  removeTerminalStateWorkspaceIds: WorkspaceId[];
   needsProviderInvalidation: boolean;
 }
 
 export function deriveOrchestrationBatchEffects(
   events: readonly OrchestrationEvent[],
 ): OrchestrationBatchEffects {
-  const threadLifecycleEffects = new Map<
-    ThreadId,
+  const workspaceLifecycleEffects = new Map<
+    WorkspaceId,
     {
       clearPromotedDraft: boolean;
-      clearDeletedThread: boolean;
+      clearDeletedWorkspace: boolean;
       removeTerminalState: boolean;
     }
   >();
@@ -22,43 +22,43 @@ export function deriveOrchestrationBatchEffects(
 
   for (const event of events) {
     switch (event.type) {
-      case "thread.turn-diff-completed":
-      case "thread.reverted": {
+      case "workspace.turn-diff-completed":
+      case "workspace.reverted": {
         needsProviderInvalidation = true;
         break;
       }
 
-      case "thread.created": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "workspace.created": {
+        workspaceLifecycleEffects.set(event.payload.workspaceId, {
           clearPromotedDraft: true,
-          clearDeletedThread: false,
+          clearDeletedWorkspace: false,
           removeTerminalState: false,
         });
         break;
       }
 
-      case "thread.deleted": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "workspace.deleted": {
+        workspaceLifecycleEffects.set(event.payload.workspaceId, {
           clearPromotedDraft: false,
-          clearDeletedThread: true,
+          clearDeletedWorkspace: true,
           removeTerminalState: true,
         });
         break;
       }
 
-      case "thread.archived": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "workspace.archived": {
+        workspaceLifecycleEffects.set(event.payload.workspaceId, {
           clearPromotedDraft: false,
-          clearDeletedThread: false,
+          clearDeletedWorkspace: false,
           removeTerminalState: true,
         });
         break;
       }
 
-      case "thread.unarchived": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "workspace.unarchived": {
+        workspaceLifecycleEffects.set(event.payload.workspaceId, {
           clearPromotedDraft: false,
-          clearDeletedThread: false,
+          clearDeletedWorkspace: false,
           removeTerminalState: false,
         });
         break;
@@ -70,25 +70,25 @@ export function deriveOrchestrationBatchEffects(
     }
   }
 
-  const clearPromotedDraftThreadIds: ThreadId[] = [];
-  const clearDeletedThreadIds: ThreadId[] = [];
-  const removeTerminalStateThreadIds: ThreadId[] = [];
-  for (const [threadId, effect] of threadLifecycleEffects) {
+  const clearPromotedDraftWorkspaceIds: WorkspaceId[] = [];
+  const clearDeletedWorkspaceIds: WorkspaceId[] = [];
+  const removeTerminalStateWorkspaceIds: WorkspaceId[] = [];
+  for (const [workspaceId, effect] of workspaceLifecycleEffects) {
     if (effect.clearPromotedDraft) {
-      clearPromotedDraftThreadIds.push(threadId);
+      clearPromotedDraftWorkspaceIds.push(workspaceId);
     }
-    if (effect.clearDeletedThread) {
-      clearDeletedThreadIds.push(threadId);
+    if (effect.clearDeletedWorkspace) {
+      clearDeletedWorkspaceIds.push(workspaceId);
     }
     if (effect.removeTerminalState) {
-      removeTerminalStateThreadIds.push(threadId);
+      removeTerminalStateWorkspaceIds.push(workspaceId);
     }
   }
 
   return {
-    clearPromotedDraftThreadIds,
-    clearDeletedThreadIds,
-    removeTerminalStateThreadIds,
+    clearPromotedDraftWorkspaceIds,
+    clearDeletedWorkspaceIds,
+    removeTerminalStateWorkspaceIds,
     needsProviderInvalidation,
   };
 }

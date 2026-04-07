@@ -1,4 +1,4 @@
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +10,7 @@ describe("ComposerPendingTerminalContextChip", () => {
       <ComposerPendingTerminalContextChip
         context={{
           id: "ctx-expired",
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 2,

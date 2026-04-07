@@ -11,7 +11,7 @@ import {
   IsoDateTime,
   ProjectionPendingApprovalDecision,
   ProjectionPendingApprovalStatus,
-  ThreadId,
+  WorkspaceId,
   TurnId,
 } from "@matcha/contracts";
 import { Option, Schema, ServiceMap } from "effect";
@@ -21,7 +21,7 @@ import type { ProjectionRepositoryError } from "../Errors.ts";
 
 export const ProjectionPendingApproval = Schema.Struct({
   requestId: ApprovalRequestId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: Schema.NullOr(TurnId),
   status: ProjectionPendingApprovalStatus,
   decision: ProjectionPendingApprovalDecision,
@@ -31,7 +31,7 @@ export const ProjectionPendingApproval = Schema.Struct({
 export type ProjectionPendingApproval = typeof ProjectionPendingApproval.Type;
 
 export const ListProjectionPendingApprovalsInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 });
 export type ListProjectionPendingApprovalsInput = typeof ListProjectionPendingApprovalsInput.Type;
 
@@ -59,11 +59,11 @@ export interface ProjectionPendingApprovalRepositoryShape {
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
   /**
-   * List pending approvals for a thread.
+   * List pending approvals for a workspace.
    *
    * Returned in ascending creation order.
    */
-  readonly listByThreadId: (
+  readonly listByWorkspaceId: (
     input: ListProjectionPendingApprovalsInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionPendingApproval>, ProjectionRepositoryError>;
 

@@ -24,7 +24,7 @@ interface ComposerPrimaryActionsProps {
   hasSendableContent: boolean;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
-  onImplementPlanInNewThread: () => void;
+  onImplementPlanInNewWorkspace: () => void;
 }
 
 const formatPendingPrimaryActionLabel = (input: {
@@ -53,7 +53,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   hasSendableContent,
   onPreviousPendingQuestion,
   onInterrupt,
-  onImplementPlanInNewThread,
+  onImplementPlanInNewWorkspace,
 }: ComposerPrimaryActionsProps) {
   if (pendingAction) {
     return (
@@ -157,9 +157,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <MenuPopup align="end" side="top">
             <MenuItem
               disabled={isSendBusy || isConnecting}
-              onClick={() => void onImplementPlanInNewThread()}
+              onClick={() => void onImplementPlanInNewWorkspace()}
             >
-              Implement in a new thread
+              Implement in a new workspace
             </MenuItem>
           </MenuPopup>
         </Menu>

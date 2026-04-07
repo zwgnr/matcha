@@ -13,7 +13,7 @@ describe("ProviderRuntimeEvent", () => {
       provider: "claudeAgent",
       sessionId: "runtime-session-1",
       createdAt: "2026-02-28T00:00:00.000Z",
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       turnId: "turn-1",
       payload: {
         explanation: "Implement schema updates",
@@ -38,7 +38,7 @@ describe("ProviderRuntimeEvent", () => {
       eventId: "event-proposed-plan-1",
       provider: "codex",
       createdAt: "2026-02-28T00:00:00.000Z",
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       turnId: "turn-1",
       payload: {
         planMarkdown: "# Ship it",
@@ -59,7 +59,7 @@ describe("ProviderRuntimeEvent", () => {
       provider: "claudeAgent",
       sessionId: "runtime-session-2",
       createdAt: "2026-02-28T00:00:01.000Z",
-      threadId: "thread-2",
+      workspaceId: "workspace-2",
       requestId: "request-1",
       payload: {
         questions: [
@@ -97,7 +97,7 @@ describe("ProviderRuntimeEvent", () => {
       provider: "claudeAgent",
       sessionId: "runtime-session-2",
       createdAt: "2026-02-28T00:00:02.000Z",
-      threadId: "thread-2",
+      workspaceId: "workspace-2",
       requestId: "request-1",
       payload: {
         answers: {
@@ -134,19 +134,19 @@ describe("ProviderRuntimeEvent", () => {
         provider: "codex",
         sessionId: "runtime-session-3",
         createdAt: "2026-02-28T00:00:03.000Z",
-        threadId: "   ",
+        workspaceId: "   ",
         payload: { message: "boom" },
       }),
     ).toThrow();
   });
 
-  it("decodes normalized thread token usage snapshots", () => {
+  it("decodes normalized workspace token usage snapshots", () => {
     const parsed = decodeRuntimeEvent({
-      type: "thread.token-usage.updated",
+      type: "workspace.token-usage.updated",
       eventId: "event-token-usage-1",
       provider: "claudeAgent",
       createdAt: "2026-02-28T00:00:04.000Z",
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       payload: {
         usage: {
           usedTokens: 31251,
@@ -157,9 +157,9 @@ describe("ProviderRuntimeEvent", () => {
       },
     });
 
-    expect(parsed.type).toBe("thread.token-usage.updated");
-    if (parsed.type !== "thread.token-usage.updated") {
-      throw new Error("expected thread.token-usage.updated");
+    expect(parsed.type).toBe("workspace.token-usage.updated");
+    if (parsed.type !== "workspace.token-usage.updated") {
+      throw new Error("expected workspace.token-usage.updated");
     }
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);

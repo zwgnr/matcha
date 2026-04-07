@@ -3,9 +3,9 @@ import type {
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
   OrchestrationSessionStatus,
-  OrchestrationThreadActivity,
+  OrchestrationWorkspaceActivity,
   ProjectScript as ContractProjectScript,
-  ThreadId,
+  WorkspaceId,
   ProjectId,
   TurnId,
   MessageId,
@@ -19,12 +19,12 @@ export type SessionPhase = "disconnected" | "connecting" | "ready" | "running";
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 
 export const DEFAULT_INTERACTION_MODE: ProviderInteractionMode = "default";
-export const DEFAULT_THREAD_TERMINAL_HEIGHT = 280;
-export const DEFAULT_THREAD_TERMINAL_ID = "default";
+export const DEFAULT_WORKSPACE_TERMINAL_HEIGHT = 280;
+export const DEFAULT_WORKSPACE_TERMINAL_ID = "default";
 export const MAX_TERMINALS_PER_GROUP = 4;
 export type ProjectScript = ContractProjectScript;
 
-export interface ThreadTerminalGroup {
+export interface WorkspaceTerminalGroup {
   id: string;
   terminalIds: string[];
 }
@@ -56,7 +56,7 @@ export interface ProposedPlan {
   turnId: TurnId | null;
   planMarkdown: string;
   implementedAt: string | null;
-  implementationThreadId: ThreadId | null;
+  implementationWorkspaceId: WorkspaceId | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,15 +88,15 @@ export interface Project {
   scripts: ProjectScript[];
 }
 
-export interface Thread {
-  id: ThreadId;
-  codexThreadId: string | null;
+export interface Workspace {
+  id: WorkspaceId;
+  codexWorkspaceId: string | null;
   projectId: ProjectId;
   title: string;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
-  session: ThreadSession | null;
+  session: WorkspaceSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
   error: string | null;
@@ -108,15 +108,15 @@ export interface Thread {
   branch: string | null;
   worktreePath: string | null;
   turnDiffSummaries: TurnDiffSummary[];
-  activities: OrchestrationThreadActivity[];
+  activities: OrchestrationWorkspaceActivity[];
 }
 
-export interface SidebarThreadSummary {
-  id: ThreadId;
+export interface SidebarWorkspaceSummary {
+  id: WorkspaceId;
   projectId: ProjectId;
   title: string;
   interactionMode: ProviderInteractionMode;
-  session: ThreadSession | null;
+  session: WorkspaceSession | null;
   createdAt: string;
   archivedAt: string | null;
   updatedAt?: string | undefined;
@@ -129,7 +129,7 @@ export interface SidebarThreadSummary {
   hasActionableProposedPlan: boolean;
 }
 
-export interface ThreadSession {
+export interface WorkspaceSession {
   provider: ProviderKind;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;

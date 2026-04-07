@@ -5,7 +5,7 @@ import {
   ApprovalRequestId,
   ProviderKind,
   type OrchestrationEvent,
-  type OrchestrationThread,
+  type OrchestrationWorkspace,
 } from "@matcha/contracts";
 import {
   Effect,
@@ -172,11 +172,11 @@ export interface OrchestrationIntegrationHarness {
   readonly checkpointStore: CheckpointStore["Service"];
   readonly checkpointRepository: ProjectionCheckpointRepository["Service"];
   readonly pendingApprovalRepository: ProjectionPendingApprovalRepository["Service"];
-  readonly waitForThread: (
-    threadId: string,
-    predicate: (thread: OrchestrationThread) => boolean,
+  readonly waitForWorkspace: (
+    workspaceId: string,
+    predicate: (workspace: OrchestrationWorkspace) => boolean,
     timeoutMs?: number,
-  ) => Effect.Effect<OrchestrationThread, never>;
+  ) => Effect.Effect<OrchestrationWorkspace, never>;
   readonly waitForDomainEvent: (
     predicate: (event: OrchestrationEvent) => boolean,
     timeoutMs?: number,
@@ -310,7 +310,7 @@ export const makeOrchestrationIntegrationHarness = (
     } as unknown as GitCoreShape);
     const textGenerationLayer = Layer.succeed(TextGeneration, {
       generateBranchName: () => Effect.succeed({ branch: "update" }),
-      generateThreadTitle: () => Effect.succeed({ title: "New thread" }),
+      generateWorkspaceTitle: () => Effect.succeed({ title: "New workspace" }),
     } as unknown as TextGenerationShape);
     const providerCommandReactorLayer = ProviderCommandReactorLive.pipe(
       Layer.provideMerge(runtimeServicesLayer),
@@ -381,8 +381,8 @@ export const makeOrchestrationIntegrationHarness = (
     ).pipe(Effect.forkIn(scope));
     yield* Effect.sleep(10);
 
-    const waitForThread: OrchestrationIntegrationHarness["waitForThread"] = (
-      threadId,
+    const waitForWorkspace: OrchestrationIntegrationHarness["waitForWorkspace"] = (
+      workspaceId,
       predicate,
       timeoutMs,
     ) =>
@@ -391,13 +391,15 @@ export const makeOrchestrationIntegrationHarness = (
           .getSnapshot()
           .pipe(
             Effect.map(
-              (snapshot) => snapshot.threads.find((thread) => thread.id === threadId) ?? null,
+              (snapshot) =>
+                snapshot.workspaces.find((workspace) => workspace.id === workspaceId) ?? null,
             ),
           ),
-        (thread): thread is OrchestrationThread => thread !== null && predicate(thread),
-        `projected thread '${threadId}'`,
+        (workspace): workspace is OrchestrationWorkspace =>
+          workspace !== null && predicate(workspace),
+        `projected workspace '${workspaceId}'`,
         timeoutMs,
-      ) as Effect.Effect<OrchestrationThread, never>;
+      ) as Effect.Effect<OrchestrationWorkspace, never>;
 
     const waitForDomainEvent: OrchestrationIntegrationHarness["waitForDomainEvent"] = (
       predicate,
@@ -510,7 +512,7 @@ export const makeOrchestrationIntegrationHarness = (
       checkpointStore,
       checkpointRepository,
       pendingApprovalRepository,
-      waitForThread,
+      waitForWorkspace,
       waitForDomainEvent,
       waitForPendingApproval,
       waitForReceipt,

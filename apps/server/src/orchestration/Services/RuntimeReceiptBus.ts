@@ -14,13 +14,13 @@
  *
  * @module RuntimeReceiptBus
  */
-import { CheckpointRef, IsoDateTime, NonNegativeInt, ThreadId, TurnId } from "@matcha/contracts";
+import { CheckpointRef, IsoDateTime, NonNegativeInt, WorkspaceId, TurnId } from "@matcha/contracts";
 import { Schema, ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 export const CheckpointBaselineCapturedReceipt = Schema.Struct({
   type: Schema.Literal("checkpoint.baseline.captured"),
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
   createdAt: IsoDateTime,
@@ -29,7 +29,7 @@ export type CheckpointBaselineCapturedReceipt = typeof CheckpointBaselineCapture
 
 export const CheckpointDiffFinalizedReceipt = Schema.Struct({
   type: Schema.Literal("checkpoint.diff.finalized"),
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
@@ -40,7 +40,7 @@ export type CheckpointDiffFinalizedReceipt = typeof CheckpointDiffFinalizedRecei
 
 export const TurnProcessingQuiescedReceipt = Schema.Struct({
   type: Schema.Literal("turn.processing.quiesced"),
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   createdAt: IsoDateTime,

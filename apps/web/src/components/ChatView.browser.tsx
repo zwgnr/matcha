@@ -10,7 +10,7 @@ import {
   type ProjectId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
-  type ThreadId,
+  type WorkspaceId,
   type TurnId,
   WS_METHODS,
   OrchestrationSessionStatus,
@@ -34,12 +34,12 @@ import { __resetNativeApiForTests } from "../nativeApi";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
-import { useWorkspaceTabStore } from "../threadTabStore";
+import { useWorkspaceTabStore } from "../workspaceTabStore";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
 import { DEFAULT_CLIENT_SETTINGS } from "@matcha/contracts/settings";
 
-const THREAD_ID = "thread-browser-test" as ThreadId;
+const WORKSPACE_ID = "workspace-browser-test" as WorkspaceId;
 const UUID_ROUTE_RE = /^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PROJECT_ID = "project-1" as ProjectId;
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
@@ -195,7 +195,7 @@ function createTerminalContext(input: {
 }): TerminalContextDraft {
   return {
     id: input.id,
-    threadId: THREAD_ID,
+    workspaceId: WORKSPACE_ID,
     terminalId: `terminal-${input.id}`,
     terminalLabel: input.terminalLabel,
     lineStart: input.lineStart,
@@ -211,7 +211,7 @@ function createSnapshotForTargetUser(options: {
   targetAttachmentCount?: number;
   sessionStatus?: OrchestrationSessionStatus;
 }): OrchestrationReadModel {
-  const messages: Array<OrchestrationReadModel["threads"][number]["messages"][number]> = [];
+  const messages: Array<OrchestrationReadModel["workspaces"][number]["messages"][number]> = [];
 
   for (let index = 0; index < 22; index += 1) {
     const isTarget = index === 3;
@@ -262,11 +262,11 @@ function createSnapshotForTargetUser(options: {
         deletedAt: null,
       },
     ],
-    threads: [
+    workspaces: [
       {
-        id: THREAD_ID,
+        id: WORKSPACE_ID,
         projectId: PROJECT_ID,
-        title: "Browser test thread",
+        title: "Browser test workspace",
         modelSelection: {
           provider: "codex",
           model: "gpt-5",
@@ -285,7 +285,7 @@ function createSnapshotForTargetUser(options: {
         proposedPlans: [],
         checkpoints: [],
         session: {
-          threadId: THREAD_ID,
+          workspaceId: WORKSPACE_ID,
           status: options.sessionStatus ?? "ready",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -307,24 +307,24 @@ function buildFixture(snapshot: OrchestrationReadModel): TestFixture {
       cwd: "/repo/project",
       projectName: "Project",
       bootstrapProjectId: PROJECT_ID,
-      bootstrapThreadId: THREAD_ID,
+      bootstrapWorkspaceId: WORKSPACE_ID,
     },
   };
 }
 
-function addThreadToSnapshot(
+function addWorkspaceToSnapshot(
   snapshot: OrchestrationReadModel,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 ): OrchestrationReadModel {
   return {
     ...snapshot,
     snapshotSequence: snapshot.snapshotSequence + 1,
-    threads: [
-      ...snapshot.threads,
+    workspaces: [
+      ...snapshot.workspaces,
       {
-        id: threadId,
+        id: workspaceId,
         projectId: PROJECT_ID,
-        title: "New thread",
+        title: "New workspace",
         modelSelection: {
           provider: "codex",
           model: "gpt-5",
@@ -343,7 +343,7 @@ function addThreadToSnapshot(
         proposedPlans: [],
         checkpoints: [],
         session: {
-          threadId,
+          workspaceId,
           status: "ready",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -356,22 +356,25 @@ function addThreadToSnapshot(
   };
 }
 
-function createThreadCreatedEvent(threadId: ThreadId, sequence: number): OrchestrationEvent {
+function createWorkspaceCreatedEvent(
+  workspaceId: WorkspaceId,
+  sequence: number,
+): OrchestrationEvent {
   return {
     sequence,
-    eventId: EventId.makeUnsafe(`event-thread-created-${sequence}`),
-    aggregateKind: "thread",
-    aggregateId: threadId,
+    eventId: EventId.makeUnsafe(`event-workspace-created-${sequence}`),
+    aggregateKind: "workspace",
+    aggregateId: workspaceId,
     occurredAt: NOW_ISO,
     commandId: null,
     causationEventId: null,
     correlationId: null,
     metadata: {},
-    type: "thread.created",
+    type: "workspace.created",
     payload: {
-      threadId,
+      workspaceId,
       projectId: PROJECT_ID,
-      title: "New thread",
+      title: "New workspace",
       modelSelection: {
         provider: "codex",
         model: "gpt-5",
@@ -403,15 +406,17 @@ async function waitForWsClient(): Promise<void> {
   );
 }
 
-async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
+async function promoteDraftWorkspaceViaDomainEvent(workspaceId: WorkspaceId): Promise<void> {
   await waitForWsClient();
-  fixture.snapshot = addThreadToSnapshot(fixture.snapshot, threadId);
+  fixture.snapshot = addWorkspaceToSnapshot(fixture.snapshot, workspaceId);
   sendOrchestrationDomainEvent(
-    createThreadCreatedEvent(threadId, fixture.snapshot.snapshotSequence),
+    createWorkspaceCreatedEvent(workspaceId, fixture.snapshot.snapshotSequence),
   );
   await vi.waitFor(
     () => {
-      expect(useComposerDraftStore.getState().draftThreadsByThreadId[threadId]).toBeUndefined();
+      expect(
+        useComposerDraftStore.getState().draftWorkspacesByWorkspaceId[workspaceId],
+      ).toBeUndefined();
     },
     { timeout: 8_000, interval: 16 },
   );
@@ -420,11 +425,11 @@ async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<voi
 function createDraftOnlySnapshot(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-draft-target" as MessageId,
-    targetText: "draft thread",
+    targetText: "draft workspace",
   });
   return {
     ...snapshot,
-    threads: [],
+    workspaces: [],
   };
 }
 
@@ -440,10 +445,10 @@ function withProjectScripts(
   };
 }
 
-function setDraftThreadWithoutWorktree(): void {
+function setDraftWorkspaceWithoutWorktree(): void {
   useComposerDraftStore.setState({
-    draftThreadsByThreadId: {
-      [THREAD_ID]: {
+    draftWorkspacesByWorkspaceId: {
+      [WORKSPACE_ID]: {
         projectId: PROJECT_ID,
         createdAt: NOW_ISO,
         runtimeMode: "full-access",
@@ -453,8 +458,8 @@ function setDraftThreadWithoutWorktree(): void {
         envMode: "local",
       },
     },
-    projectDraftThreadIdByProjectId: {
-      [PROJECT_ID]: THREAD_ID,
+    projectDraftWorkspaceIdByProjectId: {
+      [PROJECT_ID]: WORKSPACE_ID,
     },
   });
 }
@@ -462,13 +467,13 @@ function setDraftThreadWithoutWorktree(): void {
 function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-plan-target" as MessageId,
-    targetText: "plan thread",
+    targetText: "plan workspace",
   });
   const planMarkdown = [
     "# Ship plan mode follow-up",
     "",
-    "- Step 1: capture the thread-open trace",
-    "- Step 2: identify the main-thread bottleneck",
+    "- Step 1: capture the workspace-open trace",
+    "- Step 2: identify the main-workspace bottleneck",
     "- Step 3: keep collapsed cards cheap",
     "- Step 4: render the full markdown only on demand",
     "- Step 5: preserve export and save actions",
@@ -495,23 +500,23 @@ function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
 
   return {
     ...snapshot,
-    threads: snapshot.threads.map((thread) =>
-      thread.id === THREAD_ID
-        ? Object.assign({}, thread, {
+    workspaces: snapshot.workspaces.map((workspace) =>
+      workspace.id === WORKSPACE_ID
+        ? Object.assign({}, workspace, {
             proposedPlans: [
               {
                 id: "plan-browser-test",
                 turnId: null,
                 planMarkdown,
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationWorkspaceId: null,
                 createdAt: isoAt(1_000),
                 updatedAt: isoAt(1_001),
               },
             ],
             updatedAt: isoAt(1_001),
           })
-        : thread,
+        : workspace,
     ),
   };
 }
@@ -519,14 +524,14 @@ function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
 function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-pending-input-target" as MessageId,
-    targetText: "question thread",
+    targetText: "question workspace",
   });
 
   return {
     ...snapshot,
-    threads: snapshot.threads.map((thread) =>
-      thread.id === THREAD_ID
-        ? Object.assign({}, thread, {
+    workspaces: snapshot.workspaces.map((workspace) =>
+      workspace.id === WORKSPACE_ID
+        ? Object.assign({}, workspace, {
             interactionMode: "plan",
             activities: [
               {
@@ -576,7 +581,7 @@ function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
             ],
             updatedAt: isoAt(1_000),
           })
-        : thread,
+        : workspace,
     ),
   };
 }
@@ -584,14 +589,14 @@ function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
 function createSnapshotWithPlanFollowUpPrompt(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-plan-follow-up-target" as MessageId,
-    targetText: "plan follow-up thread",
+    targetText: "plan follow-up workspace",
   });
 
   return {
     ...snapshot,
-    threads: snapshot.threads.map((thread) =>
-      thread.id === THREAD_ID
-        ? Object.assign({}, thread, {
+    workspaces: snapshot.workspaces.map((workspace) =>
+      workspace.id === WORKSPACE_ID
+        ? Object.assign({}, workspace, {
             interactionMode: "plan",
             latestTurn: {
               turnId: "turn-plan-follow-up" as TurnId,
@@ -607,19 +612,19 @@ function createSnapshotWithPlanFollowUpPrompt(): OrchestrationReadModel {
                 turnId: "turn-plan-follow-up" as TurnId,
                 planMarkdown: "# Follow-up plan\n\n- Keep the composer footer stable on resize.",
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationWorkspaceId: null,
                 createdAt: isoAt(1_002),
                 updatedAt: isoAt(1_003),
               },
             ],
             session: {
-              ...thread.session,
+              ...workspace.session,
               status: "ready",
               updatedAt: isoAt(1_010),
             },
             updatedAt: isoAt(1_010),
           })
-        : thread,
+        : workspace,
     ),
   };
 }
@@ -681,7 +686,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
   }
   if (tag === WS_METHODS.terminalOpen) {
     return {
-      threadId: typeof body.threadId === "string" ? body.threadId : THREAD_ID,
+      workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : WORKSPACE_ID,
       terminalId: typeof body.terminalId === "string" ? body.terminalId : "default",
       cwd: typeof body.cwd === "string" ? body.cwd : "/repo/project",
       worktreePath:
@@ -922,13 +927,13 @@ async function triggerChatNewShortcutUntilPath(
   throw new Error(`${errorMessage} Last path: ${pathname}`);
 }
 
-async function waitForNewThreadShortcutLabel(): Promise<void> {
-  const newThreadButton = page.getByTestId("new-thread-button");
-  await expect.element(newThreadButton).toBeInTheDocument();
-  await newThreadButton.hover();
+async function waitForNewWorkspaceShortcutLabel(): Promise<void> {
+  const newWorkspaceButton = page.getByTestId("new-workspace-button");
+  await expect.element(newWorkspaceButton).toBeInTheDocument();
+  await newWorkspaceButton.hover();
   const shortcutLabel = isMacPlatform(navigator.platform)
-    ? "New thread (⇧⌘O)"
-    : "New thread (Ctrl+Shift+O)";
+    ? "New workspace (⇧⌘O)"
+    : "New workspace (Ctrl+Shift+O)";
   await expect.element(page.getByText(shortcutLabel)).toBeInTheDocument();
 }
 
@@ -1041,7 +1046,7 @@ async function mountChatView(options: {
 
   const router = getRouter(
     createMemoryHistory({
-      initialEntries: [`/${THREAD_ID}`],
+      initialEntries: [`/${WORKSPACE_ID}`],
     }),
   );
 
@@ -1146,27 +1151,27 @@ describe("ChatView timeline estimator parity (full app)", () => {
     wsRequests.length = 0;
     customWsRpcResolver = null;
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByWorkspaceId: {},
+      draftWorkspacesByWorkspaceId: {},
+      projectDraftWorkspaceIdByProjectId: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
     });
     useStore.setState({
       projects: [],
-      threads: [],
+      workspaces: [],
       bootstrapComplete: false,
     });
     useTerminalStateStore.persist.clearStorage();
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {},
-      terminalLaunchContextByThreadId: {},
+      terminalStateByWorkspaceId: {},
+      terminalLaunchContextByWorkspaceId: {},
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
     });
     useWorkspaceTabStore.persist.clearStorage();
     useWorkspaceTabStore.setState({
-      tabStateByWorkspaceThreadId: {},
+      tabStateByWorkspaceWorkspaceId: {},
     });
   });
 
@@ -1332,21 +1337,21 @@ describe("ChatView timeline estimator parity (full app)", () => {
     },
   );
 
-  it("shows an explicit empty state for projects without threads in the sidebar", async () => {
+  it("shows an explicit empty state for projects without workspaces in the sidebar", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createDraftOnlySnapshot(),
     });
 
     try {
-      await expect.element(page.getByText("No threads yet")).toBeInTheDocument();
+      await expect.element(page.getByText("No workspaces yet")).toBeInTheDocument();
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("opens the project cwd for draft threads without a worktree path", async () => {
-    setDraftThreadWithoutWorktree();
+  it("opens the project cwd for draft workspaces without a worktree path", async () => {
+    setDraftWorkspaceWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1396,17 +1401,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
       targetMessageId: "msg-user-launch-context-target" as MessageId,
       targetText: "launch context worktree override",
     });
-    const targetThread = snapshot.threads.find((thread) => thread.id === THREAD_ID);
-    if (targetThread) {
-      Object.assign(targetThread, {
+    const targetWorkspace = snapshot.workspaces.find((workspace) => workspace.id === WORKSPACE_ID);
+    if (targetWorkspace) {
+      Object.assign(targetWorkspace, {
         branch: "feature/branch",
         worktreePath: "/repo/worktrees/feature-branch",
       });
     }
 
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {
-        [THREAD_ID]: {
+      terminalStateByWorkspaceId: {
+        [WORKSPACE_ID]: {
           terminalOpen: true,
           terminalHeight: 280,
           terminalIds: ["default"],
@@ -1416,8 +1421,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           activeTerminalGroupId: "group-default",
         },
       },
-      terminalLaunchContextByThreadId: {
-        [THREAD_ID]: {
+      terminalLaunchContextByWorkspaceId: {
+        [WORKSPACE_ID]: {
           cwd: "/repo/project",
           worktreePath: null,
         },
@@ -1460,7 +1465,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("opens the project cwd with VS Code Insiders when it is the only available editor", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftWorkspaceWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1506,7 +1511,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("opens the project cwd with Trae when it is the only available editor", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftWorkspaceWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1552,7 +1557,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("filters the open picker menu and opens VSCodium from the menu", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftWorkspaceWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1616,7 +1621,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("falls back to the first installed editor when the stored favorite is unavailable", async () => {
     localStorage.setItem("matcha:last-editor", JSON.stringify("vscodium"));
-    setDraftThreadWithoutWorktree();
+    setDraftWorkspaceWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1661,10 +1666,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("runs project scripts from local draft threads at the project cwd", async () => {
+  it("runs project scripts from local draft workspaces at the project cwd", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1674,8 +1679,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
 
@@ -1709,7 +1714,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(openRequest).toMatchObject({
             _tag: WS_METHODS.terminalOpen,
-            threadId: THREAD_ID,
+            workspaceId: WORKSPACE_ID,
             cwd: "/repo/project",
             env: {
               MATCHA_PROJECT_ROOT: "/repo/project",
@@ -1726,7 +1731,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(writeRequest).toMatchObject({
             _tag: WS_METHODS.terminalWrite,
-            threadId: THREAD_ID,
+            workspaceId: WORKSPACE_ID,
             data: "bun run lint\r",
           });
         },
@@ -1737,10 +1742,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("runs project scripts from worktree draft threads at the worktree cwd", async () => {
+  it("runs project scripts from worktree draft workspaces at the worktree cwd", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1750,8 +1755,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
 
@@ -1785,7 +1790,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(openRequest).toMatchObject({
             _tag: WS_METHODS.terminalOpen,
-            threadId: THREAD_ID,
+            workspaceId: WORKSPACE_ID,
             cwd: "/repo/worktrees/feature-draft",
             env: {
               MATCHA_PROJECT_ROOT: "/repo/project",
@@ -1800,10 +1805,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("lets the server own setup after preparing a pull request worktree thread", async () => {
+  it("lets the server own setup after preparing a pull request worktree workspace", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1813,8 +1818,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
 
@@ -1834,7 +1839,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           return {
             pullRequest: {
               number: 1359,
-              title: "Add thread archiving and settings navigation",
+              title: "Add workspace archiving and settings navigation",
               url: "https://github.com/pingdotgg/matcha/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
@@ -1842,11 +1847,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
             },
           };
         }
-        if (body._tag === WS_METHODS.gitPreparePullRequestThread) {
+        if (body._tag === WS_METHODS.gitPreparePullRequestWorkspace) {
           return {
             pullRequest: {
               number: 1359,
-              title: "Add thread archiving and settings navigation",
+              title: "Add workspace archiving and settings navigation",
               url: "https://github.com/pingdotgg/matcha/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
@@ -1898,14 +1903,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           const prepareRequest = wsRequests.find(
-            (request) => request._tag === WS_METHODS.gitPreparePullRequestThread,
+            (request) => request._tag === WS_METHODS.gitPreparePullRequestWorkspace,
           );
           expect(prepareRequest).toMatchObject({
-            _tag: WS_METHODS.gitPreparePullRequestThread,
+            _tag: WS_METHODS.gitPreparePullRequestWorkspace,
             cwd: "/repo/project",
             reference: "1359",
             mode: "worktree",
-            threadId: THREAD_ID,
+            workspaceId: WORKSPACE_ID,
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -1924,11 +1929,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("sends bootstrap turn-starts and waits for server setup on first-send worktree drafts", async () => {
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {},
+      terminalStateByWorkspaceId: {},
     });
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1938,8 +1943,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
 
@@ -1965,7 +1970,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      useComposerDraftStore.getState().setPrompt(WORKSPACE_ID, "Ship it");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -1981,7 +1986,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
                 _tag: string;
                 type?: string;
                 bootstrap?: {
-                  createThread?: { projectId?: string };
+                  createWorkspace?: { projectId?: string };
                   prepareWorktree?: { projectCwd?: string; baseBranch?: string; branch?: string };
                   runSetupScript?: boolean;
                 };
@@ -1989,9 +1994,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
             | undefined;
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.turn.start",
+            type: "workspace.turn.start",
             bootstrap: {
-              createThread: {
+              createWorkspace: {
                 projectId: PROJECT_ID,
               },
               prepareWorktree: {
@@ -2013,7 +2018,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         wsRequests.some(
           (request) =>
             request._tag === WS_METHODS.terminalWrite &&
-            request.threadId === THREAD_ID &&
+            request.workspaceId === WORKSPACE_ID &&
             request.data === "bun install\r",
         ),
       ).toBe(false);
@@ -2024,11 +2029,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("shows the send state once bootstrap dispatch is in flight", async () => {
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {},
+      terminalStateByWorkspaceId: {},
     });
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -2038,8 +2043,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
 
@@ -2068,7 +2073,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      useComposerDraftStore.getState().setPrompt(WORKSPACE_ID, "Ship it");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -2160,7 +2165,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const removedLabel = "Terminal 1 lines 1-2";
     const addedLabel = "Terminal 2 lines 9-10";
     useComposerDraftStore.getState().addTerminalContext(
-      THREAD_ID,
+      WORKSPACE_ID,
       createTerminalContext({
         id: "ctx-removed",
         terminalLabel: "Terminal 1",
@@ -2187,21 +2192,23 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       const store = useComposerDraftStore.getState();
-      const currentPrompt = store.draftsByThreadId[THREAD_ID]?.prompt ?? "";
+      const currentPrompt = store.draftsByWorkspaceId[WORKSPACE_ID]?.prompt ?? "";
       const nextPrompt = removeInlineTerminalContextPlaceholder(currentPrompt, 0);
-      store.setPrompt(THREAD_ID, nextPrompt.prompt);
-      store.removeTerminalContext(THREAD_ID, "ctx-removed");
+      store.setPrompt(WORKSPACE_ID, nextPrompt.prompt);
+      store.removeTerminalContext(WORKSPACE_ID, "ctx-removed");
 
       await vi.waitFor(
         () => {
-          expect(useComposerDraftStore.getState().draftsByThreadId[THREAD_ID]).toBeUndefined();
+          expect(
+            useComposerDraftStore.getState().draftsByWorkspaceId[WORKSPACE_ID],
+          ).toBeUndefined();
           expect(document.body.textContent).not.toContain(removedLabel);
         },
         { timeout: 8_000, interval: 16 },
       );
 
       useComposerDraftStore.getState().addTerminalContext(
-        THREAD_ID,
+        WORKSPACE_ID,
         createTerminalContext({
           id: "ctx-added",
           terminalLabel: "Terminal 2",
@@ -2213,7 +2220,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          const draft = useComposerDraftStore.getState().draftsByThreadId[THREAD_ID];
+          const draft = useComposerDraftStore.getState().draftsByWorkspaceId[WORKSPACE_ID];
           expect(draft?.terminalContexts.map((context) => context.id)).toEqual(["ctx-added"]);
           expect(document.body.textContent).toContain(addedLabel);
           expect(document.body.textContent).not.toContain(removedLabel);
@@ -2228,7 +2235,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("disables send when the composer only contains an expired terminal pill", async () => {
     const expiredLabel = "Terminal 1 line 4";
     useComposerDraftStore.getState().addTerminalContext(
-      THREAD_ID,
+      WORKSPACE_ID,
       createTerminalContext({
         id: "ctx-expired-only",
         terminalLabel: "Terminal 1",
@@ -2264,7 +2271,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("warns when sending text while omitting expired terminal pills", async () => {
     const expiredLabel = "Terminal 1 line 4";
     useComposerDraftStore.getState().addTerminalContext(
-      THREAD_ID,
+      WORKSPACE_ID,
       createTerminalContext({
         id: "ctx-expired-send-warning",
         terminalLabel: "Terminal 1",
@@ -2275,7 +2282,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     );
     useComposerDraftStore
       .getState()
-      .setPrompt(THREAD_ID, `yoo${INLINE_TERMINAL_CONTEXT_PLACEHOLDER}waddup`);
+      .setPrompt(WORKSPACE_ID, `yoo${INLINE_TERMINAL_CONTEXT_PLACEHOLDER}waddup`);
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2334,7 +2341,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("hides the archive action when the pointer leaves a thread row", async () => {
+  it("hides the archive action when the pointer leaves a workspace row", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -2344,12 +2351,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const threadRow = page.getByTestId(`thread-row-${THREAD_ID}`);
+      const workspaceRow = page.getByTestId(`workspace-row-${WORKSPACE_ID}`);
 
-      await expect.element(threadRow).toBeInTheDocument();
+      await expect.element(workspaceRow).toBeInTheDocument();
       const archiveButton = await waitForElement(
         () =>
-          document.querySelector<HTMLButtonElement>(`[data-testid="thread-archive-${THREAD_ID}"]`),
+          document.querySelector<HTMLButtonElement>(
+            `[data-testid="workspace-archive-${WORKSPACE_ID}"]`,
+          ),
         "Unable to find archive button.",
       );
       const archiveAction = archiveButton.parentElement;
@@ -2359,7 +2368,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       ).not.toBeNull();
       expect(getComputedStyle(archiveAction!).opacity).toBe("0");
 
-      await threadRow.hover();
+      await workspaceRow.hover();
       await vi.waitFor(
         () => {
           expect(getComputedStyle(archiveAction!).opacity).toBe("1");
@@ -2384,7 +2393,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       "matcha:client-settings:v1",
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
-        confirmThreadArchive: true,
+        confirmWorkspaceArchive: true,
       }),
     );
 
@@ -2397,16 +2406,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const threadRow = page.getByTestId(`thread-row-${THREAD_ID}`);
+      const workspaceRow = page.getByTestId(`workspace-row-${WORKSPACE_ID}`);
 
-      await expect.element(threadRow).toBeInTheDocument();
-      await threadRow.hover();
+      await expect.element(workspaceRow).toBeInTheDocument();
+      await workspaceRow.hover();
 
-      const archiveButton = page.getByTestId(`thread-archive-${THREAD_ID}`);
+      const archiveButton = page.getByTestId(`workspace-archive-${WORKSPACE_ID}`);
       await expect.element(archiveButton).toBeInTheDocument();
       await archiveButton.click();
 
-      const confirmButton = page.getByTestId(`thread-archive-confirm-${THREAD_ID}`);
+      const confirmButton = page.getByTestId(`workspace-archive-confirm-${WORKSPACE_ID}`);
       await expect.element(confirmButton).toBeInTheDocument();
       await expect.element(confirmButton).toBeVisible();
     } finally {
@@ -2415,46 +2424,46 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("keeps the new thread selected after clicking the new-thread button", async () => {
+  it("keeps the new workspace selected after clicking the new-workspace button", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-new-thread-test" as MessageId,
-        targetText: "new thread selection test",
+        targetMessageId: "msg-user-new-workspace-test" as MessageId,
+        targetText: "new workspace selection test",
       }),
     });
 
     try {
       // Wait for the sidebar to render with the project.
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      // The route should change to a new draft thread ID.
-      const newThreadPath = await waitForURL(
+      // The route should change to a new draft workspace ID.
+      const newWorkspacePath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft workspace UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newWorkspaceId = newWorkspacePath.slice(1) as WorkspaceId;
 
-      // The composer editor should be present for the new draft thread.
+      // The composer editor should be present for the new draft workspace.
       await waitForComposerEditor();
 
       // Simulate the steady-state promotion path: the server emits
-      // `thread.created`, the client materializes the thread incrementally,
+      // `workspace.created`, the client materializes the workspace incrementally,
       // and the draft is cleared by live batch effects.
-      await promoteDraftThreadViaDomainEvent(newThreadId);
+      await promoteDraftWorkspaceViaDomainEvent(newWorkspaceId);
 
-      // The route should still be on the new thread — not redirected away.
+      // The route should still be on the new workspace — not redirected away.
       await waitForURL(
         mounted.router,
-        (path) => path === newThreadPath,
-        "New thread should remain selected after server thread promotion clears the draft.",
+        (path) => path === newWorkspacePath,
+        "New workspace should remain selected after server workspace promotion clears the draft.",
       );
 
-      // The empty thread view and composer should still be visible.
+      // The empty workspace view and composer should still be visible.
       await expect
         .element(page.getByText("Send a message to start the conversation."))
         .toBeInTheDocument();
@@ -2464,10 +2473,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("keeps a new workspace on the same thread when the first Codex tab sends", async () => {
+  it("keeps a new workspace on the same workspace when the first Codex tab sends", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -2477,8 +2486,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
 
@@ -2519,11 +2528,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await waitForURL(
         mounted.router,
-        (path) => path === `/${THREAD_ID}`,
-        "The first provider tab should stay on the workspace thread id.",
+        (path) => path === `/${WORKSPACE_ID}`,
+        "The first provider tab should stay on the workspace id.",
       );
 
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      useComposerDraftStore.getState().setPrompt(WORKSPACE_ID, "Ship it");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -2538,13 +2547,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
             | {
                 _tag: string;
                 type?: string;
-                threadId?: string;
+                workspaceId?: string;
               }
             | undefined;
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.turn.start",
-            threadId: THREAD_ID,
+            type: "workspace.turn.start",
+            workspaceId: WORKSPACE_ID,
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -2554,10 +2563,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("reuses the workspace thread for the first provider tab even with a terminal tab already open", async () => {
+  it("reuses the workspace for the first provider tab even with a terminal tab already open", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftWorkspacesByWorkspaceId: {
+        [WORKSPACE_ID]: {
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -2567,13 +2576,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftWorkspaceIdByProjectId: {
+        [PROJECT_ID]: WORKSPACE_ID,
       },
     });
     useWorkspaceTabStore.setState({
-      tabStateByWorkspaceThreadId: {
-        [THREAD_ID]: {
+      tabStateByWorkspaceWorkspaceId: {
+        [WORKSPACE_ID]: {
           tabs: [{ id: "terminal-tab-1", kind: "terminal", label: "Terminal" }],
           activeTabId: "terminal-tab-1",
         },
@@ -2614,11 +2623,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await waitForURL(
         mounted.router,
-        (path) => path === `/${THREAD_ID}`,
-        "The first provider tab should still use the workspace thread id.",
+        (path) => path === `/${WORKSPACE_ID}`,
+        "The first provider tab should still use the workspace id.",
       );
 
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      useComposerDraftStore.getState().setPrompt(WORKSPACE_ID, "Ship it");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -2633,13 +2642,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
             | {
                 _tag: string;
                 type?: string;
-                threadId?: string;
+                workspaceId?: string;
               }
             | undefined;
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.turn.start",
-            threadId: THREAD_ID,
+            type: "workspace.turn.start",
+            workspaceId: WORKSPACE_ID,
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -2685,14 +2694,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
         "Expected the original workspace to show provider tabs before creating a new workspace.",
       );
 
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
-      await newThreadButton.click();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
+      await newWorkspaceButton.click();
 
       await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should change to a fresh workspace thread id.",
+        "Route should change to a fresh workspace id.",
       );
       await expect.element(page.getByText("New workspace")).toBeInTheDocument();
 
@@ -2744,11 +2753,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await waitForURL(
         mounted.router,
-        (path) => path === `/${THREAD_ID}`,
+        (path) => path === `/${WORKSPACE_ID}`,
         "Opening a provider tab should keep the current workspace route.",
       );
 
-      const tabState = useWorkspaceTabStore.getState().tabStateByWorkspaceThreadId[THREAD_ID];
+      const tabState = useWorkspaceTabStore.getState().tabStateByWorkspaceWorkspaceId[WORKSPACE_ID];
       expect(tabState).toBeDefined();
       expect(tabState?.tabs.filter((tab) => tab.kind === "provider")).toHaveLength(2);
       const activeProviderTab = tabState?.tabs.find((tab) => tab.id === tabState.activeTabId);
@@ -2756,11 +2765,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
         kind: "provider",
         provider: "claudeAgent",
       });
-      expect(activeProviderTab?.threadId).toBeDefined();
-      expect(activeProviderTab?.threadId).not.toBe(THREAD_ID);
+      expect(activeProviderTab?.workspaceId).toBeDefined();
+      expect(activeProviderTab?.workspaceId).not.toBe(WORKSPACE_ID);
 
-      const claudeThreadId = activeProviderTab?.threadId as ThreadId;
-      useComposerDraftStore.getState().setPrompt(claudeThreadId, "Use claude here");
+      const claudeWorkspaceId = activeProviderTab?.workspaceId as WorkspaceId;
+      useComposerDraftStore.getState().setPrompt(claudeWorkspaceId, "Use claude here");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -2774,18 +2783,18 @@ describe("ChatView timeline estimator parity (full app)", () => {
             .find(
               (request) =>
                 request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
-                request.type === "thread.turn.start",
+                request.type === "workspace.turn.start",
             ) as
             | {
                 _tag: string;
                 type?: string;
-                threadId?: string;
+                workspaceId?: string;
               }
             | undefined;
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.turn.start",
-            threadId: claudeThreadId,
+            type: "workspace.turn.start",
+            workspaceId: claudeWorkspaceId,
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -2824,7 +2833,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("snapshots sticky codex settings into a new draft thread", async () => {
+  it("snapshots sticky codex settings into a new draft workspace", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
         codex: {
@@ -2848,19 +2857,19 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newWorkspacePath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft workspace UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newWorkspaceId = newWorkspacePath.slice(1) as WorkspaceId;
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByWorkspaceId[newWorkspaceId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -2901,19 +2910,19 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newWorkspacePath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new sticky claude draft thread UUID.",
+        "Route should have changed to a new sticky claude draft workspace UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newWorkspaceId = newWorkspacePath.slice(1) as WorkspaceId;
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByWorkspaceId[newWorkspaceId]).toMatchObject({
         modelSelectionByProvider: {
           claudeAgent: {
             provider: "claudeAgent",
@@ -2941,19 +2950,19 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newWorkspacePath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft workspace UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newWorkspaceId = newWorkspacePath.slice(1) as WorkspaceId;
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toBeUndefined();
+      expect(useComposerDraftStore.getState().draftsByWorkspaceId[newWorkspaceId]).toBeUndefined();
     } finally {
       await mounted.cleanup();
     }
@@ -2983,19 +2992,19 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      const threadPath = await waitForURL(
+      const workspacePath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a sticky draft thread UUID.",
+        "Route should have changed to a sticky draft workspace UUID.",
       );
-      const threadId = threadPath.slice(1) as ThreadId;
+      const workspaceId = workspacePath.slice(1) as WorkspaceId;
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByWorkspaceId[workspaceId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -3008,7 +3017,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         activeProvider: "codex",
       });
 
-      useComposerDraftStore.getState().setModelSelection(threadId, {
+      useComposerDraftStore.getState().setModelSelection(workspaceId, {
         provider: "codex",
         model: "gpt-5.4",
         options: {
@@ -3017,15 +3026,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
         },
       });
 
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      const nextThreadPath = await waitForURL(
+      const nextWorkspacePath = await waitForURL(
         mounted.router,
-        (path) => UUID_ROUTE_RE.test(path) && path !== threadPath,
-        "New-thread should create a fresh workspace thread.",
+        (path) => UUID_ROUTE_RE.test(path) && path !== workspacePath,
+        "New-workspace should create a fresh workspace.",
       );
-      const nextThreadId = nextThreadPath.slice(1) as ThreadId;
-      expect(useComposerDraftStore.getState().draftsByThreadId[nextThreadId]).toMatchObject({
+      const nextWorkspaceId = nextWorkspacePath.slice(1) as WorkspaceId;
+      expect(useComposerDraftStore.getState().draftsByWorkspaceId[nextWorkspaceId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -3042,7 +3051,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a new thread from the global chat.new shortcut", async () => {
+  it("creates a new workspace from the global chat.new shortcut", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -3074,7 +3083,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      await waitForNewThreadShortcutLabel();
+      await waitForNewWorkspaceShortcutLabel();
       await waitForServerConfigToApply();
       const composerEditor = await waitForComposerEditor();
       composerEditor.focus();
@@ -3082,13 +3091,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await triggerChatNewShortcutUntilPath(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID from the shortcut.",
+        "Route should have changed to a new draft workspace UUID from the shortcut.",
       );
     } finally {
       await mounted.cleanup();
     }
   });
-  it("creates a fresh draft after the previous draft thread is promoted", async () => {
+  it("creates a fresh draft after the previous draft workspace is promoted", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -3120,27 +3129,27 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
-      await waitForNewThreadShortcutLabel();
+      const newWorkspaceButton = page.getByTestId("new-workspace-button");
+      await expect.element(newWorkspaceButton).toBeInTheDocument();
+      await waitForNewWorkspaceShortcutLabel();
       await waitForServerConfigToApply();
-      await newThreadButton.click();
+      await newWorkspaceButton.click();
 
-      const promotedThreadPath = await waitForURL(
+      const promotedWorkspacePath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a promoted draft thread UUID.",
+        "Route should have changed to a promoted draft workspace UUID.",
       );
-      const promotedThreadId = promotedThreadPath.slice(1) as ThreadId;
+      const promotedWorkspaceId = promotedWorkspacePath.slice(1) as WorkspaceId;
 
-      await promoteDraftThreadViaDomainEvent(promotedThreadId);
+      await promoteDraftWorkspaceViaDomainEvent(promotedWorkspaceId);
 
-      const freshThreadPath = await triggerChatNewShortcutUntilPath(
+      const freshWorkspacePath = await triggerChatNewShortcutUntilPath(
         mounted.router,
-        (path) => UUID_ROUTE_RE.test(path) && path !== promotedThreadPath,
-        "Shortcut should create a fresh draft instead of reusing the promoted thread.",
+        (path) => UUID_ROUTE_RE.test(path) && path !== promotedWorkspacePath,
+        "Shortcut should create a fresh draft instead of reusing the promoted workspace.",
       );
-      expect(freshThreadPath).not.toBe(promotedThreadPath);
+      expect(freshWorkspacePath).not.toBe(promotedWorkspacePath);
     } finally {
       await mounted.cleanup();
     }
@@ -3185,13 +3194,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("uses the active worktree path when saving a proposed plan to the workspace", async () => {
     const snapshot = createSnapshotWithLongProposedPlan();
-    const threads = snapshot.threads.slice();
-    const targetThreadIndex = threads.findIndex((thread) => thread.id === THREAD_ID);
-    const targetThread = targetThreadIndex >= 0 ? threads[targetThreadIndex] : undefined;
-    if (targetThread) {
-      threads[targetThreadIndex] = {
-        ...targetThread,
-        worktreePath: "/repo/worktrees/plan-thread",
+    const workspaces = snapshot.workspaces.slice();
+    const targetWorkspaceIndex = workspaces.findIndex((workspace) => workspace.id === WORKSPACE_ID);
+    const targetWorkspace =
+      targetWorkspaceIndex >= 0 ? workspaces[targetWorkspaceIndex] : undefined;
+    if (targetWorkspace) {
+      workspaces[targetWorkspaceIndex] = {
+        ...targetWorkspace,
+        worktreePath: "/repo/worktrees/plan-workspace",
       };
     }
 
@@ -3199,7 +3209,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: {
         ...snapshot,
-        threads,
+        workspaces,
       },
     });
 
@@ -3222,7 +3232,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           expect(document.body.textContent).toContain(
-            "Enter a path relative to /repo/worktrees/plan-thread.",
+            "Enter a path relative to /repo/worktrees/plan-workspace.",
           );
         },
         { timeout: 8_000, interval: 16 },
@@ -3318,7 +3328,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-menu-target" as MessageId,
-        targetText: "command menu thread",
+        targetText: "command menu workspace",
       }),
     });
 
@@ -3358,7 +3368,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-native-slash-target" as MessageId,
-        targetText: "native slash thread",
+        targetText: "native slash workspace",
       }),
     });
 

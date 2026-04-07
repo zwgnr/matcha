@@ -21,7 +21,7 @@ import type {
   ProviderSession,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
-  ThreadId,
+  WorkspaceId,
   ProviderTurnStartResult,
 } from "@matcha/contracts";
 import { ServiceMap } from "effect";
@@ -38,7 +38,7 @@ export interface ProviderServiceShape {
    * Start a provider session.
    */
   readonly startSession: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     input: ProviderSessionStartInput,
   ) => Effect.Effect<ProviderSession, ProviderServiceError>;
 
@@ -95,7 +95,7 @@ export interface ProviderServiceShape {
    * Roll back provider conversation state by a number of turns.
    */
   readonly rollbackConversation: (input: {
-    readonly threadId: ThreadId;
+    readonly workspaceId: WorkspaceId;
     readonly numTurns: number;
   }) => Effect.Effect<void, ProviderServiceError>;
 

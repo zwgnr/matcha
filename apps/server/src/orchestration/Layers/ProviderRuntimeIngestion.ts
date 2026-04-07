@@ -7,10 +7,10 @@ import {
   type OrchestrationProposedPlanId,
   CheckpointRef,
   isToolLifecycleItemType,
-  ThreadId,
-  type ThreadTokenUsageSnapshot,
+  WorkspaceId,
+  type WorkspaceTokenUsageSnapshot,
   TurnId,
-  type OrchestrationThreadActivity,
+  type OrchestrationWorkspaceActivity,
   type ProviderRuntimeEvent,
 } from "@matcha/contracts";
 import { Cache, Cause, Duration, Effect, Layer, Option, Stream } from "effect";
@@ -19,7 +19,7 @@ import { makeDrainableWorker } from "@matcha/shared/DrainableWorker";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
-import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
+import { resolveWorkspaceWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { isGitRepository } from "../../git/Utils.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import {
@@ -28,7 +28,7 @@ import {
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 
-const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
+const providerTurnKey = (workspaceId: WorkspaceId, turnId: TurnId) => `${workspaceId}:${turnId}`;
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
   CommandId.makeUnsafe(`provider:${event.eventId}:${tag}:${crypto.randomUUID()}`);
 
@@ -43,7 +43,7 @@ const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.MATCHA_STRICT_PROVIDER_LIFEC
 
 type TurnStartRequestedDomainEvent = Extract<
   OrchestrationEvent,
-  { type: "thread.turn-start-requested" }
+  { type: "workspace.turn-start-requested" }
 >;
 
 type RuntimeIngestionInput =
@@ -83,25 +83,25 @@ function normalizeProposedPlanMarkdown(planMarkdown: string | undefined): string
   return trimmed;
 }
 
-function proposedPlanIdForTurn(threadId: ThreadId, turnId: TurnId): string {
-  return `plan:${threadId}:turn:${turnId}`;
+function proposedPlanIdForTurn(workspaceId: WorkspaceId, turnId: TurnId): string {
+  return `plan:${workspaceId}:turn:${turnId}`;
 }
 
-function proposedPlanIdFromEvent(event: ProviderRuntimeEvent, threadId: ThreadId): string {
+function proposedPlanIdFromEvent(event: ProviderRuntimeEvent, workspaceId: WorkspaceId): string {
   const turnId = toTurnId(event.turnId);
   if (turnId) {
-    return proposedPlanIdForTurn(threadId, turnId);
+    return proposedPlanIdForTurn(workspaceId, turnId);
   }
   if (event.itemId) {
-    return `plan:${threadId}:item:${event.itemId}`;
+    return `plan:${workspaceId}:item:${event.itemId}`;
   }
-  return `plan:${threadId}:event:${event.eventId}`;
+  return `plan:${workspaceId}:event:${event.eventId}`;
 }
 
 function buildContextWindowActivityPayload(
   event: ProviderRuntimeEvent,
-): ThreadTokenUsageSnapshot | undefined {
-  if (event.type !== "thread.token-usage.updated" || event.payload.usage.usedTokens <= 0) {
+): WorkspaceTokenUsageSnapshot | undefined {
+  if (event.type !== "workspace.token-usage.updated" || event.payload.usage.usedTokens <= 0) {
     return undefined;
   }
   return event.payload.usage;
@@ -160,7 +160,7 @@ function requestKindFromCanonicalRequestType(
 
 function runtimeEventToActivities(
   event: ProviderRuntimeEvent,
-): ReadonlyArray<OrchestrationThreadActivity> {
+): ReadonlyArray<OrchestrationWorkspaceActivity> {
   const maybeSequence = (() => {
     const eventWithSequence = event as ProviderRuntimeEvent & { sessionSequence?: number };
     return eventWithSequence.sessionSequence !== undefined
@@ -386,7 +386,7 @@ function runtimeEventToActivities(
       ];
     }
 
-    case "thread.state.changed": {
+    case "workspace.state.changed": {
       if (event.payload.state !== "compacted") {
         return [];
       }
@@ -408,7 +408,7 @@ function runtimeEventToActivities(
       ];
     }
 
-    case "thread.token-usage.updated": {
+    case "workspace.token-usage.updated": {
       const payload = buildContextWindowActivityPayload(event);
       if (!payload) {
         return [];
@@ -524,14 +524,16 @@ const make = Effect.fn("make")(function* () {
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
   });
 
-  const isGitRepoForThread = Effect.fn("isGitRepoForThread")(function* (threadId: ThreadId) {
+  const isGitRepoForWorkspace = Effect.fn("isGitRepoForWorkspace")(function* (
+    workspaceId: WorkspaceId,
+  ) {
     const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId);
-    if (!thread) {
+    const workspace = readModel.workspaces.find((entry) => entry.id === workspaceId);
+    if (!workspace) {
       return false;
     }
-    const workspaceCwd = resolveThreadWorkspaceCwd({
-      thread,
+    const workspaceCwd = resolveWorkspaceWorkspaceCwd({
+      workspace,
       projects: readModel.projects,
     });
     if (!workspaceCwd) {
@@ -540,12 +542,16 @@ const make = Effect.fn("make")(function* () {
     return isGitRepository(workspaceCwd);
   });
 
-  const rememberAssistantMessageId = (threadId: ThreadId, turnId: TurnId, messageId: MessageId) =>
-    Cache.getOption(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId)).pipe(
+  const rememberAssistantMessageId = (
+    workspaceId: WorkspaceId,
+    turnId: TurnId,
+    messageId: MessageId,
+  ) =>
+    Cache.getOption(turnMessageIdsByTurnKey, providerTurnKey(workspaceId, turnId)).pipe(
       Effect.flatMap((existingIds) =>
         Cache.set(
           turnMessageIdsByTurnKey,
-          providerTurnKey(threadId, turnId),
+          providerTurnKey(workspaceId, turnId),
           Option.match(existingIds, {
             onNone: () => new Set([messageId]),
             onSome: (ids) => {
@@ -558,8 +564,12 @@ const make = Effect.fn("make")(function* () {
       ),
     );
 
-  const forgetAssistantMessageId = (threadId: ThreadId, turnId: TurnId, messageId: MessageId) =>
-    Cache.getOption(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId)).pipe(
+  const forgetAssistantMessageId = (
+    workspaceId: WorkspaceId,
+    turnId: TurnId,
+    messageId: MessageId,
+  ) =>
+    Cache.getOption(turnMessageIdsByTurnKey, providerTurnKey(workspaceId, turnId)).pipe(
       Effect.flatMap((existingIds) =>
         Option.match(existingIds, {
           onNone: () => Effect.void,
@@ -567,23 +577,30 @@ const make = Effect.fn("make")(function* () {
             const nextIds = new Set(ids);
             nextIds.delete(messageId);
             if (nextIds.size === 0) {
-              return Cache.invalidate(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId));
+              return Cache.invalidate(
+                turnMessageIdsByTurnKey,
+                providerTurnKey(workspaceId, turnId),
+              );
             }
-            return Cache.set(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId), nextIds);
+            return Cache.set(
+              turnMessageIdsByTurnKey,
+              providerTurnKey(workspaceId, turnId),
+              nextIds,
+            );
           },
         }),
       ),
     );
 
-  const getAssistantMessageIdsForTurn = (threadId: ThreadId, turnId: TurnId) =>
-    Cache.getOption(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId)).pipe(
+  const getAssistantMessageIdsForTurn = (workspaceId: WorkspaceId, turnId: TurnId) =>
+    Cache.getOption(turnMessageIdsByTurnKey, providerTurnKey(workspaceId, turnId)).pipe(
       Effect.map((existingIds) =>
         Option.getOrElse(existingIds, (): Set<MessageId> => new Set<MessageId>()),
       ),
     );
 
-  const clearAssistantMessageIdsForTurn = (threadId: ThreadId, turnId: TurnId) =>
-    Cache.invalidate(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId));
+  const clearAssistantMessageIdsForTurn = (workspaceId: WorkspaceId, turnId: TurnId) =>
+    Cache.invalidate(turnMessageIdsByTurnKey, providerTurnKey(workspaceId, turnId));
 
   const appendBufferedAssistantText = (messageId: MessageId, delta: string) =>
     Cache.getOption(bufferedAssistantTextByMessageId, messageId).pipe(
@@ -646,7 +663,7 @@ const make = Effect.fn("make")(function* () {
 
   const finalizeAssistantMessage = Effect.fn("finalizeAssistantMessage")(function* (input: {
     event: ProviderRuntimeEvent;
-    threadId: ThreadId;
+    workspaceId: WorkspaceId;
     messageId: MessageId;
     turnId?: TurnId;
     createdAt: string;
@@ -664,9 +681,9 @@ const make = Effect.fn("make")(function* () {
 
     if (text.length > 0) {
       yield* orchestrationEngine.dispatch({
-        type: "thread.message.assistant.delta",
+        type: "workspace.message.assistant.delta",
         commandId: providerCommandId(input.event, input.finalDeltaCommandTag),
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         messageId: input.messageId,
         delta: text,
         ...(input.turnId ? { turnId: input.turnId } : {}),
@@ -675,9 +692,9 @@ const make = Effect.fn("make")(function* () {
     }
 
     yield* orchestrationEngine.dispatch({
-      type: "thread.message.assistant.complete",
+      type: "workspace.message.assistant.complete",
       commandId: providerCommandId(input.event, input.commandTag),
-      threadId: input.threadId,
+      workspaceId: input.workspaceId,
       messageId: input.messageId,
       ...(input.turnId ? { turnId: input.turnId } : {}),
       createdAt: input.createdAt,
@@ -687,12 +704,12 @@ const make = Effect.fn("make")(function* () {
 
   const upsertProposedPlan = Effect.fn("upsertProposedPlan")(function* (input: {
     event: ProviderRuntimeEvent;
-    threadId: ThreadId;
-    threadProposedPlans: ReadonlyArray<{
+    workspaceId: WorkspaceId;
+    workspaceProposedPlans: ReadonlyArray<{
       id: string;
       createdAt: string;
       implementedAt: string | null;
-      implementationThreadId: ThreadId | null;
+      implementationWorkspaceId: WorkspaceId | null;
     }>;
     planId: string;
     turnId?: TurnId;
@@ -705,17 +722,17 @@ const make = Effect.fn("make")(function* () {
       return;
     }
 
-    const existingPlan = input.threadProposedPlans.find((entry) => entry.id === input.planId);
+    const existingPlan = input.workspaceProposedPlans.find((entry) => entry.id === input.planId);
     yield* orchestrationEngine.dispatch({
-      type: "thread.proposed-plan.upsert",
+      type: "workspace.proposed-plan.upsert",
       commandId: providerCommandId(input.event, "proposed-plan-upsert"),
-      threadId: input.threadId,
+      workspaceId: input.workspaceId,
       proposedPlan: {
         id: input.planId,
         turnId: input.turnId ?? null,
         planMarkdown,
         implementedAt: existingPlan?.implementedAt ?? null,
-        implementationThreadId: existingPlan?.implementationThreadId ?? null,
+        implementationWorkspaceId: existingPlan?.implementationWorkspaceId ?? null,
         createdAt: existingPlan?.createdAt ?? input.createdAt,
         updatedAt: input.updatedAt,
       },
@@ -725,12 +742,12 @@ const make = Effect.fn("make")(function* () {
 
   const finalizeBufferedProposedPlan = Effect.fn("finalizeBufferedProposedPlan")(function* (input: {
     event: ProviderRuntimeEvent;
-    threadId: ThreadId;
-    threadProposedPlans: ReadonlyArray<{
+    workspaceId: WorkspaceId;
+    workspaceProposedPlans: ReadonlyArray<{
       id: string;
       createdAt: string;
       implementedAt: string | null;
-      implementationThreadId: ThreadId | null;
+      implementationWorkspaceId: WorkspaceId | null;
     }>;
     planId: string;
     turnId?: TurnId;
@@ -747,8 +764,8 @@ const make = Effect.fn("make")(function* () {
 
     yield* upsertProposedPlan({
       event: input.event,
-      threadId: input.threadId,
-      threadProposedPlans: input.threadProposedPlans,
+      workspaceId: input.workspaceId,
+      workspaceProposedPlans: input.workspaceProposedPlans,
       planId: input.planId,
       ...(input.turnId ? { turnId: input.turnId } : {}),
       planMarkdown,
@@ -762,10 +779,10 @@ const make = Effect.fn("make")(function* () {
   });
 
   const clearTurnStateForSession = Effect.fn("clearTurnStateForSession")(function* (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
   ) {
-    const prefix = `${threadId}:`;
-    const proposedPlanPrefix = `plan:${threadId}:`;
+    const prefix = `${workspaceId}:`;
+    const proposedPlanPrefix = `plan:${workspaceId}:`;
     const turnKeys = Array.from(yield* Cache.keys(turnMessageIdsByTurnKey));
     const proposedPlanKeys = Array.from(yield* Cache.keys(bufferedProposedPlanById));
     yield* Effect.forEach(
@@ -798,73 +815,73 @@ const make = Effect.fn("make")(function* () {
 
   const getSourceProposedPlanReferenceForPendingTurnStart = Effect.fn(
     "getSourceProposedPlanReferenceForPendingTurnStart",
-  )(function* (threadId: ThreadId) {
-    const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByThreadId({
-      threadId,
+  )(function* (workspaceId: WorkspaceId) {
+    const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByWorkspaceId({
+      workspaceId,
     });
     if (Option.isNone(pendingTurnStart)) {
       return null;
     }
 
-    const sourceThreadId = pendingTurnStart.value.sourceProposedPlanThreadId;
+    const sourceWorkspaceId = pendingTurnStart.value.sourceProposedPlanWorkspaceId;
     const sourcePlanId = pendingTurnStart.value.sourceProposedPlanId;
-    if (sourceThreadId === null || sourcePlanId === null) {
+    if (sourceWorkspaceId === null || sourcePlanId === null) {
       return null;
     }
 
     return {
-      sourceThreadId,
+      sourceWorkspaceId,
       sourcePlanId,
     } as const;
   });
 
-  const getExpectedProviderTurnIdForThread = Effect.fn("getExpectedProviderTurnIdForThread")(
-    function* (threadId: ThreadId) {
+  const getExpectedProviderTurnIdForWorkspace = Effect.fn("getExpectedProviderTurnIdForWorkspace")(
+    function* (workspaceId: WorkspaceId) {
       const sessions = yield* providerService.listSessions();
-      const session = sessions.find((entry) => entry.threadId === threadId);
+      const session = sessions.find((entry) => entry.workspaceId === workspaceId);
       return session?.activeTurnId;
     },
   );
 
   const getSourceProposedPlanReferenceForAcceptedTurnStart = Effect.fn(
     "getSourceProposedPlanReferenceForAcceptedTurnStart",
-  )(function* (threadId: ThreadId, eventTurnId: TurnId | undefined) {
+  )(function* (workspaceId: WorkspaceId, eventTurnId: TurnId | undefined) {
     if (eventTurnId === undefined) {
       return null;
     }
 
-    const expectedTurnId = yield* getExpectedProviderTurnIdForThread(threadId);
+    const expectedTurnId = yield* getExpectedProviderTurnIdForWorkspace(workspaceId);
     if (!sameId(expectedTurnId, eventTurnId)) {
       return null;
     }
 
-    return yield* getSourceProposedPlanReferenceForPendingTurnStart(threadId);
+    return yield* getSourceProposedPlanReferenceForPendingTurnStart(workspaceId);
   });
 
   const markSourceProposedPlanImplemented = Effect.fn("markSourceProposedPlanImplemented")(
     function* (
-      sourceThreadId: ThreadId,
+      sourceWorkspaceId: WorkspaceId,
       sourcePlanId: OrchestrationProposedPlanId,
-      implementationThreadId: ThreadId,
+      implementationWorkspaceId: WorkspaceId,
       implementedAt: string,
     ) {
       const readModel = yield* orchestrationEngine.getReadModel();
-      const sourceThread = readModel.threads.find((entry) => entry.id === sourceThreadId);
-      const sourcePlan = sourceThread?.proposedPlans.find((entry) => entry.id === sourcePlanId);
-      if (!sourceThread || !sourcePlan || sourcePlan.implementedAt !== null) {
+      const sourceWorkspace = readModel.workspaces.find((entry) => entry.id === sourceWorkspaceId);
+      const sourcePlan = sourceWorkspace?.proposedPlans.find((entry) => entry.id === sourcePlanId);
+      if (!sourceWorkspace || !sourcePlan || sourcePlan.implementedAt !== null) {
         return;
       }
 
       yield* orchestrationEngine.dispatch({
-        type: "thread.proposed-plan.upsert",
+        type: "workspace.proposed-plan.upsert",
         commandId: CommandId.makeUnsafe(
-          `provider:source-proposed-plan-implemented:${implementationThreadId}:${crypto.randomUUID()}`,
+          `provider:source-proposed-plan-implemented:${implementationWorkspaceId}:${crypto.randomUUID()}`,
         ),
-        threadId: sourceThread.id,
+        workspaceId: sourceWorkspace.id,
         proposedPlan: {
           ...sourcePlan,
           implementedAt,
-          implementationThreadId,
+          implementationWorkspaceId,
           updatedAt: implementedAt,
         },
         createdAt: implementedAt,
@@ -876,18 +893,18 @@ const make = Effect.fn("make")(function* () {
     event: ProviderRuntimeEvent,
   ) {
     const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === event.threadId);
-    if (!thread) return;
+    const workspace = readModel.workspaces.find((entry) => entry.id === event.workspaceId);
+    if (!workspace) return;
 
     const now = event.createdAt;
     const eventTurnId = toTurnId(event.turnId);
-    const activeTurnId = thread.session?.activeTurnId ?? null;
+    const activeTurnId = workspace.session?.activeTurnId ?? null;
 
     const conflictsWithActiveTurn =
       activeTurnId !== null && eventTurnId !== undefined && !sameId(activeTurnId, eventTurnId);
     const missingTurnForActiveTurn = activeTurnId !== null && eventTurnId === undefined;
 
-    const shouldApplyThreadLifecycle = (() => {
+    const shouldApplyWorkspaceLifecycle = (() => {
       if (!STRICT_PROVIDER_LIFECYCLE_GUARD) {
         return true;
       }
@@ -895,7 +912,7 @@ const make = Effect.fn("make")(function* () {
         case "session.exited":
           return true;
         case "session.started":
-        case "thread.started":
+        case "workspace.started":
           return true;
         case "turn.started":
           return !conflictsWithActiveTurn;
@@ -907,22 +924,22 @@ const make = Effect.fn("make")(function* () {
           if (activeTurnId !== null && eventTurnId !== undefined) {
             return sameId(activeTurnId, eventTurnId);
           }
-          // If no active turn is tracked, accept completion scoped to this thread.
+          // If no active turn is tracked, accept completion scoped to this workspace.
           return true;
         default:
           return true;
       }
     })();
     const acceptedTurnStartedSourcePlan =
-      event.type === "turn.started" && shouldApplyThreadLifecycle
-        ? yield* getSourceProposedPlanReferenceForAcceptedTurnStart(thread.id, eventTurnId)
+      event.type === "turn.started" && shouldApplyWorkspaceLifecycle
+        ? yield* getSourceProposedPlanReferenceForAcceptedTurnStart(workspace.id, eventTurnId)
         : null;
 
     if (
       event.type === "session.started" ||
       event.type === "session.state.changed" ||
       event.type === "session.exited" ||
-      event.type === "thread.started" ||
+      event.type === "workspace.started" ||
       event.type === "turn.started" ||
       event.type === "turn.completed"
     ) {
@@ -943,28 +960,28 @@ const make = Effect.fn("make")(function* () {
           case "turn.completed":
             return normalizeRuntimeTurnState(event.payload.state) === "failed" ? "error" : "ready";
           case "session.started":
-          case "thread.started":
-            // Provider thread/session start notifications can arrive during an
+          case "workspace.started":
+            // Provider workspace/session start notifications can arrive during an
             // active turn; preserve turn-running state in that case.
             return activeTurnId !== null ? "running" : "ready";
         }
       })();
       const lastError =
         event.type === "session.state.changed" && event.payload.state === "error"
-          ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
+          ? (event.payload.reason ?? workspace.session?.lastError ?? "Provider session error")
           : event.type === "turn.completed" &&
               normalizeRuntimeTurnState(event.payload.state) === "failed"
-            ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
+            ? (event.payload.errorMessage ?? workspace.session?.lastError ?? "Turn failed")
             : status === "ready"
               ? null
-              : (thread.session?.lastError ?? null);
+              : (workspace.session?.lastError ?? null);
 
-      if (shouldApplyThreadLifecycle) {
+      if (shouldApplyWorkspaceLifecycle) {
         if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
           yield* markSourceProposedPlanImplemented(
-            acceptedTurnStartedSourcePlan.sourceThreadId,
+            acceptedTurnStartedSourcePlan.sourceWorkspaceId,
             acceptedTurnStartedSourcePlan.sourcePlanId,
-            thread.id,
+            workspace.id,
             now,
           ).pipe(
             Effect.catchCause((cause) =>
@@ -978,14 +995,14 @@ const make = Effect.fn("make")(function* () {
         }
 
         yield* orchestrationEngine.dispatch({
-          type: "thread.session.set",
-          commandId: providerCommandId(event, "thread-session-set"),
-          threadId: thread.id,
+          type: "workspace.session.set",
+          commandId: providerCommandId(event, "workspace-session-set"),
+          workspaceId: workspace.id,
           session: {
-            threadId: thread.id,
+            workspaceId: workspace.id,
             status,
             providerName: event.provider,
-            runtimeMode: thread.session?.runtimeMode ?? "full-access",
+            runtimeMode: workspace.session?.runtimeMode ?? "full-access",
             activeTurnId: nextActiveTurnId,
             lastError,
             updatedAt: now,
@@ -1008,7 +1025,7 @@ const make = Effect.fn("make")(function* () {
       );
       const turnId = toTurnId(event.turnId);
       if (turnId) {
-        yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
+        yield* rememberAssistantMessageId(workspace.id, turnId, assistantMessageId);
       }
 
       const assistantDeliveryMode: AssistantDeliveryMode = yield* Effect.map(
@@ -1019,9 +1036,9 @@ const make = Effect.fn("make")(function* () {
         const spillChunk = yield* appendBufferedAssistantText(assistantMessageId, assistantDelta);
         if (spillChunk.length > 0) {
           yield* orchestrationEngine.dispatch({
-            type: "thread.message.assistant.delta",
+            type: "workspace.message.assistant.delta",
             commandId: providerCommandId(event, "assistant-delta-buffer-spill"),
-            threadId: thread.id,
+            workspaceId: workspace.id,
             messageId: assistantMessageId,
             delta: spillChunk,
             ...(turnId ? { turnId } : {}),
@@ -1030,9 +1047,9 @@ const make = Effect.fn("make")(function* () {
         }
       } else {
         yield* orchestrationEngine.dispatch({
-          type: "thread.message.assistant.delta",
+          type: "workspace.message.assistant.delta",
           commandId: providerCommandId(event, "assistant-delta"),
-          threadId: thread.id,
+          workspaceId: workspace.id,
           messageId: assistantMessageId,
           delta: assistantDelta,
           ...(turnId ? { turnId } : {}),
@@ -1042,7 +1059,7 @@ const make = Effect.fn("make")(function* () {
     }
 
     if (proposedPlanDelta && proposedPlanDelta.length > 0) {
-      const planId = proposedPlanIdFromEvent(event, thread.id);
+      const planId = proposedPlanIdFromEvent(event, workspace.id);
       yield* appendBufferedProposedPlan(planId, proposedPlanDelta, now);
     }
 
@@ -1058,7 +1075,7 @@ const make = Effect.fn("make")(function* () {
     const proposedPlanCompletion =
       event.type === "turn.proposed.completed"
         ? {
-            planId: proposedPlanIdFromEvent(event, thread.id),
+            planId: proposedPlanIdFromEvent(event, workspace.id),
             turnId: toTurnId(event.turnId),
             planMarkdown: event.payload.planMarkdown,
           }
@@ -1067,18 +1084,18 @@ const make = Effect.fn("make")(function* () {
     if (assistantCompletion) {
       const assistantMessageId = assistantCompletion.messageId;
       const turnId = toTurnId(event.turnId);
-      const existingAssistantMessage = thread.messages.find(
+      const existingAssistantMessage = workspace.messages.find(
         (entry) => entry.id === assistantMessageId,
       );
       const shouldApplyFallbackCompletionText =
         !existingAssistantMessage || existingAssistantMessage.text.length === 0;
       if (turnId) {
-        yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
+        yield* rememberAssistantMessageId(workspace.id, turnId, assistantMessageId);
       }
 
       yield* finalizeAssistantMessage({
         event,
-        threadId: thread.id,
+        workspaceId: workspace.id,
         messageId: assistantMessageId,
         ...(turnId ? { turnId } : {}),
         createdAt: now,
@@ -1090,15 +1107,15 @@ const make = Effect.fn("make")(function* () {
       });
 
       if (turnId) {
-        yield* forgetAssistantMessageId(thread.id, turnId, assistantMessageId);
+        yield* forgetAssistantMessageId(workspace.id, turnId, assistantMessageId);
       }
     }
 
     if (proposedPlanCompletion) {
       yield* finalizeBufferedProposedPlan({
         event,
-        threadId: thread.id,
-        threadProposedPlans: thread.proposedPlans,
+        workspaceId: workspace.id,
+        workspaceProposedPlans: workspace.proposedPlans,
         planId: proposedPlanCompletion.planId,
         ...(proposedPlanCompletion.turnId ? { turnId: proposedPlanCompletion.turnId } : {}),
         fallbackMarkdown: proposedPlanCompletion.planMarkdown,
@@ -1109,13 +1126,13 @@ const make = Effect.fn("make")(function* () {
     if (event.type === "turn.completed") {
       const turnId = toTurnId(event.turnId);
       if (turnId) {
-        const assistantMessageIds = yield* getAssistantMessageIdsForTurn(thread.id, turnId);
+        const assistantMessageIds = yield* getAssistantMessageIdsForTurn(workspace.id, turnId);
         yield* Effect.forEach(
           assistantMessageIds,
           (assistantMessageId) =>
             finalizeAssistantMessage({
               event,
-              threadId: thread.id,
+              workspaceId: workspace.id,
               messageId: assistantMessageId,
               turnId,
               createdAt: now,
@@ -1124,13 +1141,13 @@ const make = Effect.fn("make")(function* () {
             }),
           { concurrency: 1 },
         ).pipe(Effect.asVoid);
-        yield* clearAssistantMessageIdsForTurn(thread.id, turnId);
+        yield* clearAssistantMessageIdsForTurn(workspace.id, turnId);
 
         yield* finalizeBufferedProposedPlan({
           event,
-          threadId: thread.id,
-          threadProposedPlans: thread.proposedPlans,
-          planId: proposedPlanIdForTurn(thread.id, turnId),
+          workspaceId: workspace.id,
+          workspaceProposedPlans: workspace.proposedPlans,
+          planId: proposedPlanIdForTurn(workspace.id, turnId),
           turnId,
           updatedAt: now,
         });
@@ -1138,7 +1155,7 @@ const make = Effect.fn("make")(function* () {
     }
 
     if (event.type === "session.exited") {
-      yield* clearTurnStateForSession(thread.id);
+      yield* clearTurnStateForSession(workspace.id);
     }
 
     if (event.type === "runtime.error") {
@@ -1150,14 +1167,14 @@ const make = Effect.fn("make")(function* () {
 
       if (shouldApplyRuntimeError) {
         yield* orchestrationEngine.dispatch({
-          type: "thread.session.set",
+          type: "workspace.session.set",
           commandId: providerCommandId(event, "runtime-error-session-set"),
-          threadId: thread.id,
+          workspaceId: workspace.id,
           session: {
-            threadId: thread.id,
+            workspaceId: workspace.id,
             status: "error",
             providerName: event.provider,
-            runtimeMode: thread.session?.runtimeMode ?? "full-access",
+            runtimeMode: workspace.session?.runtimeMode ?? "full-access",
             activeTurnId: eventTurnId ?? null,
             lastError: runtimeErrorMessage,
             updatedAt: now,
@@ -1167,36 +1184,36 @@ const make = Effect.fn("make")(function* () {
       }
     }
 
-    if (event.type === "thread.metadata.updated" && event.payload.name) {
+    if (event.type === "workspace.metadata.updated" && event.payload.name) {
       yield* orchestrationEngine.dispatch({
-        type: "thread.meta.update",
-        commandId: providerCommandId(event, "thread-meta-update"),
-        threadId: thread.id,
+        type: "workspace.meta.update",
+        commandId: providerCommandId(event, "workspace-meta-update"),
+        workspaceId: workspace.id,
         title: event.payload.name,
       });
     }
 
     if (event.type === "turn.diff.updated") {
       const turnId = toTurnId(event.turnId);
-      if (turnId && (yield* isGitRepoForThread(thread.id))) {
+      if (turnId && (yield* isGitRepoForWorkspace(workspace.id))) {
         // Skip if a checkpoint already exists for this turn. A real
         // (non-placeholder) capture from CheckpointReactor should not
         // be clobbered, and dispatching a duplicate placeholder for the
         // same turnId would produce an unstable checkpointTurnCount.
-        if (thread.checkpoints.some((c) => c.turnId === turnId)) {
+        if (workspace.checkpoints.some((c) => c.turnId === turnId)) {
           // Already tracked; no-op.
         } else {
           const assistantMessageId = MessageId.makeUnsafe(
             `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
           );
-          const maxTurnCount = thread.checkpoints.reduce(
+          const maxTurnCount = workspace.checkpoints.reduce(
             (max, c) => Math.max(max, c.checkpointTurnCount),
             0,
           );
           yield* orchestrationEngine.dispatch({
-            type: "thread.turn.diff.complete",
-            commandId: providerCommandId(event, "thread-turn-diff-complete"),
-            threadId: thread.id,
+            type: "workspace.turn.diff.complete",
+            commandId: providerCommandId(event, "workspace-turn-diff-complete"),
+            workspaceId: workspace.id,
             turnId,
             completedAt: now,
             checkpointRef: CheckpointRef.makeUnsafe(`provider-diff:${event.eventId}`),
@@ -1213,9 +1230,9 @@ const make = Effect.fn("make")(function* () {
     const activities = runtimeEventToActivities(event);
     yield* Effect.forEach(activities, (activity) =>
       orchestrationEngine.dispatch({
-        type: "thread.activity.append",
-        commandId: providerCommandId(event, "thread-activity-append"),
-        threadId: thread.id,
+        type: "workspace.activity.append",
+        commandId: providerCommandId(event, "workspace-activity-append"),
+        workspaceId: workspace.id,
         activity,
         createdAt: activity.createdAt,
       }),
@@ -1252,7 +1269,7 @@ const make = Effect.fn("make")(function* () {
     );
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {
-        if (event.type !== "thread.turn-start-requested") {
+        if (event.type !== "workspace.turn-start-requested") {
           return Effect.void;
         }
         return worker.enqueue({ source: "domain", event });

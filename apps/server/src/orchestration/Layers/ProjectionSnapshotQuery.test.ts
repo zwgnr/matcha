@@ -1,4 +1,11 @@
-import { CheckpointRef, EventId, MessageId, ProjectId, ThreadId, TurnId } from "@matcha/contracts";
+import {
+  CheckpointRef,
+  EventId,
+  MessageId,
+  ProjectId,
+  WorkspaceId,
+  TurnId,
+} from "@matcha/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -26,7 +33,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
 
       yield* sql`DELETE FROM projection_projects`;
       yield* sql`DELETE FROM projection_state`;
-      yield* sql`DELETE FROM projection_thread_proposed_plans`;
+      yield* sql`DELETE FROM projection_workspace_proposed_plans`;
       yield* sql`DELETE FROM projection_turns`;
 
       yield* sql`
@@ -53,8 +60,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
       yield* sql`
-        INSERT INTO projection_threads (
-          thread_id,
+        INSERT INTO projection_workspaces (
+          workspace_id,
           project_id,
           title,
           model_selection_json,
@@ -66,9 +73,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           deleted_at
         )
         VALUES (
-          'thread-1',
+          'workspace-1',
           'project-1',
-          'Thread 1',
+          'Workspace 1',
           '{"provider":"codex","model":"gpt-5-codex"}',
           NULL,
           NULL,
@@ -80,9 +87,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
       yield* sql`
-        INSERT INTO projection_thread_messages (
+        INSERT INTO projection_workspace_messages (
           message_id,
-          thread_id,
+          workspace_id,
           turn_id,
           role,
           text,
@@ -92,7 +99,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
         VALUES (
           'message-1',
-          'thread-1',
+          'workspace-1',
           'turn-1',
           'assistant',
           'hello from projection',
@@ -103,32 +110,32 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
       yield* sql`
-        INSERT INTO projection_thread_proposed_plans (
+        INSERT INTO projection_workspace_proposed_plans (
           plan_id,
-          thread_id,
+          workspace_id,
           turn_id,
           plan_markdown,
           implemented_at,
-          implementation_thread_id,
+          implementation_workspace_id,
           created_at,
           updated_at
         )
         VALUES (
           'plan-1',
-          'thread-1',
+          'workspace-1',
           'turn-1',
           '# Ship it',
           '2026-02-24T00:00:05.500Z',
-          'thread-2',
+          'workspace-2',
           '2026-02-24T00:00:05.000Z',
           '2026-02-24T00:00:05.500Z'
         )
       `;
 
       yield* sql`
-        INSERT INTO projection_thread_activities (
+        INSERT INTO projection_workspace_activities (
           activity_id,
-          thread_id,
+          workspace_id,
           turn_id,
           tone,
           kind,
@@ -138,7 +145,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
         VALUES (
           'activity-1',
-          'thread-1',
+          'workspace-1',
           'turn-1',
           'info',
           'runtime.note',
@@ -149,23 +156,23 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
       yield* sql`
-        INSERT INTO projection_thread_sessions (
-          thread_id,
+        INSERT INTO projection_workspace_sessions (
+          workspace_id,
           status,
           provider_name,
           provider_session_id,
-          provider_thread_id,
+          provider_workspace_id,
           runtime_mode,
           active_turn_id,
           last_error,
           updated_at
         )
         VALUES (
-          'thread-1',
+          'workspace-1',
           'running',
           'codex',
           'provider-session-1',
-          'provider-thread-1',
+          'provider-workspace-1',
           'approval-required',
           'turn-1',
           NULL,
@@ -175,10 +182,10 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
 
       yield* sql`
         INSERT INTO projection_turns (
-          thread_id,
+          workspace_id,
           turn_id,
           pending_message_id,
-          source_proposed_plan_thread_id,
+          source_proposed_plan_workspace_id,
           source_proposed_plan_id,
           assistant_message_id,
           state,
@@ -191,10 +198,10 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           checkpoint_files_json
         )
         VALUES (
-          'thread-1',
+          'workspace-1',
           'turn-1',
           NULL,
-          'thread-1',
+          'workspace-1',
           'plan-1',
           'message-1',
           'completed',
@@ -252,11 +259,11 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           deletedAt: null,
         },
       ]);
-      assert.deepEqual(snapshot.threads, [
+      assert.deepEqual(snapshot.workspaces, [
         {
-          id: ThreadId.makeUnsafe("thread-1"),
+          id: WorkspaceId.makeUnsafe("workspace-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread 1",
+          title: "Workspace 1",
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -273,7 +280,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             completedAt: "2026-02-24T00:00:08.000Z",
             assistantMessageId: asMessageId("message-1"),
             sourceProposedPlan: {
-              threadId: ThreadId.makeUnsafe("thread-1"),
+              workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
               planId: "plan-1",
             },
           },
@@ -298,7 +305,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
               turnId: asTurnId("turn-1"),
               planMarkdown: "# Ship it",
               implementedAt: "2026-02-24T00:00:05.500Z",
-              implementationThreadId: ThreadId.makeUnsafe("thread-2"),
+              implementationWorkspaceId: WorkspaceId.makeUnsafe("workspace-2"),
               createdAt: "2026-02-24T00:00:05.000Z",
               updatedAt: "2026-02-24T00:00:05.500Z",
             },
@@ -326,7 +333,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             },
           ],
           session: {
-            threadId: ThreadId.makeUnsafe("thread-1"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
             status: "running",
             providerName: "codex",
             runtimeMode: "approval-required",
@@ -340,14 +347,14 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
   );
 
   it.effect(
-    "reads targeted project, thread, and count queries without hydrating the full snapshot",
+    "reads targeted project, workspace, and count queries without hydrating the full snapshot",
     () =>
       Effect.gen(function* () {
         const snapshotQuery = yield* ProjectionSnapshotQuery;
         const sql = yield* SqlClient.SqlClient;
 
         yield* sql`DELETE FROM projection_projects`;
-        yield* sql`DELETE FROM projection_threads`;
+        yield* sql`DELETE FROM projection_workspaces`;
         yield* sql`DELETE FROM projection_turns`;
 
         yield* sql`
@@ -385,8 +392,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
         yield* sql`
-        INSERT INTO projection_threads (
-          thread_id,
+        INSERT INTO projection_workspaces (
+          workspace_id,
           project_id,
           title,
           model_selection_json,
@@ -402,9 +409,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
         VALUES
           (
-            'thread-first',
+            'workspace-first',
             'project-active',
-            'First Thread',
+            'First Workspace',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'full-access',
             'default',
@@ -417,9 +424,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             NULL
           ),
           (
-            'thread-second',
+            'workspace-second',
             'project-active',
-            'Second Thread',
+            'Second Workspace',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'full-access',
             'default',
@@ -432,9 +439,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             NULL
           ),
           (
-            'thread-deleted',
+            'workspace-deleted',
             'project-active',
-            'Deleted Thread',
+            'Deleted Workspace',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'full-access',
             'default',
@@ -451,7 +458,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         const counts = yield* snapshotQuery.getCounts();
         assert.deepEqual(counts, {
           projectCount: 2,
-          threadCount: 3,
+          workspaceCount: 3,
         });
 
         const project = yield* snapshotQuery.getActiveProjectByWorkspaceRoot("/tmp/workspace");
@@ -463,26 +470,28 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         const missingProject = yield* snapshotQuery.getActiveProjectByWorkspaceRoot("/tmp/missing");
         assert.equal(missingProject._tag, "None");
 
-        const firstThreadId = yield* snapshotQuery.getFirstActiveThreadIdByProjectId(
+        const firstWorkspaceId = yield* snapshotQuery.getFirstActiveWorkspaceIdByProjectId(
           asProjectId("project-active"),
         );
-        assert.equal(firstThreadId._tag, "Some");
-        if (firstThreadId._tag === "Some") {
-          assert.equal(firstThreadId.value, ThreadId.makeUnsafe("thread-first"));
+        assert.equal(firstWorkspaceId._tag, "Some");
+        if (firstWorkspaceId._tag === "Some") {
+          assert.equal(firstWorkspaceId.value, WorkspaceId.makeUnsafe("workspace-first"));
         }
       }),
   );
 
-  it.effect("reads single-thread checkpoint context without hydrating unrelated threads", () =>
-    Effect.gen(function* () {
-      const snapshotQuery = yield* ProjectionSnapshotQuery;
-      const sql = yield* SqlClient.SqlClient;
+  it.effect(
+    "reads single-workspace checkpoint context without hydrating unrelated workspaces",
+    () =>
+      Effect.gen(function* () {
+        const snapshotQuery = yield* ProjectionSnapshotQuery;
+        const sql = yield* SqlClient.SqlClient;
 
-      yield* sql`DELETE FROM projection_projects`;
-      yield* sql`DELETE FROM projection_threads`;
-      yield* sql`DELETE FROM projection_turns`;
+        yield* sql`DELETE FROM projection_projects`;
+        yield* sql`DELETE FROM projection_workspaces`;
+        yield* sql`DELETE FROM projection_turns`;
 
-      yield* sql`
+        yield* sql`
         INSERT INTO projection_projects (
           project_id,
           title,
@@ -505,9 +514,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
       `;
 
-      yield* sql`
-        INSERT INTO projection_threads (
-          thread_id,
+        yield* sql`
+        INSERT INTO projection_workspaces (
+          workspace_id,
           project_id,
           title,
           model_selection_json,
@@ -522,9 +531,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           deleted_at
         )
         VALUES (
-          'thread-context',
+          'workspace-context',
           'project-context',
-          'Context Thread',
+          'Context Workspace',
           '{"provider":"codex","model":"gpt-5-codex"}',
           'full-access',
           'default',
@@ -538,12 +547,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
       `;
 
-      yield* sql`
+        yield* sql`
         INSERT INTO projection_turns (
-          thread_id,
+          workspace_id,
           turn_id,
           pending_message_id,
-          source_proposed_plan_thread_id,
+          source_proposed_plan_workspace_id,
           source_proposed_plan_id,
           assistant_message_id,
           state,
@@ -557,7 +566,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
         VALUES
           (
-            'thread-context',
+            'workspace-context',
             'turn-1',
             NULL,
             NULL,
@@ -573,7 +582,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             '[]'
           ),
           (
-            'thread-context',
+            'workspace-context',
             'turn-2',
             NULL,
             NULL,
@@ -590,38 +599,38 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           )
       `;
 
-      const context = yield* snapshotQuery.getThreadCheckpointContext(
-        ThreadId.makeUnsafe("thread-context"),
-      );
-      assert.equal(context._tag, "Some");
-      if (context._tag === "Some") {
-        assert.deepEqual(context.value, {
-          threadId: ThreadId.makeUnsafe("thread-context"),
-          projectId: asProjectId("project-context"),
-          workspaceRoot: "/tmp/context-workspace",
-          worktreePath: "/tmp/context-worktree",
-          checkpoints: [
-            {
-              turnId: asTurnId("turn-1"),
-              checkpointTurnCount: 1,
-              checkpointRef: asCheckpointRef("checkpoint-a"),
-              status: "ready",
-              files: [],
-              assistantMessageId: null,
-              completedAt: "2026-03-02T00:00:04.000Z",
-            },
-            {
-              turnId: asTurnId("turn-2"),
-              checkpointTurnCount: 2,
-              checkpointRef: asCheckpointRef("checkpoint-b"),
-              status: "ready",
-              files: [],
-              assistantMessageId: null,
-              completedAt: "2026-03-02T00:00:05.000Z",
-            },
-          ],
-        });
-      }
-    }),
+        const context = yield* snapshotQuery.getWorkspaceCheckpointContext(
+          WorkspaceId.makeUnsafe("workspace-context"),
+        );
+        assert.equal(context._tag, "Some");
+        if (context._tag === "Some") {
+          assert.deepEqual(context.value, {
+            workspaceId: WorkspaceId.makeUnsafe("workspace-context"),
+            projectId: asProjectId("project-context"),
+            workspaceRoot: "/tmp/context-workspace",
+            worktreePath: "/tmp/context-worktree",
+            checkpoints: [
+              {
+                turnId: asTurnId("turn-1"),
+                checkpointTurnCount: 1,
+                checkpointRef: asCheckpointRef("checkpoint-a"),
+                status: "ready",
+                files: [],
+                assistantMessageId: null,
+                completedAt: "2026-03-02T00:00:04.000Z",
+              },
+              {
+                turnId: asTurnId("turn-2"),
+                checkpointTurnCount: 2,
+                checkpointRef: asCheckpointRef("checkpoint-b"),
+                status: "ready",
+                files: [],
+                assistantMessageId: null,
+                completedAt: "2026-03-02T00:00:05.000Z",
+              },
+            ],
+          });
+        }
+      }),
   );
 });

@@ -1,5 +1,5 @@
 import { Debouncer } from "@tanstack/react-pacer";
-import { type ProjectId, type ThreadId } from "@matcha/contracts";
+import { type ProjectId, type WorkspaceId } from "@matcha/contracts";
 import { create } from "zustand";
 
 const PERSISTED_STATE_KEY = "matcha:ui-state:v1";
@@ -26,26 +26,26 @@ export interface UiProjectState {
   projectOrder: ProjectId[];
 }
 
-export interface UiThreadState {
-  threadLastVisitedAtById: Record<string, string>;
+export interface UiWorkspaceState {
+  workspaceLastVisitedAtById: Record<string, string>;
 }
 
-export interface UiState extends UiProjectState, UiThreadState {}
+export interface UiState extends UiProjectState, UiWorkspaceState {}
 
 export interface SyncProjectInput {
   id: ProjectId;
   cwd: string;
 }
 
-export interface SyncThreadInput {
-  id: ThreadId;
+export interface SyncWorkspaceInput {
+  id: WorkspaceId;
   seedVisitedAt?: string | undefined;
 }
 
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
-  threadLastVisitedAtById: {},
+  workspaceLastVisitedAtById: {},
 };
 
 const persistedExpandedProjectCwds = new Set<string>();
@@ -245,35 +245,39 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
   };
 }
 
-export function syncThreads(state: UiState, threads: readonly SyncThreadInput[]): UiState {
-  const retainedThreadIds = new Set(threads.map((thread) => thread.id));
-  const nextThreadLastVisitedAtById = Object.fromEntries(
-    Object.entries(state.threadLastVisitedAtById).filter(([threadId]) =>
-      retainedThreadIds.has(threadId as ThreadId),
+export function syncWorkspaces(state: UiState, workspaces: readonly SyncWorkspaceInput[]): UiState {
+  const retainedWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  const nextWorkspaceLastVisitedAtById = Object.fromEntries(
+    Object.entries(state.workspaceLastVisitedAtById).filter(([workspaceId]) =>
+      retainedWorkspaceIds.has(workspaceId as WorkspaceId),
     ),
   );
-  for (const thread of threads) {
+  for (const workspace of workspaces) {
     if (
-      nextThreadLastVisitedAtById[thread.id] === undefined &&
-      thread.seedVisitedAt !== undefined &&
-      thread.seedVisitedAt.length > 0
+      nextWorkspaceLastVisitedAtById[workspace.id] === undefined &&
+      workspace.seedVisitedAt !== undefined &&
+      workspace.seedVisitedAt.length > 0
     ) {
-      nextThreadLastVisitedAtById[thread.id] = thread.seedVisitedAt;
+      nextWorkspaceLastVisitedAtById[workspace.id] = workspace.seedVisitedAt;
     }
   }
-  if (recordsEqual(state.threadLastVisitedAtById, nextThreadLastVisitedAtById)) {
+  if (recordsEqual(state.workspaceLastVisitedAtById, nextWorkspaceLastVisitedAtById)) {
     return state;
   }
   return {
     ...state,
-    threadLastVisitedAtById: nextThreadLastVisitedAtById,
+    workspaceLastVisitedAtById: nextWorkspaceLastVisitedAtById,
   };
 }
 
-export function markThreadVisited(state: UiState, threadId: ThreadId, visitedAt?: string): UiState {
+export function markWorkspaceVisited(
+  state: UiState,
+  workspaceId: WorkspaceId,
+  visitedAt?: string,
+): UiState {
   const at = visitedAt ?? new Date().toISOString();
   const visitedAtMs = Date.parse(at);
-  const previousVisitedAt = state.threadLastVisitedAtById[threadId];
+  const previousVisitedAt = state.workspaceLastVisitedAtById[workspaceId];
   const previousVisitedAtMs = previousVisitedAt ? Date.parse(previousVisitedAt) : NaN;
   if (
     Number.isFinite(previousVisitedAtMs) &&
@@ -284,16 +288,16 @@ export function markThreadVisited(state: UiState, threadId: ThreadId, visitedAt?
   }
   return {
     ...state,
-    threadLastVisitedAtById: {
-      ...state.threadLastVisitedAtById,
-      [threadId]: at,
+    workspaceLastVisitedAtById: {
+      ...state.workspaceLastVisitedAtById,
+      [workspaceId]: at,
     },
   };
 }
 
-export function markThreadUnread(
+export function markWorkspaceUnread(
   state: UiState,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   latestTurnCompletedAt: string | null | undefined,
 ): UiState {
   if (!latestTurnCompletedAt) {
@@ -304,27 +308,27 @@ export function markThreadUnread(
     return state;
   }
   const unreadVisitedAt = new Date(latestTurnCompletedAtMs - 1).toISOString();
-  if (state.threadLastVisitedAtById[threadId] === unreadVisitedAt) {
+  if (state.workspaceLastVisitedAtById[workspaceId] === unreadVisitedAt) {
     return state;
   }
   return {
     ...state,
-    threadLastVisitedAtById: {
-      ...state.threadLastVisitedAtById,
-      [threadId]: unreadVisitedAt,
+    workspaceLastVisitedAtById: {
+      ...state.workspaceLastVisitedAtById,
+      [workspaceId]: unreadVisitedAt,
     },
   };
 }
 
-export function clearThreadUi(state: UiState, threadId: ThreadId): UiState {
-  if (!(threadId in state.threadLastVisitedAtById)) {
+export function clearWorkspaceUi(state: UiState, workspaceId: WorkspaceId): UiState {
+  if (!(workspaceId in state.workspaceLastVisitedAtById)) {
     return state;
   }
-  const nextThreadLastVisitedAtById = { ...state.threadLastVisitedAtById };
-  delete nextThreadLastVisitedAtById[threadId];
+  const nextWorkspaceLastVisitedAtById = { ...state.workspaceLastVisitedAtById };
+  delete nextWorkspaceLastVisitedAtById[workspaceId];
   return {
     ...state,
-    threadLastVisitedAtById: nextThreadLastVisitedAtById,
+    workspaceLastVisitedAtById: nextWorkspaceLastVisitedAtById,
   };
 }
 
@@ -383,10 +387,13 @@ export function reorderProjects(
 
 interface UiStateStore extends UiState {
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
-  syncThreads: (threads: readonly SyncThreadInput[]) => void;
-  markThreadVisited: (threadId: ThreadId, visitedAt?: string) => void;
-  markThreadUnread: (threadId: ThreadId, latestTurnCompletedAt: string | null | undefined) => void;
-  clearThreadUi: (threadId: ThreadId) => void;
+  syncWorkspaces: (workspaces: readonly SyncWorkspaceInput[]) => void;
+  markWorkspaceVisited: (workspaceId: WorkspaceId, visitedAt?: string) => void;
+  markWorkspaceUnread: (
+    workspaceId: WorkspaceId,
+    latestTurnCompletedAt: string | null | undefined,
+  ) => void;
+  clearWorkspaceUi: (workspaceId: WorkspaceId) => void;
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
   reorderProjects: (draggedProjectId: ProjectId, targetProjectId: ProjectId) => void;
@@ -395,12 +402,12 @@ interface UiStateStore extends UiState {
 export const useUiStateStore = create<UiStateStore>((set) => ({
   ...readPersistedState(),
   syncProjects: (projects) => set((state) => syncProjects(state, projects)),
-  syncThreads: (threads) => set((state) => syncThreads(state, threads)),
-  markThreadVisited: (threadId, visitedAt) =>
-    set((state) => markThreadVisited(state, threadId, visitedAt)),
-  markThreadUnread: (threadId, latestTurnCompletedAt) =>
-    set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
-  clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
+  syncWorkspaces: (workspaces) => set((state) => syncWorkspaces(state, workspaces)),
+  markWorkspaceVisited: (workspaceId, visitedAt) =>
+    set((state) => markWorkspaceVisited(state, workspaceId, visitedAt)),
+  markWorkspaceUnread: (workspaceId, latestTurnCompletedAt) =>
+    set((state) => markWorkspaceUnread(state, workspaceId, latestTurnCompletedAt)),
+  clearWorkspaceUi: (workspaceId) => set((state) => clearWorkspaceUi(state, workspaceId)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

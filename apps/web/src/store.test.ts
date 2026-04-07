@@ -4,7 +4,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   TurnId,
   type OrchestrationEvent,
   type OrchestrationReadModel,
@@ -17,14 +17,14 @@ import {
   syncServerReadModel,
   type AppState,
 } from "./store";
-import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
+import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Workspace } from "./types";
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
-    id: ThreadId.makeUnsafe("thread-1"),
-    codexThreadId: null,
+    id: WorkspaceId.makeUnsafe("workspace-1"),
+    codexWorkspaceId: null,
     projectId: ProjectId.makeUnsafe("project-1"),
-    title: "Thread",
+    title: "Workspace",
     modelSelection: {
       provider: "codex",
       model: "gpt-5-codex",
@@ -46,9 +46,9 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-function makeState(thread: Thread): AppState {
-  const threadIdsByProjectId: AppState["threadIdsByProjectId"] = {
-    [thread.projectId]: [thread.id],
+function makeState(workspace: Workspace): AppState {
+  const workspaceIdsByProjectId: AppState["workspaceIdsByProjectId"] = {
+    [workspace.projectId]: [workspace.id],
   };
   return {
     projects: [
@@ -63,9 +63,9 @@ function makeState(thread: Thread): AppState {
         scripts: [],
       },
     ],
-    threads: [thread],
-    sidebarThreadsById: {},
-    threadIdsByProjectId,
+    workspaces: [workspace],
+    sidebarWorkspacesById: {},
+    workspaceIdsByProjectId,
     bootstrapComplete: true,
   };
 }
@@ -79,10 +79,10 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
   return {
     sequence,
     eventId: EventId.makeUnsafe(`event-${sequence}`),
-    aggregateKind: "thread",
+    aggregateKind: "workspace",
     aggregateId:
-      "threadId" in payload
-        ? payload.threadId
+      "workspaceId" in payload
+        ? payload.workspaceId
         : "projectId" in payload
           ? payload.projectId
           : ProjectId.makeUnsafe("project-1"),
@@ -97,11 +97,11 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
   } as Extract<OrchestrationEvent, { type: T }>;
 }
 
-function makeReadModelThread(overrides: Partial<OrchestrationReadModel["threads"][number]>) {
+function makeReadModelWorkspace(overrides: Partial<OrchestrationReadModel["workspaces"][number]>) {
   return {
-    id: ThreadId.makeUnsafe("thread-1"),
+    id: WorkspaceId.makeUnsafe("workspace-1"),
     projectId: ProjectId.makeUnsafe("project-1"),
-    title: "Thread",
+    title: "Workspace",
     modelSelection: {
       provider: "codex",
       model: "gpt-5.3-codex",
@@ -121,10 +121,12 @@ function makeReadModelThread(overrides: Partial<OrchestrationReadModel["threads"
     checkpoints: [],
     session: null,
     ...overrides,
-  } satisfies OrchestrationReadModel["threads"][number];
+  } satisfies OrchestrationReadModel["workspaces"][number];
 }
 
-function makeReadModel(thread: OrchestrationReadModel["threads"][number]): OrchestrationReadModel {
+function makeReadModel(
+  workspace: OrchestrationReadModel["workspaces"][number],
+): OrchestrationReadModel {
   return {
     snapshotSequence: 1,
     updatedAt: "2026-02-27T00:00:00.000Z",
@@ -143,7 +145,7 @@ function makeReadModel(thread: OrchestrationReadModel["threads"][number]): Orche
         scripts: [],
       },
     ],
-    threads: [thread],
+    workspaces: [workspace],
   };
 }
 
@@ -169,19 +171,19 @@ function makeReadModelProject(
 describe("store read model sync", () => {
   it("marks bootstrap complete after snapshot sync", () => {
     const initialState: AppState = {
-      ...makeState(makeThread()),
+      ...makeState(makeWorkspace()),
       bootstrapComplete: false,
     };
 
-    const next = syncServerReadModel(initialState, makeReadModel(makeReadModelThread({})));
+    const next = syncServerReadModel(initialState, makeReadModel(makeReadModelWorkspace({})));
 
     expect(next.bootstrapComplete).toBe(true);
   });
 
   it("preserves claude model slugs without an active session", () => {
-    const initialState = makeState(makeThread());
+    const initialState = makeState(makeWorkspace());
     const readModel = makeReadModel(
-      makeReadModelThread({
+      makeReadModelWorkspace({
         modelSelection: {
           provider: "claudeAgent",
           model: "claude-opus-4-6",
@@ -191,19 +193,19 @@ describe("store read model sync", () => {
 
     const next = syncServerReadModel(initialState, readModel);
 
-    expect(next.threads[0]?.modelSelection.model).toBe("claude-opus-4-6");
+    expect(next.workspaces[0]?.modelSelection.model).toBe("claude-opus-4-6");
   });
 
   it("resolves claude aliases when session provider is claudeAgent", () => {
-    const initialState = makeState(makeThread());
+    const initialState = makeState(makeWorkspace());
     const readModel = makeReadModel(
-      makeReadModelThread({
+      makeReadModelWorkspace({
         modelSelection: {
           provider: "claudeAgent",
           model: "sonnet",
         },
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "ready",
           providerName: "claudeAgent",
           runtimeMode: "approval-required",
@@ -216,13 +218,13 @@ describe("store read model sync", () => {
 
     const next = syncServerReadModel(initialState, readModel);
 
-    expect(next.threads[0]?.modelSelection.model).toBe("claude-sonnet-4-6");
+    expect(next.workspaces[0]?.modelSelection.model).toBe("claude-sonnet-4-6");
   });
 
-  it("preserves project and thread updatedAt timestamps from the read model", () => {
-    const initialState = makeState(makeThread());
+  it("preserves project and workspace updatedAt timestamps from the read model", () => {
+    const initialState = makeState(makeWorkspace());
     const readModel = makeReadModel(
-      makeReadModelThread({
+      makeReadModelWorkspace({
         updatedAt: "2026-02-27T00:05:00.000Z",
       }),
     );
@@ -230,22 +232,22 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, readModel);
 
     expect(next.projects[0]?.updatedAt).toBe("2026-02-27T00:00:00.000Z");
-    expect(next.threads[0]?.updatedAt).toBe("2026-02-27T00:05:00.000Z");
+    expect(next.workspaces[0]?.updatedAt).toBe("2026-02-27T00:05:00.000Z");
   });
 
   it("maps archivedAt from the read model", () => {
-    const initialState = makeState(makeThread());
+    const initialState = makeState(makeWorkspace());
     const archivedAt = "2026-02-28T00:00:00.000Z";
     const next = syncServerReadModel(
       initialState,
       makeReadModel(
-        makeReadModelThread({
+        makeReadModelWorkspace({
           archivedAt,
         }),
       ),
     );
 
-    expect(next.threads[0]?.archivedAt).toBe(archivedAt);
+    expect(next.workspaces[0]?.archivedAt).toBe(archivedAt);
   });
 
   it("replaces projects using snapshot order during recovery", () => {
@@ -275,9 +277,9 @@ describe("store read model sync", () => {
           scripts: [],
         },
       ],
-      threads: [],
-      sidebarThreadsById: {},
-      threadIdsByProjectId: {},
+      workspaces: [],
+      sidebarWorkspacesById: {},
+      workspaceIdsByProjectId: {},
       bootstrapComplete: true,
     };
     const readModel: OrchestrationReadModel = {
@@ -300,7 +302,7 @@ describe("store read model sync", () => {
           workspaceRoot: "/tmp/project-3",
         }),
       ],
-      threads: [],
+      workspaces: [],
     };
 
     const next = syncServerReadModel(initialState, readModel);
@@ -312,14 +314,14 @@ describe("store read model sync", () => {
 describe("incremental orchestration updates", () => {
   it("does not mark bootstrap complete for incremental events", () => {
     const state: AppState = {
-      ...makeState(makeThread()),
+      ...makeState(makeWorkspace()),
       bootstrapComplete: false,
     };
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.meta-updated", {
-        threadId: ThreadId.makeUnsafe("thread-1"),
+      makeEvent("workspace.meta-updated", {
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         title: "Updated title",
         updatedAt: "2026-02-27T00:00:01.000Z",
       }),
@@ -328,9 +330,9 @@ describe("incremental orchestration updates", () => {
     expect(next.bootstrapComplete).toBe(false);
   });
 
-  it("preserves state identity for no-op project and thread deletes", () => {
-    const thread = makeThread();
-    const state = makeState(thread);
+  it("preserves state identity for no-op project and workspace deletes", () => {
+    const workspace = makeWorkspace();
+    const state = makeState(workspace);
 
     const nextAfterProjectDelete = applyOrchestrationEvent(
       state,
@@ -339,16 +341,16 @@ describe("incremental orchestration updates", () => {
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
     );
-    const nextAfterThreadDelete = applyOrchestrationEvent(
+    const nextAfterWorkspaceDelete = applyOrchestrationEvent(
       state,
-      makeEvent("thread.deleted", {
-        threadId: ThreadId.makeUnsafe("thread-missing"),
+      makeEvent("workspace.deleted", {
+        workspaceId: WorkspaceId.makeUnsafe("workspace-missing"),
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
     );
 
     expect(nextAfterProjectDelete).toBe(state);
-    expect(nextAfterThreadDelete).toBe(state);
+    expect(nextAfterWorkspaceDelete).toBe(state);
   });
 
   it("reuses an existing project row when project.created arrives with a new id for the same cwd", () => {
@@ -367,9 +369,9 @@ describe("incremental orchestration updates", () => {
           scripts: [],
         },
       ],
-      threads: [],
-      sidebarThreadsById: {},
-      threadIdsByProjectId: {},
+      workspaces: [],
+      sidebarWorkspacesById: {},
+      workspaceIdsByProjectId: {},
       bootstrapComplete: true,
     };
 
@@ -395,12 +397,12 @@ describe("incremental orchestration updates", () => {
     expect(next.projects[0]?.name).toBe("Project Recreated");
   });
 
-  it("removes stale project index entries when thread.created recreates a thread under a new project", () => {
+  it("removes stale project index entries when workspace.created recreates a workspace under a new project", () => {
     const originalProjectId = ProjectId.makeUnsafe("project-1");
     const recreatedProjectId = ProjectId.makeUnsafe("project-2");
-    const threadId = ThreadId.makeUnsafe("thread-1");
-    const thread = makeThread({
-      id: threadId,
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-1");
+    const workspace = makeWorkspace({
+      id: workspaceId,
       projectId: originalProjectId,
     });
     const state: AppState = {
@@ -426,20 +428,20 @@ describe("incremental orchestration updates", () => {
           scripts: [],
         },
       ],
-      threads: [thread],
-      sidebarThreadsById: {},
-      threadIdsByProjectId: {
-        [originalProjectId]: [threadId],
+      workspaces: [workspace],
+      sidebarWorkspacesById: {},
+      workspaceIdsByProjectId: {
+        [originalProjectId]: [workspaceId],
       },
       bootstrapComplete: true,
     };
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.created", {
-        threadId,
+      makeEvent("workspace.created", {
+        workspaceId,
         projectId: recreatedProjectId,
-        title: "Recovered thread",
+        title: "Recovered workspace",
         modelSelection: {
           provider: "codex",
           model: DEFAULT_MODEL_BY_PROVIDER.codex,
@@ -453,15 +455,15 @@ describe("incremental orchestration updates", () => {
       }),
     );
 
-    expect(next.threads).toHaveLength(1);
-    expect(next.threads[0]?.projectId).toBe(recreatedProjectId);
-    expect(next.threadIdsByProjectId[originalProjectId]).toBeUndefined();
-    expect(next.threadIdsByProjectId[recreatedProjectId]).toEqual([threadId]);
+    expect(next.workspaces).toHaveLength(1);
+    expect(next.workspaces[0]?.projectId).toBe(recreatedProjectId);
+    expect(next.workspaceIdsByProjectId[originalProjectId]).toBeUndefined();
+    expect(next.workspaceIdsByProjectId[recreatedProjectId]).toEqual([workspaceId]);
   });
 
-  it("updates only the affected thread for message events", () => {
-    const thread1 = makeThread({
-      id: ThreadId.makeUnsafe("thread-1"),
+  it("updates only the affected workspace for message events", () => {
+    const workspace1 = makeWorkspace({
+      id: WorkspaceId.makeUnsafe("workspace-1"),
       messages: [
         {
           id: MessageId.makeUnsafe("message-1"),
@@ -474,16 +476,16 @@ describe("incremental orchestration updates", () => {
         },
       ],
     });
-    const thread2 = makeThread({ id: ThreadId.makeUnsafe("thread-2") });
+    const workspace2 = makeWorkspace({ id: WorkspaceId.makeUnsafe("workspace-2") });
     const state: AppState = {
-      ...makeState(thread1),
-      threads: [thread1, thread2],
+      ...makeState(workspace1),
+      workspaces: [workspace1, workspace2],
     };
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.message-sent", {
-        threadId: thread1.id,
+      makeEvent("workspace.message-sent", {
+        workspaceId: workspace1.id,
         messageId: MessageId.makeUnsafe("message-1"),
         role: "assistant",
         text: " world",
@@ -494,13 +496,13 @@ describe("incremental orchestration updates", () => {
       }),
     );
 
-    expect(next.threads[0]?.messages[0]?.text).toBe("hello world");
-    expect(next.threads[0]?.latestTurn?.state).toBe("running");
-    expect(next.threads[1]).toBe(thread2);
+    expect(next.workspaces[0]?.messages[0]?.text).toBe("hello world");
+    expect(next.workspaces[0]?.latestTurn?.state).toBe("running");
+    expect(next.workspaces[1]).toBe(workspace2);
   });
 
   it("applies replay batches in sequence and updates session state", () => {
-    const thread = makeThread({
+    const workspace = makeWorkspace({
       latestTurn: {
         turnId: TurnId.makeUnsafe("turn-1"),
         state: "running",
@@ -510,15 +512,15 @@ describe("incremental orchestration updates", () => {
         assistantMessageId: null,
       },
     });
-    const state = makeState(thread);
+    const state = makeState(workspace);
 
     const next = applyOrchestrationEvents(state, [
       makeEvent(
-        "thread.session-set",
+        "workspace.session-set",
         {
-          threadId: thread.id,
+          workspaceId: workspace.id,
           session: {
-            threadId: thread.id,
+            workspaceId: workspace.id,
             status: "running",
             providerName: "codex",
             runtimeMode: "full-access",
@@ -530,9 +532,9 @@ describe("incremental orchestration updates", () => {
         { sequence: 2 },
       ),
       makeEvent(
-        "thread.message-sent",
+        "workspace.message-sent",
         {
-          threadId: thread.id,
+          workspaceId: workspace.id,
           messageId: MessageId.makeUnsafe("assistant-1"),
           role: "assistant",
           text: "done",
@@ -545,14 +547,14 @@ describe("incremental orchestration updates", () => {
       ),
     ]);
 
-    expect(next.threads[0]?.session?.status).toBe("running");
-    expect(next.threads[0]?.latestTurn?.state).toBe("completed");
-    expect(next.threads[0]?.messages).toHaveLength(1);
+    expect(next.workspaces[0]?.session?.status).toBe("running");
+    expect(next.workspaces[0]?.latestTurn?.state).toBe("completed");
+    expect(next.workspaces[0]?.messages).toHaveLength(1);
   });
 
   it("does not regress latestTurn when an older turn diff completes late", () => {
     const state = makeState(
-      makeThread({
+      makeWorkspace({
         latestTurn: {
           turnId: TurnId.makeUnsafe("turn-2"),
           state: "running",
@@ -566,8 +568,8 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.turn-diff-completed", {
-        threadId: ThreadId.makeUnsafe("thread-1"),
+      makeEvent("workspace.turn-diff-completed", {
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         turnId: TurnId.makeUnsafe("turn-1"),
         checkpointTurnCount: 1,
         checkpointRef: CheckpointRef.makeUnsafe("checkpoint-1"),
@@ -578,14 +580,14 @@ describe("incremental orchestration updates", () => {
       }),
     );
 
-    expect(next.threads[0]?.turnDiffSummaries).toHaveLength(1);
-    expect(next.threads[0]?.latestTurn).toEqual(state.threads[0]?.latestTurn);
+    expect(next.workspaces[0]?.turnDiffSummaries).toHaveLength(1);
+    expect(next.workspaces[0]?.latestTurn).toEqual(state.workspaces[0]?.latestTurn);
   });
 
   it("rebinds live turn diffs to the authoritative assistant message when it arrives later", () => {
     const turnId = TurnId.makeUnsafe("turn-1");
     const state = makeState(
-      makeThread({
+      makeWorkspace({
         latestTurn: {
           turnId,
           state: "completed",
@@ -610,8 +612,8 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.message-sent", {
-        threadId: ThreadId.makeUnsafe("thread-1"),
+      makeEvent("workspace.message-sent", {
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         messageId: MessageId.makeUnsafe("assistant-real"),
         role: "assistant",
         text: "final answer",
@@ -622,17 +624,17 @@ describe("incremental orchestration updates", () => {
       }),
     );
 
-    expect(next.threads[0]?.turnDiffSummaries[0]?.assistantMessageId).toBe(
+    expect(next.workspaces[0]?.turnDiffSummaries[0]?.assistantMessageId).toBe(
       MessageId.makeUnsafe("assistant-real"),
     );
-    expect(next.threads[0]?.latestTurn?.assistantMessageId).toBe(
+    expect(next.workspaces[0]?.latestTurn?.assistantMessageId).toBe(
       MessageId.makeUnsafe("assistant-real"),
     );
   });
 
   it("reverts messages, plans, activities, and checkpoints by retained turns", () => {
     const state = makeState(
-      makeThread({
+      makeWorkspace({
         messages: [
           {
             id: MessageId.makeUnsafe("user-1"),
@@ -668,7 +670,7 @@ describe("incremental orchestration updates", () => {
             turnId: TurnId.makeUnsafe("turn-1"),
             planMarkdown: "plan 1",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationWorkspaceId: null,
             createdAt: "2026-02-27T00:00:00.000Z",
             updatedAt: "2026-02-27T00:00:00.000Z",
           },
@@ -677,7 +679,7 @@ describe("incremental orchestration updates", () => {
             turnId: TurnId.makeUnsafe("turn-2"),
             planMarkdown: "plan 2",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationWorkspaceId: null,
             createdAt: "2026-02-27T00:00:02.000Z",
             updatedAt: "2026-02-27T00:00:02.000Z",
           },
@@ -725,27 +727,27 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.reverted", {
-        threadId: ThreadId.makeUnsafe("thread-1"),
+      makeEvent("workspace.reverted", {
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         turnCount: 1,
       }),
     );
 
-    expect(next.threads[0]?.messages.map((message) => message.id)).toEqual([
+    expect(next.workspaces[0]?.messages.map((message) => message.id)).toEqual([
       "user-1",
       "assistant-1",
     ]);
-    expect(next.threads[0]?.proposedPlans.map((plan) => plan.id)).toEqual(["plan-1"]);
-    expect(next.threads[0]?.activities.map((activity) => activity.id)).toEqual([
+    expect(next.workspaces[0]?.proposedPlans.map((plan) => plan.id)).toEqual(["plan-1"]);
+    expect(next.workspaces[0]?.activities.map((activity) => activity.id)).toEqual([
       EventId.makeUnsafe("activity-1"),
     ]);
-    expect(next.threads[0]?.turnDiffSummaries.map((summary) => summary.turnId)).toEqual([
+    expect(next.workspaces[0]?.turnDiffSummaries.map((summary) => summary.turnId)).toEqual([
       TurnId.makeUnsafe("turn-1"),
     ]);
   });
 
   it("clears pending source proposed plans after revert before a new session-set event", () => {
-    const thread = makeThread({
+    const workspace = makeWorkspace({
       latestTurn: {
         turnId: TurnId.makeUnsafe("turn-2"),
         state: "completed",
@@ -754,12 +756,12 @@ describe("incremental orchestration updates", () => {
         completedAt: "2026-02-27T00:00:03.000Z",
         assistantMessageId: MessageId.makeUnsafe("assistant-2"),
         sourceProposedPlan: {
-          threadId: ThreadId.makeUnsafe("thread-source"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-source"),
           planId: "plan-2" as never,
         },
       },
       pendingSourceProposedPlan: {
-        threadId: ThreadId.makeUnsafe("thread-source"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-source"),
         planId: "plan-2" as never,
       },
       turnDiffSummaries: [
@@ -782,21 +784,21 @@ describe("incremental orchestration updates", () => {
       ],
     });
     const reverted = applyOrchestrationEvent(
-      makeState(thread),
-      makeEvent("thread.reverted", {
-        threadId: thread.id,
+      makeState(workspace),
+      makeEvent("workspace.reverted", {
+        workspaceId: workspace.id,
         turnCount: 1,
       }),
     );
 
-    expect(reverted.threads[0]?.pendingSourceProposedPlan).toBeUndefined();
+    expect(reverted.workspaces[0]?.pendingSourceProposedPlan).toBeUndefined();
 
     const next = applyOrchestrationEvent(
       reverted,
-      makeEvent("thread.session-set", {
-        threadId: thread.id,
+      makeEvent("workspace.session-set", {
+        workspaceId: workspace.id,
         session: {
-          threadId: thread.id,
+          workspaceId: workspace.id,
           status: "running",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -807,10 +809,10 @@ describe("incremental orchestration updates", () => {
       }),
     );
 
-    expect(next.threads[0]?.latestTurn).toMatchObject({
+    expect(next.workspaces[0]?.latestTurn).toMatchObject({
       turnId: TurnId.makeUnsafe("turn-3"),
       state: "running",
     });
-    expect(next.threads[0]?.latestTurn?.sourceProposedPlan).toBeUndefined();
+    expect(next.workspaces[0]?.latestTurn?.sourceProposedPlan).toBeUndefined();
   });
 });

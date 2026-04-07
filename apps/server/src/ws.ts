@@ -7,14 +7,14 @@ import {
   type GitManagerServiceError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
-  OrchestrationGetFullThreadDiffError,
+  OrchestrationGetFullWorkspaceDiffError,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
-  ThreadId,
+  WorkspaceId,
   type TerminalEvent,
   WS_METHODS,
   WsRpcGroup,
@@ -70,7 +70,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
 
     const appendSetupScriptActivity = (input: {
-      readonly threadId: ThreadId;
+      readonly workspaceId: WorkspaceId;
       readonly kind: "setup-script.requested" | "setup-script.started" | "setup-script.failed";
       readonly summary: string;
       readonly createdAt: string;
@@ -78,9 +78,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       readonly tone: "info" | "error";
     }) =>
       orchestrationEngine.dispatch({
-        type: "thread.activity.append",
+        type: "workspace.activity.append",
         commandId: serverCommandId("setup-script-activity"),
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         activity: {
           id: EventId.makeUnsafe(crypto.randomUUID()),
           tone: input.tone,
@@ -107,29 +107,29 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         ? error
         : new OrchestrationDispatchCommandError({
             message:
-              error instanceof Error ? error.message : "Failed to bootstrap thread turn start.",
+              error instanceof Error ? error.message : "Failed to bootstrap workspace turn start.",
             cause,
           });
     };
 
     const dispatchBootstrapTurnStart = (
-      command: Extract<OrchestrationCommand, { type: "thread.turn.start" }>,
+      command: Extract<OrchestrationCommand, { type: "workspace.turn.start" }>,
     ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> =>
       Effect.gen(function* () {
         const bootstrap = command.bootstrap;
         const { bootstrap: _bootstrap, ...finalTurnStartCommand } = command;
-        let createdThread = false;
-        let targetProjectId = bootstrap?.createThread?.projectId;
+        let createdWorkspace = false;
+        let targetProjectId = bootstrap?.createWorkspace?.projectId;
         let targetProjectCwd = bootstrap?.prepareWorktree?.projectCwd;
-        let targetWorktreePath = bootstrap?.createThread?.worktreePath ?? null;
+        let targetWorktreePath = bootstrap?.createWorkspace?.worktreePath ?? null;
 
-        const cleanupCreatedThread = () =>
-          createdThread
+        const cleanupCreatedWorkspace = () =>
+          createdWorkspace
             ? orchestrationEngine
                 .dispatch({
-                  type: "thread.delete",
-                  commandId: serverCommandId("bootstrap-thread-delete"),
-                  threadId: command.threadId,
+                  type: "workspace.delete",
+                  commandId: serverCommandId("bootstrap-workspace-delete"),
+                  workspaceId: command.workspaceId,
                 })
                 .pipe(Effect.ignoreCause({ log: true }))
             : Effect.void;
@@ -142,7 +142,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           const detail =
             input.error instanceof Error ? input.error.message : "Unknown setup failure.";
           return appendSetupScriptActivity({
-            threadId: command.threadId,
+            workspaceId: command.workspaceId,
             kind: "setup-script.failed",
             summary: "Setup script failed to start",
             createdAt: input.requestedAt,
@@ -155,7 +155,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             Effect.ignoreCause({ log: false }),
             Effect.flatMap(() =>
               Effect.logWarning("bootstrap turn start failed to launch setup script", {
-                threadId: command.threadId,
+                workspaceId: command.workspaceId,
                 worktreePath: input.worktreePath,
                 detail,
               }),
@@ -178,7 +178,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           };
           return Effect.all([
             appendSetupScriptActivity({
-              threadId: command.threadId,
+              workspaceId: command.workspaceId,
               kind: "setup-script.requested",
               summary: "Starting setup script",
               createdAt: input.requestedAt,
@@ -186,7 +186,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               tone: "info",
             }),
             appendSetupScriptActivity({
-              threadId: command.threadId,
+              workspaceId: command.workspaceId,
               kind: "setup-script.started",
               summary: "Setup script started",
               createdAt: new Date().toISOString(),
@@ -199,7 +199,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               Effect.logWarning(
                 "bootstrap turn start launched setup script but failed to record setup activity",
                 {
-                  threadId: command.threadId,
+                  workspaceId: command.workspaceId,
                   worktreePath: input.worktreePath,
                   scriptId: input.scriptId,
                   terminalId: input.terminalId,
@@ -219,8 +219,8 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                 const worktreePath = targetWorktreePath;
                 const requestedAt = new Date().toISOString();
                 return projectSetupScriptRunner
-                  .runForThread({
-                    threadId: command.threadId,
+                  .runForWorkspace({
+                    workspaceId: command.workspaceId,
                     ...(targetProjectId ? { projectId: targetProjectId } : {}),
                     ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
                     worktreePath,
@@ -251,21 +251,21 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             : Effect.void;
 
         const bootstrapProgram = Effect.gen(function* () {
-          if (bootstrap?.createThread) {
+          if (bootstrap?.createWorkspace) {
             yield* orchestrationEngine.dispatch({
-              type: "thread.create",
-              commandId: serverCommandId("bootstrap-thread-create"),
-              threadId: command.threadId,
-              projectId: bootstrap.createThread.projectId,
-              title: bootstrap.createThread.title,
-              modelSelection: bootstrap.createThread.modelSelection,
-              runtimeMode: bootstrap.createThread.runtimeMode,
-              interactionMode: bootstrap.createThread.interactionMode,
-              branch: bootstrap.createThread.branch,
-              worktreePath: bootstrap.createThread.worktreePath,
-              createdAt: bootstrap.createThread.createdAt,
+              type: "workspace.create",
+              commandId: serverCommandId("bootstrap-workspace-create"),
+              workspaceId: command.workspaceId,
+              projectId: bootstrap.createWorkspace.projectId,
+              title: bootstrap.createWorkspace.title,
+              modelSelection: bootstrap.createWorkspace.modelSelection,
+              runtimeMode: bootstrap.createWorkspace.runtimeMode,
+              interactionMode: bootstrap.createWorkspace.interactionMode,
+              branch: bootstrap.createWorkspace.branch,
+              worktreePath: bootstrap.createWorkspace.worktreePath,
+              createdAt: bootstrap.createWorkspace.createdAt,
             });
-            createdThread = true;
+            createdWorkspace = true;
           }
 
           if (bootstrap?.prepareWorktree) {
@@ -277,9 +277,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             });
             targetWorktreePath = worktree.worktree.path;
             yield* orchestrationEngine.dispatch({
-              type: "thread.meta.update",
-              commandId: serverCommandId("bootstrap-thread-meta-update"),
-              threadId: command.threadId,
+              type: "workspace.meta.update",
+              commandId: serverCommandId("bootstrap-workspace-meta-update"),
+              workspaceId: command.workspaceId,
               branch: worktree.worktree.branch,
               worktreePath: targetWorktreePath,
             });
@@ -296,7 +296,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             if (Cause.hasInterruptsOnly(cause)) {
               return Effect.fail(dispatchError);
             }
-            return cleanupCreatedThread().pipe(Effect.flatMap(() => Effect.fail(dispatchError)));
+            return cleanupCreatedWorkspace().pipe(Effect.flatMap(() => Effect.fail(dispatchError)));
           }),
         );
       });
@@ -305,7 +305,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       normalizedCommand: OrchestrationCommand,
     ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
       const dispatchEffect =
-        normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
+        normalizedCommand.type === "workspace.turn.start" && normalizedCommand.bootstrap
           ? dispatchBootstrapTurnStart(normalizedCommand)
           : orchestrationEngine
               .dispatch(normalizedCommand)
@@ -369,11 +369,11 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           Effect.gen(function* () {
             const normalizedCommand = yield* normalizeDispatchCommand(command);
             const result = yield* dispatchNormalizedCommand(normalizedCommand);
-            if (normalizedCommand.type === "thread.archive") {
-              yield* terminalManager.close({ threadId: normalizedCommand.threadId }).pipe(
+            if (normalizedCommand.type === "workspace.archive") {
+              yield* terminalManager.close({ workspaceId: normalizedCommand.workspaceId }).pipe(
                 Effect.catch((error) =>
-                  Effect.logWarning("failed to close thread terminals after archive", {
-                    threadId: normalizedCommand.threadId,
+                  Effect.logWarning("failed to close workspace terminals after archive", {
+                    workspaceId: normalizedCommand.workspaceId,
                     error: error.message,
                   }),
                 ),
@@ -406,14 +406,14 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           ),
           { "rpc.aggregate": "orchestration" },
         ),
-      [ORCHESTRATION_WS_METHODS.getFullThreadDiff]: (input) =>
+      [ORCHESTRATION_WS_METHODS.getFullWorkspaceDiff]: (input) =>
         observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.getFullThreadDiff,
-          checkpointDiffQuery.getFullThreadDiff(input).pipe(
+          ORCHESTRATION_WS_METHODS.getFullWorkspaceDiff,
+          checkpointDiffQuery.getFullWorkspaceDiff(input).pipe(
             Effect.mapError(
               (cause) =>
-                new OrchestrationGetFullThreadDiffError({
-                  message: "Failed to load full thread diff",
+                new OrchestrationGetFullWorkspaceDiffError({
+                  message: "Failed to load full workspace diff",
                   cause,
                 }),
             ),
@@ -591,10 +591,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.gitResolvePullRequest, gitManager.resolvePullRequest(input), {
           "rpc.aggregate": "git",
         }),
-      [WS_METHODS.gitPreparePullRequestThread]: (input) =>
+      [WS_METHODS.gitPreparePullRequestWorkspace]: (input) =>
         observeRpcEffect(
-          WS_METHODS.gitPreparePullRequestThread,
-          gitManager.preparePullRequestThread(input),
+          WS_METHODS.gitPreparePullRequestWorkspace,
+          gitManager.preparePullRequestWorkspace(input),
           { "rpc.aggregate": "git" },
         ),
       [WS_METHODS.gitListBranches]: (input) =>

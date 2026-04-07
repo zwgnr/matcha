@@ -2,9 +2,9 @@ import type {
   OrchestrationCommand,
   OrchestrationProject,
   OrchestrationReadModel,
-  OrchestrationThread,
+  OrchestrationWorkspace,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { Effect } from "effect";
 
@@ -17,11 +17,11 @@ function invariantError(commandType: string, detail: string): OrchestrationComma
   });
 }
 
-export function findThreadById(
+export function findWorkspaceById(
   readModel: OrchestrationReadModel,
-  threadId: ThreadId,
-): OrchestrationThread | undefined {
-  return readModel.threads.find((thread) => thread.id === threadId);
+  workspaceId: WorkspaceId,
+): OrchestrationWorkspace | undefined {
+  return readModel.workspaces.find((workspace) => workspace.id === workspaceId);
 }
 
 export function findProjectById(
@@ -31,11 +31,11 @@ export function findProjectById(
   return readModel.projects.find((project) => project.id === projectId);
 }
 
-export function listThreadsByProjectId(
+export function listWorkspacesByProjectId(
   readModel: OrchestrationReadModel,
   projectId: ProjectId,
-): ReadonlyArray<OrchestrationThread> {
-  return readModel.threads.filter((thread) => thread.projectId === projectId);
+): ReadonlyArray<OrchestrationWorkspace> {
+  return readModel.workspaces.filter((workspace) => workspace.projectId === projectId);
 }
 
 export function requireProject(input: {
@@ -71,73 +71,73 @@ export function requireProjectAbsent(input: {
   );
 }
 
-export function requireThread(input: {
+export function requireWorkspace(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
-}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
-  const thread = findThreadById(input.readModel, input.threadId);
-  if (thread) {
-    return Effect.succeed(thread);
+  readonly workspaceId: WorkspaceId;
+}): Effect.Effect<OrchestrationWorkspace, OrchestrationCommandInvariantError> {
+  const workspace = findWorkspaceById(input.readModel, input.workspaceId);
+  if (workspace) {
+    return Effect.succeed(workspace);
   }
   return Effect.fail(
     invariantError(
       input.command.type,
-      `Thread '${input.threadId}' does not exist for command '${input.command.type}'.`,
+      `Workspace '${input.workspaceId}' does not exist for command '${input.command.type}'.`,
     ),
   );
 }
 
-export function requireThreadArchived(input: {
+export function requireWorkspaceArchived(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
-}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
-  return requireThread(input).pipe(
-    Effect.flatMap((thread) =>
-      thread.archivedAt !== null
-        ? Effect.succeed(thread)
+  readonly workspaceId: WorkspaceId;
+}): Effect.Effect<OrchestrationWorkspace, OrchestrationCommandInvariantError> {
+  return requireWorkspace(input).pipe(
+    Effect.flatMap((workspace) =>
+      workspace.archivedAt !== null
+        ? Effect.succeed(workspace)
         : Effect.fail(
             invariantError(
               input.command.type,
-              `Thread '${input.threadId}' is not archived for command '${input.command.type}'.`,
+              `Workspace '${input.workspaceId}' is not archived for command '${input.command.type}'.`,
             ),
           ),
     ),
   );
 }
 
-export function requireThreadNotArchived(input: {
+export function requireWorkspaceNotArchived(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
-}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
-  return requireThread(input).pipe(
-    Effect.flatMap((thread) =>
-      thread.archivedAt === null
-        ? Effect.succeed(thread)
+  readonly workspaceId: WorkspaceId;
+}): Effect.Effect<OrchestrationWorkspace, OrchestrationCommandInvariantError> {
+  return requireWorkspace(input).pipe(
+    Effect.flatMap((workspace) =>
+      workspace.archivedAt === null
+        ? Effect.succeed(workspace)
         : Effect.fail(
             invariantError(
               input.command.type,
-              `Thread '${input.threadId}' is already archived and cannot handle command '${input.command.type}'.`,
+              `Workspace '${input.workspaceId}' is already archived and cannot handle command '${input.command.type}'.`,
             ),
           ),
     ),
   );
 }
 
-export function requireThreadAbsent(input: {
+export function requireWorkspaceAbsent(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
+  readonly workspaceId: WorkspaceId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  if (!findThreadById(input.readModel, input.threadId)) {
+  if (!findWorkspaceById(input.readModel, input.workspaceId)) {
     return Effect.void;
   }
   return Effect.fail(
     invariantError(
       input.command.type,
-      `Thread '${input.threadId}' already exists and cannot be created twice.`,
+      `Workspace '${input.workspaceId}' already exists and cannot be created twice.`,
     ),
   );
 }

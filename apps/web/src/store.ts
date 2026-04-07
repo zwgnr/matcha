@@ -4,11 +4,11 @@ import {
   type OrchestrationProposedPlan,
   type ProjectId,
   type ProviderKind,
-  ThreadId,
+  WorkspaceId,
   type OrchestrationReadModel,
   type OrchestrationSession,
   type OrchestrationCheckpointSummary,
-  type OrchestrationThread,
+  type OrchestrationWorkspace,
   type OrchestrationSessionStatus,
 } from "@matcha/contracts";
 import { resolveModelSlugForProvider } from "@matcha/shared/model";
@@ -19,47 +19,52 @@ import {
   derivePendingApprovals,
   derivePendingUserInputs,
 } from "./session-logic";
-import { sanitizeThreadErrorMessage } from "./rpc/transportError";
-import { type ChatMessage, type Project, type SidebarThreadSummary, type Thread } from "./types";
+import { sanitizeWorkspaceErrorMessage } from "./rpc/transportError";
+import {
+  type ChatMessage,
+  type Project,
+  type SidebarWorkspaceSummary,
+  type Workspace,
+} from "./types";
 
 // ── State ────────────────────────────────────────────────────────────
 
 export interface AppState {
   projects: Project[];
-  threads: Thread[];
-  sidebarThreadsById: Record<string, SidebarThreadSummary>;
-  threadIdsByProjectId: Record<string, ThreadId[]>;
+  workspaces: Workspace[];
+  sidebarWorkspacesById: Record<string, SidebarWorkspaceSummary>;
+  workspaceIdsByProjectId: Record<string, WorkspaceId[]>;
   bootstrapComplete: boolean;
 }
 
 const initialState: AppState = {
   projects: [],
-  threads: [],
-  sidebarThreadsById: {},
-  threadIdsByProjectId: {},
+  workspaces: [],
+  sidebarWorkspacesById: {},
+  workspaceIdsByProjectId: {},
   bootstrapComplete: false,
 };
-const MAX_THREAD_MESSAGES = 2_000;
-const MAX_THREAD_CHECKPOINTS = 500;
-const MAX_THREAD_PROPOSED_PLANS = 200;
-const MAX_THREAD_ACTIVITIES = 500;
-const EMPTY_THREAD_IDS: ThreadId[] = [];
+const MAX_WORKSPACE_MESSAGES = 2_000;
+const MAX_WORKSPACE_CHECKPOINTS = 500;
+const MAX_WORKSPACE_PROPOSED_PLANS = 200;
+const MAX_WORKSPACE_ACTIVITIES = 500;
+const EMPTY_WORKSPACE_IDS: WorkspaceId[] = [];
 
 // ── Pure helpers ──────────────────────────────────────────────────────
 
-function updateThread(
-  threads: Thread[],
-  threadId: ThreadId,
-  updater: (t: Thread) => Thread,
-): Thread[] {
+function updateWorkspace(
+  workspaces: Workspace[],
+  workspaceId: WorkspaceId,
+  updater: (t: Workspace) => Workspace,
+): Workspace[] {
   let changed = false;
-  const next = threads.map((t) => {
-    if (t.id !== threadId) return t;
+  const next = workspaces.map((t) => {
+    if (t.id !== workspaceId) return t;
     const updated = updater(t);
     if (updated !== t) changed = true;
     return updated;
   });
-  return changed ? next : threads;
+  return changed ? next : workspaces;
 }
 
 function updateProject(
@@ -94,7 +99,7 @@ function mapProjectScripts(scripts: ReadonlyArray<Project["scripts"][number]>): 
   return scripts.map((script) => ({ ...script }));
 }
 
-function mapSession(session: OrchestrationSession): Thread["session"] {
+function mapSession(session: OrchestrationSession): Workspace["session"] {
   return {
     provider: toLegacyProvider(session.providerName),
     status: toLegacySessionStatus(session.status),
@@ -128,13 +133,15 @@ function mapMessage(message: OrchestrationMessage): ChatMessage {
   };
 }
 
-function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): Thread["proposedPlans"][number] {
+function mapProposedPlan(
+  proposedPlan: OrchestrationProposedPlan,
+): Workspace["proposedPlans"][number] {
   return {
     id: proposedPlan.id,
     turnId: proposedPlan.turnId,
     planMarkdown: proposedPlan.planMarkdown,
     implementedAt: proposedPlan.implementedAt,
-    implementationThreadId: proposedPlan.implementationThreadId,
+    implementationWorkspaceId: proposedPlan.implementationWorkspaceId,
     createdAt: proposedPlan.createdAt,
     updatedAt: proposedPlan.updatedAt,
   };
@@ -142,7 +149,7 @@ function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): Thread["propo
 
 function mapTurnDiffSummary(
   checkpoint: OrchestrationCheckpointSummary,
-): Thread["turnDiffSummaries"][number] {
+): Workspace["turnDiffSummaries"][number] {
   return {
     turnId: checkpoint.turnId,
     completedAt: checkpoint.completedAt,
@@ -154,28 +161,28 @@ function mapTurnDiffSummary(
   };
 }
 
-function mapThread(thread: OrchestrationThread): Thread {
+function mapWorkspace(workspace: OrchestrationWorkspace): Workspace {
   return {
-    id: thread.id,
-    codexThreadId: null,
-    projectId: thread.projectId,
-    title: thread.title,
-    modelSelection: normalizeModelSelection(thread.modelSelection),
-    runtimeMode: thread.runtimeMode,
-    interactionMode: thread.interactionMode,
-    session: thread.session ? mapSession(thread.session) : null,
-    messages: thread.messages.map(mapMessage),
-    proposedPlans: thread.proposedPlans.map(mapProposedPlan),
-    error: sanitizeThreadErrorMessage(thread.session?.lastError),
-    createdAt: thread.createdAt,
-    archivedAt: thread.archivedAt,
-    updatedAt: thread.updatedAt,
-    latestTurn: thread.latestTurn,
-    pendingSourceProposedPlan: thread.latestTurn?.sourceProposedPlan,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
-    turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
-    activities: thread.activities.map((activity) => ({ ...activity })),
+    id: workspace.id,
+    codexWorkspaceId: null,
+    projectId: workspace.projectId,
+    title: workspace.title,
+    modelSelection: normalizeModelSelection(workspace.modelSelection),
+    runtimeMode: workspace.runtimeMode,
+    interactionMode: workspace.interactionMode,
+    session: workspace.session ? mapSession(workspace.session) : null,
+    messages: workspace.messages.map(mapMessage),
+    proposedPlans: workspace.proposedPlans.map(mapProposedPlan),
+    error: sanitizeWorkspaceErrorMessage(workspace.session?.lastError),
+    createdAt: workspace.createdAt,
+    archivedAt: workspace.archivedAt,
+    updatedAt: workspace.updatedAt,
+    latestTurn: workspace.latestTurn,
+    pendingSourceProposedPlan: workspace.latestTurn?.sourceProposedPlan,
+    branch: workspace.branch,
+    worktreePath: workspace.worktreePath,
+    turnDiffSummaries: workspace.checkpoints.map(mapTurnDiffSummary),
+    activities: workspace.activities.map((activity) => ({ ...activity })),
   };
 }
 
@@ -194,7 +201,7 @@ function mapProject(project: OrchestrationReadModel["projects"][number]): Projec
 }
 
 function getLatestUserMessageAt(
-  messages: ReadonlyArray<Thread["messages"][number]>,
+  messages: ReadonlyArray<Workspace["messages"][number]>,
 ): string | null {
   let latestUserMessageAt: string | null = null;
 
@@ -210,31 +217,31 @@ function getLatestUserMessageAt(
   return latestUserMessageAt;
 }
 
-function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary {
+function buildSidebarWorkspaceSummary(workspace: Workspace): SidebarWorkspaceSummary {
   return {
-    id: thread.id,
-    projectId: thread.projectId,
-    title: thread.title,
-    interactionMode: thread.interactionMode,
-    session: thread.session,
-    createdAt: thread.createdAt,
-    archivedAt: thread.archivedAt,
-    updatedAt: thread.updatedAt,
-    latestTurn: thread.latestTurn,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
-    latestUserMessageAt: getLatestUserMessageAt(thread.messages),
-    hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
-    hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
+    id: workspace.id,
+    projectId: workspace.projectId,
+    title: workspace.title,
+    interactionMode: workspace.interactionMode,
+    session: workspace.session,
+    createdAt: workspace.createdAt,
+    archivedAt: workspace.archivedAt,
+    updatedAt: workspace.updatedAt,
+    latestTurn: workspace.latestTurn,
+    branch: workspace.branch,
+    worktreePath: workspace.worktreePath,
+    latestUserMessageAt: getLatestUserMessageAt(workspace.messages),
+    hasPendingApprovals: derivePendingApprovals(workspace.activities).length > 0,
+    hasPendingUserInput: derivePendingUserInputs(workspace.activities).length > 0,
     hasActionableProposedPlan: hasActionableProposedPlan(
-      findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
+      findLatestProposedPlan(workspace.proposedPlans, workspace.latestTurn?.turnId ?? null),
     ),
   };
 }
 
-function sidebarThreadSummariesEqual(
-  left: SidebarThreadSummary | undefined,
-  right: SidebarThreadSummary,
+function sidebarWorkspaceSummariesEqual(
+  left: SidebarWorkspaceSummary | undefined,
+  right: SidebarWorkspaceSummary,
 ): boolean {
   return (
     left !== undefined &&
@@ -256,61 +263,64 @@ function sidebarThreadSummariesEqual(
   );
 }
 
-function appendThreadIdByProjectId(
-  threadIdsByProjectId: Record<string, ThreadId[]>,
+function appendWorkspaceIdByProjectId(
+  workspaceIdsByProjectId: Record<string, WorkspaceId[]>,
   projectId: ProjectId,
-  threadId: ThreadId,
-): Record<string, ThreadId[]> {
-  const existingThreadIds = threadIdsByProjectId[projectId] ?? EMPTY_THREAD_IDS;
-  if (existingThreadIds.includes(threadId)) {
-    return threadIdsByProjectId;
+  workspaceId: WorkspaceId,
+): Record<string, WorkspaceId[]> {
+  const existingWorkspaceIds = workspaceIdsByProjectId[projectId] ?? EMPTY_WORKSPACE_IDS;
+  if (existingWorkspaceIds.includes(workspaceId)) {
+    return workspaceIdsByProjectId;
   }
   return {
-    ...threadIdsByProjectId,
-    [projectId]: [...existingThreadIds, threadId],
+    ...workspaceIdsByProjectId,
+    [projectId]: [...existingWorkspaceIds, workspaceId],
   };
 }
 
-function removeThreadIdByProjectId(
-  threadIdsByProjectId: Record<string, ThreadId[]>,
+function removeWorkspaceIdByProjectId(
+  workspaceIdsByProjectId: Record<string, WorkspaceId[]>,
   projectId: ProjectId,
-  threadId: ThreadId,
-): Record<string, ThreadId[]> {
-  const existingThreadIds = threadIdsByProjectId[projectId] ?? EMPTY_THREAD_IDS;
-  if (!existingThreadIds.includes(threadId)) {
-    return threadIdsByProjectId;
+  workspaceId: WorkspaceId,
+): Record<string, WorkspaceId[]> {
+  const existingWorkspaceIds = workspaceIdsByProjectId[projectId] ?? EMPTY_WORKSPACE_IDS;
+  if (!existingWorkspaceIds.includes(workspaceId)) {
+    return workspaceIdsByProjectId;
   }
-  const nextThreadIds = existingThreadIds.filter(
-    (existingThreadId) => existingThreadId !== threadId,
+  const nextWorkspaceIds = existingWorkspaceIds.filter(
+    (existingWorkspaceId) => existingWorkspaceId !== workspaceId,
   );
-  if (nextThreadIds.length === existingThreadIds.length) {
-    return threadIdsByProjectId;
+  if (nextWorkspaceIds.length === existingWorkspaceIds.length) {
+    return workspaceIdsByProjectId;
   }
-  if (nextThreadIds.length === 0) {
-    const nextThreadIdsByProjectId = { ...threadIdsByProjectId };
-    delete nextThreadIdsByProjectId[projectId];
-    return nextThreadIdsByProjectId;
+  if (nextWorkspaceIds.length === 0) {
+    const nextWorkspaceIdsByProjectId = { ...workspaceIdsByProjectId };
+    delete nextWorkspaceIdsByProjectId[projectId];
+    return nextWorkspaceIdsByProjectId;
   }
   return {
-    ...threadIdsByProjectId,
-    [projectId]: nextThreadIds,
+    ...workspaceIdsByProjectId,
+    [projectId]: nextWorkspaceIds,
   };
 }
 
-function buildThreadIdsByProjectId(threads: ReadonlyArray<Thread>): Record<string, ThreadId[]> {
-  const threadIdsByProjectId: Record<string, ThreadId[]> = {};
-  for (const thread of threads) {
-    const existingThreadIds = threadIdsByProjectId[thread.projectId] ?? EMPTY_THREAD_IDS;
-    threadIdsByProjectId[thread.projectId] = [...existingThreadIds, thread.id];
+function buildWorkspaceIdsByProjectId(
+  workspaces: ReadonlyArray<Workspace>,
+): Record<string, WorkspaceId[]> {
+  const workspaceIdsByProjectId: Record<string, WorkspaceId[]> = {};
+  for (const workspace of workspaces) {
+    const existingWorkspaceIds =
+      workspaceIdsByProjectId[workspace.projectId] ?? EMPTY_WORKSPACE_IDS;
+    workspaceIdsByProjectId[workspace.projectId] = [...existingWorkspaceIds, workspace.id];
   }
-  return threadIdsByProjectId;
+  return workspaceIdsByProjectId;
 }
 
-function buildSidebarThreadsById(
-  threads: ReadonlyArray<Thread>,
-): Record<string, SidebarThreadSummary> {
+function buildSidebarWorkspacesById(
+  workspaces: ReadonlyArray<Workspace>,
+): Record<string, SidebarWorkspaceSummary> {
   return Object.fromEntries(
-    threads.map((thread) => [thread.id, buildSidebarThreadSummary(thread)]),
+    workspaces.map((workspace) => [workspace.id, buildSidebarWorkspaceSummary(workspace)]),
   );
 }
 
@@ -325,8 +335,8 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
 }
 
 function compareActivities(
-  left: Thread["activities"][number],
-  right: Thread["activities"][number],
+  left: Workspace["activities"][number],
+  right: Workspace["activities"][number],
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -342,15 +352,15 @@ function compareActivities(
 }
 
 function buildLatestTurn(params: {
-  previous: Thread["latestTurn"];
-  turnId: NonNullable<Thread["latestTurn"]>["turnId"];
-  state: NonNullable<Thread["latestTurn"]>["state"];
+  previous: Workspace["latestTurn"];
+  turnId: NonNullable<Workspace["latestTurn"]>["turnId"];
+  state: NonNullable<Workspace["latestTurn"]>["state"];
   requestedAt: string;
   startedAt: string | null;
   completedAt: string | null;
-  assistantMessageId: NonNullable<Thread["latestTurn"]>["assistantMessageId"];
-  sourceProposedPlan?: Thread["pendingSourceProposedPlan"];
-}): NonNullable<Thread["latestTurn"]> {
+  assistantMessageId: NonNullable<Workspace["latestTurn"]>["assistantMessageId"];
+  sourceProposedPlan?: Workspace["pendingSourceProposedPlan"];
+}): NonNullable<Workspace["latestTurn"]> {
   const resolvedPlan =
     params.previous?.turnId === params.turnId
       ? params.previous.sourceProposedPlan
@@ -367,10 +377,10 @@ function buildLatestTurn(params: {
 }
 
 function rebindTurnDiffSummariesForAssistantMessage(
-  turnDiffSummaries: ReadonlyArray<Thread["turnDiffSummaries"][number]>,
-  turnId: Thread["turnDiffSummaries"][number]["turnId"],
-  assistantMessageId: NonNullable<Thread["latestTurn"]>["assistantMessageId"],
-): Thread["turnDiffSummaries"] {
+  turnDiffSummaries: ReadonlyArray<Workspace["turnDiffSummaries"][number]>,
+  turnId: Workspace["turnDiffSummaries"][number]["turnId"],
+  assistantMessageId: NonNullable<Workspace["latestTurn"]>["assistantMessageId"],
+): Workspace["turnDiffSummaries"] {
   let changed = false;
   const nextSummaries = turnDiffSummaries.map((summary) => {
     if (summary.turnId !== turnId || summary.assistantMessageId === assistantMessageId) {
@@ -385,7 +395,7 @@ function rebindTurnDiffSummariesForAssistantMessage(
   return changed ? nextSummaries : [...turnDiffSummaries];
 }
 
-function retainThreadMessagesAfterRevert(
+function retainWorkspaceMessagesAfterRevert(
   messages: ReadonlyArray<ChatMessage>,
   retainedTurnIds: ReadonlySet<string>,
   turnCount: number,
@@ -456,19 +466,19 @@ function retainThreadMessagesAfterRevert(
   return messages.filter((message) => retainedMessageIds.has(message.id));
 }
 
-function retainThreadActivitiesAfterRevert(
-  activities: ReadonlyArray<Thread["activities"][number]>,
+function retainWorkspaceActivitiesAfterRevert(
+  activities: ReadonlyArray<Workspace["activities"][number]>,
   retainedTurnIds: ReadonlySet<string>,
-): Thread["activities"] {
+): Workspace["activities"] {
   return activities.filter(
     (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
   );
 }
 
-function retainThreadProposedPlansAfterRevert(
-  proposedPlans: ReadonlyArray<Thread["proposedPlans"][number]>,
+function retainWorkspaceProposedPlansAfterRevert(
+  proposedPlans: ReadonlyArray<Workspace["proposedPlans"][number]>,
   retainedTurnIds: ReadonlySet<string>,
-): Thread["proposedPlans"] {
+): Workspace["proposedPlans"] {
   return proposedPlans.filter(
     (proposedPlan) => proposedPlan.turnId === null || retainedTurnIds.has(proposedPlan.turnId),
   );
@@ -532,43 +542,43 @@ function attachmentPreviewRoutePath(attachmentId: string): string {
   return `/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
-function updateThreadState(
+function updateWorkspaceState(
   state: AppState,
-  threadId: ThreadId,
-  updater: (thread: Thread) => Thread,
+  workspaceId: WorkspaceId,
+  updater: (workspace: Workspace) => Workspace,
 ): AppState {
-  let updatedThread: Thread | null = null;
-  const threads = updateThread(state.threads, threadId, (thread) => {
-    const nextThread = updater(thread);
-    if (nextThread !== thread) {
-      updatedThread = nextThread;
+  let updatedWorkspace: Workspace | null = null;
+  const workspaces = updateWorkspace(state.workspaces, workspaceId, (workspace) => {
+    const nextWorkspace = updater(workspace);
+    if (nextWorkspace !== workspace) {
+      updatedWorkspace = nextWorkspace;
     }
-    return nextThread;
+    return nextWorkspace;
   });
-  if (threads === state.threads || updatedThread === null) {
+  if (workspaces === state.workspaces || updatedWorkspace === null) {
     return state;
   }
 
-  const nextSummary = buildSidebarThreadSummary(updatedThread);
-  const previousSummary = state.sidebarThreadsById[threadId];
-  const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
-    ? state.sidebarThreadsById
+  const nextSummary = buildSidebarWorkspaceSummary(updatedWorkspace);
+  const previousSummary = state.sidebarWorkspacesById[workspaceId];
+  const sidebarWorkspacesById = sidebarWorkspaceSummariesEqual(previousSummary, nextSummary)
+    ? state.sidebarWorkspacesById
     : {
-        ...state.sidebarThreadsById,
-        [threadId]: nextSummary,
+        ...state.sidebarWorkspacesById,
+        [workspaceId]: nextSummary,
       };
 
-  if (sidebarThreadsById === state.sidebarThreadsById) {
+  if (sidebarWorkspacesById === state.sidebarWorkspacesById) {
     return {
       ...state,
-      threads,
+      workspaces,
     };
   }
 
   return {
     ...state,
-    threads,
-    sidebarThreadsById,
+    workspaces,
+    sidebarWorkspacesById,
   };
 }
 
@@ -578,15 +588,17 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
   const projects = readModel.projects
     .filter((project) => project.deletedAt === null)
     .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
-  const sidebarThreadsById = buildSidebarThreadsById(threads);
-  const threadIdsByProjectId = buildThreadIdsByProjectId(threads);
+  const workspaces = readModel.workspaces
+    .filter((workspace) => workspace.deletedAt === null)
+    .map(mapWorkspace);
+  const sidebarWorkspacesById = buildSidebarWorkspacesById(workspaces);
+  const workspaceIdsByProjectId = buildWorkspaceIdsByProjectId(workspaces);
   return {
     ...state,
     projects,
-    threads,
-    sidebarThreadsById,
-    threadIdsByProjectId,
+    workspaces,
+    sidebarWorkspacesById,
+    workspaceIdsByProjectId,
     bootstrapComplete: true,
   };
 }
@@ -642,10 +654,12 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       return projects.length === state.projects.length ? state : { ...state, projects };
     }
 
-    case "thread.created": {
-      const existing = state.threads.find((thread) => thread.id === event.payload.threadId);
-      const nextThread = mapThread({
-        id: event.payload.threadId,
+    case "workspace.created": {
+      const existing = state.workspaces.find(
+        (workspace) => workspace.id === event.payload.workspaceId,
+      );
+      const nextWorkspace = mapWorkspace({
+        id: event.payload.workspaceId,
         projectId: event.payload.projectId,
         title: event.payload.title,
         modelSelection: event.payload.modelSelection,
@@ -664,76 +678,86 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         checkpoints: [],
         session: null,
       });
-      const threads = existing
-        ? state.threads.map((thread) => (thread.id === nextThread.id ? nextThread : thread))
-        : [...state.threads, nextThread];
-      const nextSummary = buildSidebarThreadSummary(nextThread);
-      const previousSummary = state.sidebarThreadsById[nextThread.id];
-      const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
-        ? state.sidebarThreadsById
+      const workspaces = existing
+        ? state.workspaces.map((workspace) =>
+            workspace.id === nextWorkspace.id ? nextWorkspace : workspace,
+          )
+        : [...state.workspaces, nextWorkspace];
+      const nextSummary = buildSidebarWorkspaceSummary(nextWorkspace);
+      const previousSummary = state.sidebarWorkspacesById[nextWorkspace.id];
+      const sidebarWorkspacesById = sidebarWorkspaceSummariesEqual(previousSummary, nextSummary)
+        ? state.sidebarWorkspacesById
         : {
-            ...state.sidebarThreadsById,
-            [nextThread.id]: nextSummary,
+            ...state.sidebarWorkspacesById,
+            [nextWorkspace.id]: nextSummary,
           };
-      const nextThreadIdsByProjectId =
-        existing !== undefined && existing.projectId !== nextThread.projectId
-          ? removeThreadIdByProjectId(state.threadIdsByProjectId, existing.projectId, existing.id)
-          : state.threadIdsByProjectId;
-      const threadIdsByProjectId = appendThreadIdByProjectId(
-        nextThreadIdsByProjectId,
-        nextThread.projectId,
-        nextThread.id,
+      const nextWorkspaceIdsByProjectId =
+        existing !== undefined && existing.projectId !== nextWorkspace.projectId
+          ? removeWorkspaceIdByProjectId(
+              state.workspaceIdsByProjectId,
+              existing.projectId,
+              existing.id,
+            )
+          : state.workspaceIdsByProjectId;
+      const workspaceIdsByProjectId = appendWorkspaceIdByProjectId(
+        nextWorkspaceIdsByProjectId,
+        nextWorkspace.projectId,
+        nextWorkspace.id,
       );
       return {
         ...state,
-        threads,
-        sidebarThreadsById,
-        threadIdsByProjectId,
+        workspaces,
+        sidebarWorkspacesById,
+        workspaceIdsByProjectId,
       };
     }
 
-    case "thread.deleted": {
-      const threads = state.threads.filter((thread) => thread.id !== event.payload.threadId);
-      if (threads.length === state.threads.length) {
+    case "workspace.deleted": {
+      const workspaces = state.workspaces.filter(
+        (workspace) => workspace.id !== event.payload.workspaceId,
+      );
+      if (workspaces.length === state.workspaces.length) {
         return state;
       }
-      const deletedThread = state.threads.find((thread) => thread.id === event.payload.threadId);
-      const sidebarThreadsById = { ...state.sidebarThreadsById };
-      delete sidebarThreadsById[event.payload.threadId];
-      const threadIdsByProjectId = deletedThread
-        ? removeThreadIdByProjectId(
-            state.threadIdsByProjectId,
-            deletedThread.projectId,
-            deletedThread.id,
+      const deletedWorkspace = state.workspaces.find(
+        (workspace) => workspace.id === event.payload.workspaceId,
+      );
+      const sidebarWorkspacesById = { ...state.sidebarWorkspacesById };
+      delete sidebarWorkspacesById[event.payload.workspaceId];
+      const workspaceIdsByProjectId = deletedWorkspace
+        ? removeWorkspaceIdByProjectId(
+            state.workspaceIdsByProjectId,
+            deletedWorkspace.projectId,
+            deletedWorkspace.id,
           )
-        : state.threadIdsByProjectId;
+        : state.workspaceIdsByProjectId;
       return {
         ...state,
-        threads,
-        sidebarThreadsById,
-        threadIdsByProjectId,
+        workspaces,
+        sidebarWorkspacesById,
+        workspaceIdsByProjectId,
       };
     }
 
-    case "thread.archived": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.archived": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         archivedAt: event.payload.archivedAt,
         updatedAt: event.payload.updatedAt,
       }));
     }
 
-    case "thread.unarchived": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.unarchived": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         archivedAt: null,
         updatedAt: event.payload.updatedAt,
       }));
     }
 
-    case "thread.meta-updated": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.meta-updated": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
@@ -746,25 +770,25 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       }));
     }
 
-    case "thread.runtime-mode-set": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.runtime-mode-set": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         runtimeMode: event.payload.runtimeMode,
         updatedAt: event.payload.updatedAt,
       }));
     }
 
-    case "thread.interaction-mode-set": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.interaction-mode-set": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         interactionMode: event.payload.interactionMode,
         updatedAt: event.payload.updatedAt,
       }));
     }
 
-    case "thread.turn-start-requested": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.turn-start-requested": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
           : {}),
@@ -775,17 +799,17 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       }));
     }
 
-    case "thread.turn-interrupt-requested": {
+    case "workspace.turn-interrupt-requested": {
       if (event.payload.turnId === undefined) {
         return state;
       }
-      return updateThreadState(state, event.payload.threadId, (thread) => {
-        const latestTurn = thread.latestTurn;
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => {
+        const latestTurn = workspace.latestTurn;
         if (latestTurn === null || latestTurn.turnId !== event.payload.turnId) {
-          return thread;
+          return workspace;
         }
         return {
-          ...thread,
+          ...workspace,
           latestTurn: buildLatestTurn({
             previous: latestTurn,
             turnId: event.payload.turnId,
@@ -800,8 +824,8 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       });
     }
 
-    case "thread.message-sent": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "workspace.message-sent": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => {
         const message = mapMessage({
           id: event.payload.messageId,
           role: event.payload.role,
@@ -814,9 +838,9 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
         });
-        const existingMessage = thread.messages.find((entry) => entry.id === message.id);
+        const existingMessage = workspace.messages.find((entry) => entry.id === message.id);
         const messages = existingMessage
-          ? thread.messages.map((entry) =>
+          ? workspace.messages.map((entry) =>
               entry.id !== message.id
                 ? entry
                 : {
@@ -840,49 +864,49 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
                       : {}),
                   },
             )
-          : [...thread.messages, message];
-        const cappedMessages = messages.slice(-MAX_THREAD_MESSAGES);
+          : [...workspace.messages, message];
+        const cappedMessages = messages.slice(-MAX_WORKSPACE_MESSAGES);
         const turnDiffSummaries =
           event.payload.role === "assistant" && event.payload.turnId !== null
             ? rebindTurnDiffSummariesForAssistantMessage(
-                thread.turnDiffSummaries,
+                workspace.turnDiffSummaries,
                 event.payload.turnId,
                 event.payload.messageId,
               )
-            : thread.turnDiffSummaries;
-        const latestTurn: Thread["latestTurn"] =
+            : workspace.turnDiffSummaries;
+        const latestTurn: Workspace["latestTurn"] =
           event.payload.role === "assistant" &&
           event.payload.turnId !== null &&
-          (thread.latestTurn === null || thread.latestTurn.turnId === event.payload.turnId)
+          (workspace.latestTurn === null || workspace.latestTurn.turnId === event.payload.turnId)
             ? buildLatestTurn({
-                previous: thread.latestTurn,
+                previous: workspace.latestTurn,
                 turnId: event.payload.turnId,
                 state: event.payload.streaming
                   ? "running"
-                  : thread.latestTurn?.state === "interrupted"
+                  : workspace.latestTurn?.state === "interrupted"
                     ? "interrupted"
-                    : thread.latestTurn?.state === "error"
+                    : workspace.latestTurn?.state === "error"
                       ? "error"
                       : "completed",
                 requestedAt:
-                  thread.latestTurn?.turnId === event.payload.turnId
-                    ? thread.latestTurn.requestedAt
+                  workspace.latestTurn?.turnId === event.payload.turnId
+                    ? workspace.latestTurn.requestedAt
                     : event.payload.createdAt,
                 startedAt:
-                  thread.latestTurn?.turnId === event.payload.turnId
-                    ? (thread.latestTurn.startedAt ?? event.payload.createdAt)
+                  workspace.latestTurn?.turnId === event.payload.turnId
+                    ? (workspace.latestTurn.startedAt ?? event.payload.createdAt)
                     : event.payload.createdAt,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
+                sourceProposedPlan: workspace.pendingSourceProposedPlan,
                 completedAt: event.payload.streaming
-                  ? thread.latestTurn?.turnId === event.payload.turnId
-                    ? (thread.latestTurn.completedAt ?? null)
+                  ? workspace.latestTurn?.turnId === event.payload.turnId
+                    ? (workspace.latestTurn.completedAt ?? null)
                     : null
                   : event.payload.updatedAt,
                 assistantMessageId: event.payload.messageId,
               })
-            : thread.latestTurn;
+            : workspace.latestTurn;
         return {
-          ...thread,
+          ...workspace,
           messages: cappedMessages,
           turnDiffSummaries,
           latestTurn,
@@ -891,45 +915,45 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       });
     }
 
-    case "thread.session-set": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "workspace.session-set": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => ({
+        ...workspace,
         session: mapSession(event.payload.session),
-        error: sanitizeThreadErrorMessage(event.payload.session.lastError),
+        error: sanitizeWorkspaceErrorMessage(event.payload.session.lastError),
         latestTurn:
           event.payload.session.status === "running" && event.payload.session.activeTurnId !== null
             ? buildLatestTurn({
-                previous: thread.latestTurn,
+                previous: workspace.latestTurn,
                 turnId: event.payload.session.activeTurnId,
                 state: "running",
                 requestedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.requestedAt
+                  workspace.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? workspace.latestTurn.requestedAt
                     : event.payload.session.updatedAt,
                 startedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? (thread.latestTurn.startedAt ?? event.payload.session.updatedAt)
+                  workspace.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? (workspace.latestTurn.startedAt ?? event.payload.session.updatedAt)
                     : event.payload.session.updatedAt,
                 completedAt: null,
                 assistantMessageId:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.assistantMessageId
+                  workspace.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? workspace.latestTurn.assistantMessageId
                     : null,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
+                sourceProposedPlan: workspace.pendingSourceProposedPlan,
               })
-            : thread.latestTurn,
+            : workspace.latestTurn,
         updatedAt: event.occurredAt,
       }));
     }
 
-    case "thread.session-stop-requested": {
-      return updateThreadState(state, event.payload.threadId, (thread) =>
-        thread.session === null
-          ? thread
+    case "workspace.session-stop-requested": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) =>
+        workspace.session === null
+          ? workspace
           : {
-              ...thread,
+              ...workspace,
               session: {
-                ...thread.session,
+                ...workspace.session,
                 status: "closed",
                 orchestrationStatus: "stopped",
                 activeTurnId: undefined,
@@ -940,28 +964,28 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       );
     }
 
-    case "thread.proposed-plan-upserted": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "workspace.proposed-plan-upserted": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => {
         const proposedPlan = mapProposedPlan(event.payload.proposedPlan);
         const proposedPlans = [
-          ...thread.proposedPlans.filter((entry) => entry.id !== proposedPlan.id),
+          ...workspace.proposedPlans.filter((entry) => entry.id !== proposedPlan.id),
           proposedPlan,
         ]
           .toSorted(
             (left, right) =>
               left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
           )
-          .slice(-MAX_THREAD_PROPOSED_PLANS);
+          .slice(-MAX_WORKSPACE_PROPOSED_PLANS);
         return {
-          ...thread,
+          ...workspace,
           proposedPlans,
           updatedAt: event.occurredAt,
         };
       });
     }
 
-    case "thread.turn-diff-completed": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "workspace.turn-diff-completed": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => {
         const checkpoint = mapTurnDiffSummary({
           turnId: event.payload.turnId,
           checkpointTurnCount: event.payload.checkpointTurnCount,
@@ -971,14 +995,14 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
           assistantMessageId: event.payload.assistantMessageId,
           completedAt: event.payload.completedAt,
         });
-        const existing = thread.turnDiffSummaries.find(
+        const existing = workspace.turnDiffSummaries.find(
           (entry) => entry.turnId === checkpoint.turnId,
         );
         if (existing && existing.status !== "missing" && checkpoint.status === "missing") {
-          return thread;
+          return workspace;
         }
         const turnDiffSummaries = [
-          ...thread.turnDiffSummaries.filter((entry) => entry.turnId !== checkpoint.turnId),
+          ...workspace.turnDiffSummaries.filter((entry) => entry.turnId !== checkpoint.turnId),
           checkpoint,
         ]
           .toSorted(
@@ -986,22 +1010,22 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
               (left.checkpointTurnCount ?? Number.MAX_SAFE_INTEGER) -
               (right.checkpointTurnCount ?? Number.MAX_SAFE_INTEGER),
           )
-          .slice(-MAX_THREAD_CHECKPOINTS);
+          .slice(-MAX_WORKSPACE_CHECKPOINTS);
         const latestTurn =
-          thread.latestTurn === null || thread.latestTurn.turnId === event.payload.turnId
+          workspace.latestTurn === null || workspace.latestTurn.turnId === event.payload.turnId
             ? buildLatestTurn({
-                previous: thread.latestTurn,
+                previous: workspace.latestTurn,
                 turnId: event.payload.turnId,
                 state: checkpointStatusToLatestTurnState(event.payload.status),
-                requestedAt: thread.latestTurn?.requestedAt ?? event.payload.completedAt,
-                startedAt: thread.latestTurn?.startedAt ?? event.payload.completedAt,
+                requestedAt: workspace.latestTurn?.requestedAt ?? event.payload.completedAt,
+                startedAt: workspace.latestTurn?.startedAt ?? event.payload.completedAt,
                 completedAt: event.payload.completedAt,
                 assistantMessageId: event.payload.assistantMessageId,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
+                sourceProposedPlan: workspace.pendingSourceProposedPlan,
               })
-            : thread.latestTurn;
+            : workspace.latestTurn;
         return {
-          ...thread,
+          ...workspace,
           turnDiffSummaries,
           latestTurn,
           updatedAt: event.occurredAt,
@@ -1009,9 +1033,9 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       });
     }
 
-    case "thread.reverted": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
-        const turnDiffSummaries = thread.turnDiffSummaries
+    case "workspace.reverted": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => {
+        const turnDiffSummaries = workspace.turnDiffSummaries
           .filter(
             (entry) =>
               entry.checkpointTurnCount !== undefined &&
@@ -1022,22 +1046,25 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
               (left.checkpointTurnCount ?? Number.MAX_SAFE_INTEGER) -
               (right.checkpointTurnCount ?? Number.MAX_SAFE_INTEGER),
           )
-          .slice(-MAX_THREAD_CHECKPOINTS);
+          .slice(-MAX_WORKSPACE_CHECKPOINTS);
         const retainedTurnIds = new Set(turnDiffSummaries.map((entry) => entry.turnId));
-        const messages = retainThreadMessagesAfterRevert(
-          thread.messages,
+        const messages = retainWorkspaceMessagesAfterRevert(
+          workspace.messages,
           retainedTurnIds,
           event.payload.turnCount,
-        ).slice(-MAX_THREAD_MESSAGES);
-        const proposedPlans = retainThreadProposedPlansAfterRevert(
-          thread.proposedPlans,
+        ).slice(-MAX_WORKSPACE_MESSAGES);
+        const proposedPlans = retainWorkspaceProposedPlansAfterRevert(
+          workspace.proposedPlans,
           retainedTurnIds,
-        ).slice(-MAX_THREAD_PROPOSED_PLANS);
-        const activities = retainThreadActivitiesAfterRevert(thread.activities, retainedTurnIds);
+        ).slice(-MAX_WORKSPACE_PROPOSED_PLANS);
+        const activities = retainWorkspaceActivitiesAfterRevert(
+          workspace.activities,
+          retainedTurnIds,
+        );
         const latestCheckpoint = turnDiffSummaries.at(-1) ?? null;
 
         return {
-          ...thread,
+          ...workspace,
           turnDiffSummaries,
           messages,
           proposedPlans,
@@ -1061,24 +1088,24 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       });
     }
 
-    case "thread.activity-appended": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "workspace.activity-appended": {
+      return updateWorkspaceState(state, event.payload.workspaceId, (workspace) => {
         const activities = [
-          ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
+          ...workspace.activities.filter((activity) => activity.id !== event.payload.activity.id),
           { ...event.payload.activity },
         ]
           .toSorted(compareActivities)
-          .slice(-MAX_THREAD_ACTIVITIES);
+          .slice(-MAX_WORKSPACE_ACTIVITIES);
         return {
-          ...thread,
+          ...workspace,
           activities,
           updatedAt: event.occurredAt,
         };
       });
     }
 
-    case "thread.approval-response-requested":
-    case "thread.user-input-response-requested":
+    case "workspace.approval-response-requested":
+    case "workspace.user-input-response-requested":
       return state;
   }
 
@@ -1100,35 +1127,41 @@ export const selectProjectById =
   (state: AppState): Project | undefined =>
     projectId ? state.projects.find((project) => project.id === projectId) : undefined;
 
-export const selectThreadById =
-  (threadId: ThreadId | null | undefined) =>
-  (state: AppState): Thread | undefined =>
-    threadId ? state.threads.find((thread) => thread.id === threadId) : undefined;
+export const selectWorkspaceById =
+  (workspaceId: WorkspaceId | null | undefined) =>
+  (state: AppState): Workspace | undefined =>
+    workspaceId ? state.workspaces.find((workspace) => workspace.id === workspaceId) : undefined;
 
-export const selectSidebarThreadSummaryById =
-  (threadId: ThreadId | null | undefined) =>
-  (state: AppState): SidebarThreadSummary | undefined =>
-    threadId ? state.sidebarThreadsById[threadId] : undefined;
+export const selectSidebarWorkspaceSummaryById =
+  (workspaceId: WorkspaceId | null | undefined) =>
+  (state: AppState): SidebarWorkspaceSummary | undefined =>
+    workspaceId ? state.sidebarWorkspacesById[workspaceId] : undefined;
 
-export const selectThreadIdsByProjectId =
+export const selectWorkspaceIdsByProjectId =
   (projectId: ProjectId | null | undefined) =>
-  (state: AppState): ThreadId[] =>
-    projectId ? (state.threadIdsByProjectId[projectId] ?? EMPTY_THREAD_IDS) : EMPTY_THREAD_IDS;
+  (state: AppState): WorkspaceId[] =>
+    projectId
+      ? (state.workspaceIdsByProjectId[projectId] ?? EMPTY_WORKSPACE_IDS)
+      : EMPTY_WORKSPACE_IDS;
 
-export function setError(state: AppState, threadId: ThreadId, error: string | null): AppState {
-  return updateThreadState(state, threadId, (t) => {
+export function setError(
+  state: AppState,
+  workspaceId: WorkspaceId,
+  error: string | null,
+): AppState {
+  return updateWorkspaceState(state, workspaceId, (t) => {
     if (t.error === error) return t;
     return { ...t, error };
   });
 }
 
-export function setThreadBranch(
+export function setWorkspaceBranch(
   state: AppState,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   branch: string | null,
   worktreePath: string | null,
 ): AppState {
-  return updateThreadState(state, threadId, (t) => {
+  return updateWorkspaceState(state, workspaceId, (t) => {
     if (t.branch === branch && t.worktreePath === worktreePath) return t;
     const cwdChanged = t.worktreePath !== worktreePath;
     return {
@@ -1146,8 +1179,12 @@ interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
-  setError: (threadId: ThreadId, error: string | null) => void;
-  setThreadBranch: (threadId: ThreadId, branch: string | null, worktreePath: string | null) => void;
+  setError: (workspaceId: WorkspaceId, error: string | null) => void;
+  setWorkspaceBranch: (
+    workspaceId: WorkspaceId,
+    branch: string | null,
+    worktreePath: string | null,
+  ) => void;
 }
 
 export const useStore = create<AppStore>((set) => ({
@@ -1155,7 +1192,7 @@ export const useStore = create<AppStore>((set) => ({
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
   applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
   applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
-  setError: (threadId, error) => set((state) => setError(state, threadId, error)),
-  setThreadBranch: (threadId, branch, worktreePath) =>
-    set((state) => setThreadBranch(state, threadId, branch, worktreePath)),
+  setError: (workspaceId, error) => set((state) => setError(state, workspaceId, error)),
+  setWorkspaceBranch: (workspaceId, branch, worktreePath) =>
+    set((state) => setWorkspaceBranch(state, workspaceId, branch, worktreePath)),
 }));

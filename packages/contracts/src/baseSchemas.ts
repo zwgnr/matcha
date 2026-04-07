@@ -15,8 +15,8 @@ export type IsoDateTime = typeof IsoDateTime.Type;
 const makeEntityId = <Brand extends string>(brand: Brand) =>
   TrimmedNonEmptyString.pipe(Schema.brand(brand));
 
-export const ThreadId = makeEntityId("ThreadId");
-export type ThreadId = typeof ThreadId.Type;
+export const WorkspaceId = makeEntityId("WorkspaceId");
+export type WorkspaceId = typeof WorkspaceId.Type;
 export const ProjectId = makeEntityId("ProjectId");
 export type ProjectId = typeof ProjectId.Type;
 export const CommandId = makeEntityId("CommandId");

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 
@@ -28,7 +28,7 @@ function parseLogLine(line: string) {
 }
 
 describe("EventNdjsonLogger", () => {
-  it.effect("writes effect-style lines to thread-scoped files", () =>
+  it.effect("writes effect-style lines to workspace-scoped files", () =>
     Effect.gen(function* () {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "matcha-provider-log-"));
       const basePath = path.join(tempDir, "provider-native.ndjson");
@@ -41,32 +41,32 @@ describe("EventNdjsonLogger", () => {
         }
 
         yield* logger.write(
-          { threadId: "provider-thread-1", id: "evt-1" },
-          ThreadId.makeUnsafe("thread-1"),
+          { workspaceId: "provider-workspace-1", id: "evt-1" },
+          WorkspaceId.makeUnsafe("workspace-1"),
         );
         yield* logger.write(
-          { type: "turn.completed", threadId: "provider-thread-2", id: "evt-2" },
-          ThreadId.makeUnsafe("thread-2"),
+          { type: "turn.completed", workspaceId: "provider-workspace-2", id: "evt-2" },
+          WorkspaceId.makeUnsafe("workspace-2"),
         );
         yield* logger.close();
 
-        const threadOnePath = path.join(tempDir, "thread-1.log");
-        const threadTwoPath = path.join(tempDir, "thread-2.log");
-        assert.equal(fs.existsSync(threadOnePath), true);
-        assert.equal(fs.existsSync(threadTwoPath), true);
+        const workspaceOnePath = path.join(tempDir, "workspace-1.log");
+        const workspaceTwoPath = path.join(tempDir, "workspace-2.log");
+        assert.equal(fs.existsSync(workspaceOnePath), true);
+        assert.equal(fs.existsSync(workspaceTwoPath), true);
 
-        const first = parseLogLine(fs.readFileSync(threadOnePath, "utf8").trim());
-        const second = parseLogLine(fs.readFileSync(threadTwoPath, "utf8").trim());
+        const first = parseLogLine(fs.readFileSync(workspaceOnePath, "utf8").trim());
+        const second = parseLogLine(fs.readFileSync(workspaceTwoPath, "utf8").trim());
 
         assert.equal(Number.isNaN(Date.parse(first.observedAt)), false);
         assert.equal(first.stream, "NTIVE");
-        assert.equal(first.payload, '{"threadId":"provider-thread-1","id":"evt-1"}');
+        assert.equal(first.payload, '{"workspaceId":"provider-workspace-1","id":"evt-1"}');
 
         assert.equal(Number.isNaN(Date.parse(second.observedAt)), false);
         assert.equal(second.stream, "NTIVE");
         assert.equal(
           second.payload,
-          '{"type":"turn.completed","threadId":"provider-thread-2","id":"evt-2"}',
+          '{"type":"turn.completed","workspaceId":"provider-workspace-2","id":"evt-2"}',
         );
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -75,7 +75,7 @@ describe("EventNdjsonLogger", () => {
   );
 
   it.effect(
-    "falls back to a global segment when orchestration thread id is missing or invalid",
+    "falls back to a global segment when orchestration workspace id is missing or invalid",
     () =>
       Effect.gen(function* () {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "matcha-provider-log-"));
@@ -88,8 +88,8 @@ describe("EventNdjsonLogger", () => {
             return;
           }
 
-          yield* logger.write({ id: "evt-no-thread" }, null);
-          yield* logger.write({ id: "evt-invalid-thread" }, "!!!" as unknown as ThreadId);
+          yield* logger.write({ id: "evt-no-workspace" }, null);
+          yield* logger.write({ id: "evt-invalid-workspace" }, "!!!" as unknown as WorkspaceId);
           yield* logger.close();
 
           const globalPath = path.join(tempDir, "_global.log");
@@ -103,9 +103,9 @@ describe("EventNdjsonLogger", () => {
           assert.equal(Number.isNaN(Date.parse(lines[0]?.observedAt ?? "")), false);
           assert.equal(Number.isNaN(Date.parse(lines[1]?.observedAt ?? "")), false);
           assert.equal(lines[0]?.stream, "CANON");
-          assert.equal(lines[0]?.payload, '{"id":"evt-no-thread"}');
+          assert.equal(lines[0]?.payload, '{"id":"evt-no-workspace"}');
           assert.equal(lines[1]?.stream, "CANON");
-          assert.equal(lines[1]?.payload, '{"id":"evt-invalid-thread"}');
+          assert.equal(lines[1]?.payload, '{"id":"evt-invalid-workspace"}');
         } finally {
           fs.rmSync(tempDir, { recursive: true, force: true });
         }
@@ -155,7 +155,7 @@ describe("EventNdjsonLogger", () => {
     }),
   );
 
-  it.effect("rotates per-thread files when max size is exceeded", () =>
+  it.effect("rotates per-workspace files when max size is exceeded", () =>
     Effect.gen(function* () {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "matcha-provider-log-"));
       const basePath = path.join(tempDir, "provider-native.ndjson");
@@ -174,16 +174,16 @@ describe("EventNdjsonLogger", () => {
         for (let index = 0; index < 10; index += 1) {
           yield* logger.write(
             {
-              threadId: "provider-thread-rotate",
+              workspaceId: "provider-workspace-rotate",
               id: `evt-${index}`,
               payload: "x".repeat(40),
             },
-            ThreadId.makeUnsafe("thread-rotate"),
+            WorkspaceId.makeUnsafe("workspace-rotate"),
           );
         }
         yield* logger.close();
 
-        const fileStem = "thread-rotate.log";
+        const fileStem = "workspace-rotate.log";
         const matchingFiles = fs
           .readdirSync(tempDir)
           .filter((entry) => entry === fileStem || entry.startsWith(`${fileStem}.`))

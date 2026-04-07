@@ -53,8 +53,8 @@ export function sanitizePrTitle(raw: string): string {
   return "Update project changes";
 }
 
-/** Normalise a raw thread title to a compact single-line sidebar-safe label. */
-export function sanitizeThreadTitle(raw: string): string {
+/** Normalise a raw workspace title to a compact single-line sidebar-safe label. */
+export function sanitizeWorkspaceTitle(raw: string): string {
   const normalized = raw
     .trim()
     .split(/\r?\n/g)[0]
@@ -64,7 +64,7 @@ export function sanitizeThreadTitle(raw: string): string {
     .replace(/\s+/g, " ");
 
   if (!normalized || normalized.trim().length === 0) {
-    return "New thread";
+    return "New workspace";
   }
 
   if (normalized.length <= 50) {

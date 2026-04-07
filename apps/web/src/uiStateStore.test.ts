@@ -1,13 +1,13 @@
-import { ProjectId, ThreadId } from "@matcha/contracts";
+import { ProjectId, WorkspaceId } from "@matcha/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
-  clearThreadUi,
-  markThreadUnread,
+  clearWorkspaceUi,
+  markWorkspaceUnread,
   reorderProjects,
   setProjectExpanded,
   syncProjects,
-  syncThreads,
+  syncWorkspaces,
   type UiState,
 } from "./uiStateStore";
 
@@ -15,35 +15,35 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
-    threadLastVisitedAtById: {},
+    workspaceLastVisitedAtById: {},
     ...overrides,
   };
 }
 
 describe("uiStateStore pure functions", () => {
-  it("markThreadUnread moves lastVisitedAt before completion for a completed thread", () => {
-    const threadId = ThreadId.makeUnsafe("thread-1");
+  it("markWorkspaceUnread moves lastVisitedAt before completion for a completed workspace", () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-1");
     const latestTurnCompletedAt = "2026-02-25T12:30:00.000Z";
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [threadId]: "2026-02-25T12:35:00.000Z",
+      workspaceLastVisitedAtById: {
+        [workspaceId]: "2026-02-25T12:35:00.000Z",
       },
     });
 
-    const next = markThreadUnread(initialState, threadId, latestTurnCompletedAt);
+    const next = markWorkspaceUnread(initialState, workspaceId, latestTurnCompletedAt);
 
-    expect(next.threadLastVisitedAtById[threadId]).toBe("2026-02-25T12:29:59.999Z");
+    expect(next.workspaceLastVisitedAtById[workspaceId]).toBe("2026-02-25T12:29:59.999Z");
   });
 
-  it("markThreadUnread does not change a thread without a completed turn", () => {
-    const threadId = ThreadId.makeUnsafe("thread-1");
+  it("markWorkspaceUnread does not change a workspace without a completed turn", () => {
+    const workspaceId = WorkspaceId.makeUnsafe("workspace-1");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [threadId]: "2026-02-25T12:35:00.000Z",
+      workspaceLastVisitedAtById: {
+        [workspaceId]: "2026-02-25T12:35:00.000Z",
       },
     });
 
-    const next = markThreadUnread(initialState, threadId, null);
+    const next = markWorkspaceUnread(initialState, workspaceId, null);
 
     expect(next).toBe(initialState);
   });
@@ -129,36 +129,36 @@ describe("uiStateStore pure functions", () => {
     expect(next.projectExpandedById[project1]).toBe(false);
   });
 
-  it("syncThreads prunes missing thread UI state", () => {
-    const thread1 = ThreadId.makeUnsafe("thread-1");
-    const thread2 = ThreadId.makeUnsafe("thread-2");
+  it("syncWorkspaces prunes missing workspace UI state", () => {
+    const workspace1 = WorkspaceId.makeUnsafe("workspace-1");
+    const workspace2 = WorkspaceId.makeUnsafe("workspace-2");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [thread1]: "2026-02-25T12:35:00.000Z",
-        [thread2]: "2026-02-25T12:36:00.000Z",
+      workspaceLastVisitedAtById: {
+        [workspace1]: "2026-02-25T12:35:00.000Z",
+        [workspace2]: "2026-02-25T12:36:00.000Z",
       },
     });
 
-    const next = syncThreads(initialState, [{ id: thread1 }]);
+    const next = syncWorkspaces(initialState, [{ id: workspace1 }]);
 
-    expect(next.threadLastVisitedAtById).toEqual({
-      [thread1]: "2026-02-25T12:35:00.000Z",
+    expect(next.workspaceLastVisitedAtById).toEqual({
+      [workspace1]: "2026-02-25T12:35:00.000Z",
     });
   });
 
-  it("syncThreads seeds visit state for unseen snapshot threads", () => {
-    const thread1 = ThreadId.makeUnsafe("thread-1");
+  it("syncWorkspaces seeds visit state for unseen snapshot workspaces", () => {
+    const workspace1 = WorkspaceId.makeUnsafe("workspace-1");
     const initialState = makeUiState();
 
-    const next = syncThreads(initialState, [
+    const next = syncWorkspaces(initialState, [
       {
-        id: thread1,
+        id: workspace1,
         seedVisitedAt: "2026-02-25T12:35:00.000Z",
       },
     ]);
 
-    expect(next.threadLastVisitedAtById).toEqual({
-      [thread1]: "2026-02-25T12:35:00.000Z",
+    expect(next.workspaceLastVisitedAtById).toEqual({
+      [workspace1]: "2026-02-25T12:35:00.000Z",
     });
   });
 
@@ -177,16 +177,16 @@ describe("uiStateStore pure functions", () => {
     expect(next.projectOrder).toEqual([project1]);
   });
 
-  it("clearThreadUi removes visit state for deleted threads", () => {
-    const thread1 = ThreadId.makeUnsafe("thread-1");
+  it("clearWorkspaceUi removes visit state for deleted workspaces", () => {
+    const workspace1 = WorkspaceId.makeUnsafe("workspace-1");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [thread1]: "2026-02-25T12:35:00.000Z",
+      workspaceLastVisitedAtById: {
+        [workspace1]: "2026-02-25T12:35:00.000Z",
       },
     });
 
-    const next = clearThreadUi(initialState, thread1);
+    const next = clearWorkspaceUi(initialState, workspace1);
 
-    expect(next.threadLastVisitedAtById).toEqual({});
+    expect(next.workspaceLastVisitedAtById).toEqual({});
   });
 });

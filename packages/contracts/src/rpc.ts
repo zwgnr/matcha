@@ -14,8 +14,8 @@ import {
   GitListBranchesInput,
   GitListBranchesResult,
   GitManagerServiceError,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
+  GitPreparePullRequestWorkspaceInput,
+  GitPreparePullRequestWorkspaceResult,
   GitPullInput,
   GitPullRequestRefInput,
   GitPullResult,
@@ -31,8 +31,8 @@ import {
   OrchestrationEvent,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
-  OrchestrationGetFullThreadDiffError,
-  OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetFullWorkspaceDiffError,
+  OrchestrationGetFullWorkspaceDiffInput,
   OrchestrationGetSnapshotError,
   OrchestrationGetSnapshotInput,
   OrchestrationGetTurnDiffError,
@@ -92,7 +92,7 @@ export const WS_METHODS = {
   gitCheckout: "git.checkout",
   gitInit: "git.init",
   gitResolvePullRequest: "git.resolvePullRequest",
-  gitPreparePullRequestThread: "git.preparePullRequestThread",
+  gitPreparePullRequestWorkspace: "git.preparePullRequestWorkspace",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -187,11 +187,14 @@ export const WsGitResolvePullRequestRpc = Rpc.make(WS_METHODS.gitResolvePullRequ
   error: GitManagerServiceError,
 });
 
-export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePullRequestThread, {
-  payload: GitPreparePullRequestThreadInput,
-  success: GitPreparePullRequestThreadResult,
-  error: GitManagerServiceError,
-});
+export const WsGitPreparePullRequestWorkspaceRpc = Rpc.make(
+  WS_METHODS.gitPreparePullRequestWorkspace,
+  {
+    payload: GitPreparePullRequestWorkspaceInput,
+    success: GitPreparePullRequestWorkspaceResult,
+    error: GitManagerServiceError,
+  },
+);
 
 export const WsGitListBranchesRpc = Rpc.make(WS_METHODS.gitListBranches, {
   payload: GitListBranchesInput,
@@ -278,12 +281,12 @@ export const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.g
   error: OrchestrationGetTurnDiffError,
 });
 
-export const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(
-  ORCHESTRATION_WS_METHODS.getFullThreadDiff,
+export const WsOrchestrationGetFullWorkspaceDiffRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getFullWorkspaceDiff,
   {
-    payload: OrchestrationGetFullThreadDiffInput,
-    success: OrchestrationRpcSchemas.getFullThreadDiff.output,
-    error: OrchestrationGetFullThreadDiffError,
+    payload: OrchestrationGetFullWorkspaceDiffInput,
+    success: OrchestrationRpcSchemas.getFullWorkspaceDiff.output,
+    error: OrchestrationGetFullWorkspaceDiffError,
   },
 );
 
@@ -334,7 +337,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitPullRpc,
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
-  WsGitPreparePullRequestThreadRpc,
+  WsGitPreparePullRequestWorkspaceRpc,
   WsGitListBranchesRpc,
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,
@@ -354,6 +357,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
-  WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationGetFullWorkspaceDiffRpc,
   WsOrchestrationReplayEventsRpc,
 );

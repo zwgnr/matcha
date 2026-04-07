@@ -1,7 +1,7 @@
 import {
   type GitActionProgressEvent,
   type GitStackedAction,
-  type ThreadId,
+  type WorkspaceId,
 } from "@matcha/contracts";
 import {
   infiniteQueryOptions,
@@ -31,8 +31,8 @@ export const gitMutationKeys = {
   checkout: (cwd: string | null) => ["git", "mutation", "checkout", cwd] as const,
   runStackedAction: (cwd: string | null) => ["git", "mutation", "run-stacked-action", cwd] as const,
   pull: (cwd: string | null) => ["git", "mutation", "pull", cwd] as const,
-  preparePullRequestThread: (cwd: string | null) =>
-    ["git", "mutation", "prepare-pull-request-thread", cwd] as const,
+  preparePullRequestWorkspace: (cwd: string | null) =>
+    ["git", "mutation", "prepare-pull-request-workspace", cwd] as const,
 };
 
 export function invalidateGitQueries(queryClient: QueryClient, input?: { cwd?: string | null }) {
@@ -243,7 +243,7 @@ export function gitRemoveWorktreeMutationOptions(input: { queryClient: QueryClie
   });
 }
 
-export function gitPreparePullRequestThreadMutationOptions(input: {
+export function gitPreparePullRequestWorkspaceMutationOptions(input: {
   cwd: string | null;
   queryClient: QueryClient;
 }) {
@@ -251,22 +251,22 @@ export function gitPreparePullRequestThreadMutationOptions(input: {
     mutationFn: async ({
       reference,
       mode,
-      threadId,
+      workspaceId,
     }: {
       reference: string;
       mode: "local" | "worktree";
-      threadId?: ThreadId;
+      workspaceId?: WorkspaceId;
     }) => {
       const api = ensureNativeApi();
-      if (!input.cwd) throw new Error("Pull request thread preparation is unavailable.");
-      return api.git.preparePullRequestThread({
+      if (!input.cwd) throw new Error("Pull request workspace preparation is unavailable.");
+      return api.git.preparePullRequestWorkspace({
         cwd: input.cwd,
         reference,
         mode,
-        ...(threadId ? { threadId } : {}),
+        ...(workspaceId ? { workspaceId } : {}),
       });
     },
-    mutationKey: gitMutationKeys.preparePullRequestThread(input.cwd),
+    mutationKey: gitMutationKeys.preparePullRequestWorkspace(input.cwd),
     onSettled: async () => {
       await invalidateGitQueries(input.queryClient);
     },

@@ -2,7 +2,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff, type FileDiffMetadata, Virtualizer } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { ThreadId, type TurnId } from "@matcha/contracts";
+import { WorkspaceId, type TurnId } from "@matcha/contracts";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -174,25 +174,27 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const previousDiffOpenRef = useRef(false);
   const [canScrollTurnStripLeft, setCanScrollTurnStripLeft] = useState(false);
   const [canScrollTurnStripRight, setCanScrollTurnStripRight] = useState(false);
-  const routeThreadId = useParams({
+  const routeWorkspaceId = useParams({
     strict: false,
-    select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
+    select: (params) => (params.workspaceId ? WorkspaceId.makeUnsafe(params.workspaceId) : null),
   });
   const diffSearch = useSearch({ strict: false, select: (search) => parseDiffRouteSearch(search) });
   const diffOpen = diffSearch.diff === "1";
-  const activeThreadId = routeThreadId;
-  const activeThread = useStore((store) =>
-    activeThreadId ? store.threads.find((thread) => thread.id === activeThreadId) : undefined,
+  const activeWorkspaceId = routeWorkspaceId;
+  const activeWorkspace = useStore((store) =>
+    activeWorkspaceId
+      ? store.workspaces.find((workspace) => workspace.id === activeWorkspaceId)
+      : undefined,
   );
-  const activeProjectId = activeThread?.projectId ?? null;
+  const activeProjectId = activeWorkspace?.projectId ?? null;
   const activeProject = useStore((store) =>
     activeProjectId ? store.projects.find((project) => project.id === activeProjectId) : undefined,
   );
-  const activeCwd = activeThread?.worktreePath ?? activeProject?.cwd;
+  const activeCwd = activeWorkspace?.worktreePath ?? activeProject?.cwd;
   const gitStatusQuery = useQuery(gitStatusQueryOptions(activeCwd ?? null));
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
-    useTurnDiffSummaries(activeThread);
+    useTurnDiffSummaries(activeWorkspace);
   const orderedTurnDiffSummaries = useMemo(
     () =>
       [...turnDiffSummaries].toSorted((left, right) => {
@@ -262,7 +264,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   }, [orderedTurnDiffSummaries, selectedTurn]);
   const activeCheckpointDiffQuery = useQuery(
     checkpointDiffQueryOptions({
-      threadId: activeThreadId,
+      workspaceId: activeWorkspaceId,
       fromTurnCount: activeCheckpointRange?.fromTurnCount ?? null,
       toTurnCount: activeCheckpointRange?.toTurnCount ?? null,
       cacheScope: selectedTurn ? `turn:${selectedTurn.turnId}` : conversationCacheScope,
@@ -332,10 +334,10 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   );
 
   const selectTurn = (turnId: TurnId) => {
-    if (!activeThread) return;
+    if (!activeWorkspace) return;
     void navigate({
-      to: "/$threadId",
-      params: { threadId: activeThread.id },
+      to: "/$workspaceId",
+      params: { workspaceId: activeWorkspace.id },
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
         return { ...rest, diff: "1", diffTurnId: turnId };
@@ -343,10 +345,10 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     });
   };
   const selectWholeConversation = () => {
-    if (!activeThread) return;
+    if (!activeWorkspace) return;
     void navigate({
-      to: "/$threadId",
-      params: { threadId: activeThread.id },
+      to: "/$workspaceId",
+      params: { workspaceId: activeWorkspace.id },
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
         return { ...rest, diff: "1" };
@@ -544,9 +546,9 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
 
   return (
     <DiffPanelShell mode={mode} header={headerRow}>
-      {!activeThread ? (
+      {!activeWorkspace ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
-          Select a thread to inspect turn diffs.
+          Select a workspace to inspect turn diffs.
         </div>
       ) : !isGitRepo ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">

@@ -18,12 +18,12 @@ import {
   isTerminalSplitShortcut,
   isTerminalToggleShortcut,
   resolveShortcutCommand,
-  shouldShowThreadJumpHints,
+  shouldShowWorkspaceJumpHints,
   shortcutLabelForCommand,
   terminalNavigationShortcutData,
-  threadJumpCommandForIndex,
-  threadJumpIndexFromCommand,
-  threadTraversalDirectionFromCommand,
+  workspaceJumpCommandForIndex,
+  workspaceJumpIndexFromCommand,
+  workspaceTraversalDirectionFromCommand,
   type ShortcutEventLike,
 } from "./keybindings";
 
@@ -104,11 +104,11 @@ const DEFAULT_BINDINGS = compile([
   { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
   { shortcut: modShortcut("n", { shiftKey: true }), command: "chat.newLocal" },
   { shortcut: modShortcut("o"), command: "editor.openFavorite" },
-  { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
-  { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
-  { shortcut: modShortcut("1"), command: "thread.jump.1" },
-  { shortcut: modShortcut("2"), command: "thread.jump.2" },
-  { shortcut: modShortcut("3"), command: "thread.jump.3" },
+  { shortcut: modShortcut("[", { shiftKey: true }), command: "workspace.previous" },
+  { shortcut: modShortcut("]", { shiftKey: true }), command: "workspace.next" },
+  { shortcut: modShortcut("1"), command: "workspace.jump.1" },
+  { shortcut: modShortcut("2"), command: "workspace.jump.2" },
+  { shortcut: modShortcut("3"), command: "workspace.jump.3" },
 ]);
 
 describe("isTerminalToggleShortcut", () => {
@@ -254,23 +254,23 @@ describe("shortcutLabelForCommand", () => {
       "Ctrl+O",
     );
     assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "thread.jump.3", "MacIntel"),
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspace.jump.3", "MacIntel"),
       "⌘3",
     );
     assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "thread.previous", "Linux"),
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspace.previous", "Linux"),
       "Ctrl+Shift+[",
     );
   });
 
   it("returns null for commands shadowed by a later conflicting shortcut", () => {
     const bindings = compile([
-      { shortcut: modShortcut("1", { shiftKey: true }), command: "thread.jump.1" },
-      { shortcut: modShortcut("1", { shiftKey: true }), command: "thread.jump.7" },
+      { shortcut: modShortcut("1", { shiftKey: true }), command: "workspace.jump.1" },
+      { shortcut: modShortcut("1", { shiftKey: true }), command: "workspace.jump.7" },
     ]);
 
-    assert.isNull(shortcutLabelForCommand(bindings, "thread.jump.1", "MacIntel"));
-    assert.strictEqual(shortcutLabelForCommand(bindings, "thread.jump.7", "MacIntel"), "⇧⌘1");
+    assert.isNull(shortcutLabelForCommand(bindings, "workspace.jump.1", "MacIntel"));
+    assert.strictEqual(shortcutLabelForCommand(bindings, "workspace.jump.7", "MacIntel"), "⇧⌘1");
   });
 
   it("respects when-context while resolving labels", () => {
@@ -306,36 +306,36 @@ describe("shortcutLabelForCommand", () => {
   });
 });
 
-describe("thread navigation helpers", () => {
-  it("maps jump commands to visible thread indices", () => {
-    assert.strictEqual(threadJumpCommandForIndex(0), "thread.jump.1");
-    assert.strictEqual(threadJumpCommandForIndex(2), "thread.jump.3");
-    assert.isNull(threadJumpCommandForIndex(9));
-    assert.strictEqual(threadJumpIndexFromCommand("thread.jump.1"), 0);
-    assert.strictEqual(threadJumpIndexFromCommand("thread.jump.3"), 2);
-    assert.isNull(threadJumpIndexFromCommand("thread.next"));
+describe("workspace navigation helpers", () => {
+  it("maps jump commands to visible workspace indices", () => {
+    assert.strictEqual(workspaceJumpCommandForIndex(0), "workspace.jump.1");
+    assert.strictEqual(workspaceJumpCommandForIndex(2), "workspace.jump.3");
+    assert.isNull(workspaceJumpCommandForIndex(9));
+    assert.strictEqual(workspaceJumpIndexFromCommand("workspace.jump.1"), 0);
+    assert.strictEqual(workspaceJumpIndexFromCommand("workspace.jump.3"), 2);
+    assert.isNull(workspaceJumpIndexFromCommand("workspace.next"));
   });
 
   it("maps traversal commands to directions", () => {
-    assert.strictEqual(threadTraversalDirectionFromCommand("thread.previous"), "previous");
-    assert.strictEqual(threadTraversalDirectionFromCommand("thread.next"), "next");
-    assert.isNull(threadTraversalDirectionFromCommand("thread.jump.1"));
-    assert.isNull(threadTraversalDirectionFromCommand(null));
+    assert.strictEqual(workspaceTraversalDirectionFromCommand("workspace.previous"), "previous");
+    assert.strictEqual(workspaceTraversalDirectionFromCommand("workspace.next"), "next");
+    assert.isNull(workspaceTraversalDirectionFromCommand("workspace.jump.1"));
+    assert.isNull(workspaceTraversalDirectionFromCommand(null));
   });
 
   it("shows jump hints only when configured modifiers match", () => {
     assert.isTrue(
-      shouldShowThreadJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
+      shouldShowWorkspaceJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
     );
     assert.isFalse(
-      shouldShowThreadJumpHints(event({ metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      shouldShowWorkspaceJumpHints(event({ metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
     );
     assert.isTrue(
-      shouldShowThreadJumpHints(event({ ctrlKey: true }), DEFAULT_BINDINGS, {
+      shouldShowWorkspaceJumpHints(event({ ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
       }),
     );
@@ -481,7 +481,7 @@ describe("resolveShortcutCommand", () => {
           platform: "MacIntel",
         },
       ),
-      "thread.previous",
+      "workspace.previous",
     );
     assert.strictEqual(
       resolveShortcutCommand(
@@ -491,7 +491,7 @@ describe("resolveShortcutCommand", () => {
           platform: "Linux",
         },
       ),
-      "thread.next",
+      "workspace.next",
     );
   });
 });

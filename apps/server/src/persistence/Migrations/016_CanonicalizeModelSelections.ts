@@ -27,19 +27,19 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE projection_threads
+    ALTER TABLE projection_workspaces
     ADD COLUMN model_selection_json TEXT
   `;
 
   yield* sql`
-    UPDATE projection_threads
+    UPDATE projection_workspaces
     SET model_selection_json = json_object(
       'provider',
       COALESCE(
         (
           SELECT provider_name
-          FROM projection_thread_sessions
-          WHERE projection_thread_sessions.thread_id = projection_threads.thread_id
+          FROM projection_workspace_sessions
+          WHERE projection_workspace_sessions.workspace_id = projection_workspaces.workspace_id
         ),
         CASE
           WHEN lower(model) LIKE '%claude%' THEN 'claudeAgent'
@@ -59,7 +59,7 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE projection_threads
+    ALTER TABLE projection_workspaces
     DROP COLUMN model
   `;
 
@@ -215,12 +215,12 @@ export default Effect.gen(function* () {
       '$.model',
       '$.modelOptions'
     )
-    WHERE event_type IN ('thread.created', 'thread.meta-updated', 'thread.turn-start-requested')
+    WHERE event_type IN ('workspace.created', 'workspace.meta-updated', 'workspace.turn-start-requested')
       AND json_type(payload_json, '$.modelSelection') IS NULL
       AND json_type(payload_json, '$.model') IS NOT NULL
   `;
 
-  // Backfill thread.created events that predate the model field entirely
+  // Backfill workspace.created events that predate the model field entirely
   yield* sql`
     UPDATE orchestration_events
     SET payload_json = json_set(
@@ -228,7 +228,7 @@ export default Effect.gen(function* () {
       '$.modelSelection',
       json(json_object('provider', 'codex', 'model', 'gpt-5.4'))
     )
-    WHERE event_type = 'thread.created'
+    WHERE event_type = 'workspace.created'
       AND json_type(payload_json, '$.modelSelection') IS NULL
       AND json_type(payload_json, '$.model') IS NULL
   `;

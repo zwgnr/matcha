@@ -73,7 +73,7 @@ export function createWsNativeApi(): NativeApi {
       checkout: rpcClient.git.checkout,
       init: rpcClient.git.init,
       resolvePullRequest: rpcClient.git.resolvePullRequest,
-      preparePullRequestThread: rpcClient.git.preparePullRequestThread,
+      preparePullRequestWorkspace: rpcClient.git.preparePullRequestWorkspace,
     },
     contextMenu: {
       show: async <T extends string>(
@@ -97,7 +97,7 @@ export function createWsNativeApi(): NativeApi {
       getSnapshot: rpcClient.orchestration.getSnapshot,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
-      getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
+      getFullWorkspaceDiff: rpcClient.orchestration.getFullWorkspaceDiff,
       replayEvents: (fromSequenceExclusive) =>
         rpcClient.orchestration
           .replayEvents({ fromSequenceExclusive })

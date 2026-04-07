@@ -1,33 +1,33 @@
 /**
- * Single Zustand store for terminal UI state keyed by threadId.
+ * Single Zustand store for terminal UI state keyed by workspaceId.
  *
  * Terminal transition helpers are intentionally private to keep the public
  * API constrained to store actions/selectors.
  */
 
-import { ThreadId, type TerminalEvent } from "@matcha/contracts";
+import { WorkspaceId, type TerminalEvent } from "@matcha/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "./lib/storage";
 import { terminalRunningSubprocessFromEvent } from "./terminalActivity";
 import {
-  DEFAULT_THREAD_TERMINAL_HEIGHT,
-  DEFAULT_THREAD_TERMINAL_ID,
+  DEFAULT_WORKSPACE_TERMINAL_HEIGHT,
+  DEFAULT_WORKSPACE_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
-  type ThreadTerminalGroup,
+  type WorkspaceTerminalGroup,
 } from "./types";
 
-interface ThreadTerminalState {
+interface WorkspaceTerminalState {
   terminalOpen: boolean;
   terminalHeight: number;
   terminalIds: string[];
   runningTerminalIds: string[];
   activeTerminalId: string;
-  terminalGroups: ThreadTerminalGroup[];
+  terminalGroups: WorkspaceTerminalGroup[];
   activeTerminalGroupId: string;
 }
 
-export interface ThreadTerminalLaunchContext {
+export interface WorkspaceTerminalLaunchContext {
   cwd: string;
   worktreePath: string | null;
 }
@@ -47,7 +47,7 @@ function createTerminalStateStorage() {
 
 function normalizeTerminalIds(terminalIds: string[]): string[] {
   const ids = [...new Set(terminalIds.map((id) => id.trim()).filter((id) => id.length > 0))];
-  return ids.length > 0 ? ids : [DEFAULT_THREAD_TERMINAL_ID];
+  return ids.length > 0 ? ids : [DEFAULT_WORKSPACE_TERMINAL_ID];
 }
 
 function normalizeRunningTerminalIds(
@@ -77,7 +77,7 @@ function assignUniqueGroupId(baseId: string, usedGroupIds: Set<string>): string 
 }
 
 function findGroupIndexByTerminalId(
-  terminalGroups: ThreadTerminalGroup[],
+  terminalGroups: WorkspaceTerminalGroup[],
   terminalId: string,
 ): number {
   return terminalGroups.findIndex((group) => group.terminalIds.includes(terminalId));
@@ -88,12 +88,12 @@ function normalizeTerminalGroupIds(terminalIds: string[]): string[] {
 }
 
 function normalizeTerminalGroups(
-  terminalGroups: ThreadTerminalGroup[],
+  terminalGroups: WorkspaceTerminalGroup[],
   terminalIds: string[],
-): ThreadTerminalGroup[] {
+): WorkspaceTerminalGroup[] {
   const validTerminalIdSet = new Set(terminalIds);
   const assignedTerminalIds = new Set<string>();
-  const nextGroups: ThreadTerminalGroup[] = [];
+  const nextGroups: WorkspaceTerminalGroup[] = [];
   const usedGroupIds = new Set<string>();
 
   for (const group of terminalGroups) {
@@ -109,7 +109,7 @@ function normalizeTerminalGroups(
     const baseGroupId =
       group.id.trim().length > 0
         ? group.id.trim()
-        : fallbackGroupId(groupTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID);
+        : fallbackGroupId(groupTerminalIds[0] ?? DEFAULT_WORKSPACE_TERMINAL_ID);
     nextGroups.push({
       id: assignUniqueGroupId(baseGroupId, usedGroupIds),
       terminalIds: groupTerminalIds,
@@ -127,8 +127,8 @@ function normalizeTerminalGroups(
   if (nextGroups.length === 0) {
     return [
       {
-        id: fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
-        terminalIds: [DEFAULT_THREAD_TERMINAL_ID],
+        id: fallbackGroupId(DEFAULT_WORKSPACE_TERMINAL_ID),
+        terminalIds: [DEFAULT_WORKSPACE_TERMINAL_ID],
       },
     ];
   }
@@ -144,7 +144,10 @@ function arraysEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-function terminalGroupsEqual(left: ThreadTerminalGroup[], right: ThreadTerminalGroup[]): boolean {
+function terminalGroupsEqual(
+  left: WorkspaceTerminalGroup[],
+  right: WorkspaceTerminalGroup[],
+): boolean {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index += 1) {
     const leftGroup = left[index];
@@ -156,7 +159,10 @@ function terminalGroupsEqual(left: ThreadTerminalGroup[], right: ThreadTerminalG
   return true;
 }
 
-function threadTerminalStateEqual(left: ThreadTerminalState, right: ThreadTerminalState): boolean {
+function workspaceTerminalStateEqual(
+  left: WorkspaceTerminalState,
+  right: WorkspaceTerminalState,
+): boolean {
   return (
     left.terminalOpen === right.terminalOpen &&
     left.terminalHeight === right.terminalHeight &&
@@ -168,41 +174,41 @@ function threadTerminalStateEqual(left: ThreadTerminalState, right: ThreadTermin
   );
 }
 
-const DEFAULT_THREAD_TERMINAL_STATE: ThreadTerminalState = Object.freeze({
+const DEFAULT_WORKSPACE_TERMINAL_STATE: WorkspaceTerminalState = Object.freeze({
   terminalOpen: false,
-  terminalHeight: DEFAULT_THREAD_TERMINAL_HEIGHT,
-  terminalIds: [DEFAULT_THREAD_TERMINAL_ID],
+  terminalHeight: DEFAULT_WORKSPACE_TERMINAL_HEIGHT,
+  terminalIds: [DEFAULT_WORKSPACE_TERMINAL_ID],
   runningTerminalIds: [],
-  activeTerminalId: DEFAULT_THREAD_TERMINAL_ID,
+  activeTerminalId: DEFAULT_WORKSPACE_TERMINAL_ID,
   terminalGroups: [
     {
-      id: fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
-      terminalIds: [DEFAULT_THREAD_TERMINAL_ID],
+      id: fallbackGroupId(DEFAULT_WORKSPACE_TERMINAL_ID),
+      terminalIds: [DEFAULT_WORKSPACE_TERMINAL_ID],
     },
   ],
-  activeTerminalGroupId: fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
+  activeTerminalGroupId: fallbackGroupId(DEFAULT_WORKSPACE_TERMINAL_ID),
 });
 
-function createDefaultThreadTerminalState(): ThreadTerminalState {
+function createDefaultWorkspaceTerminalState(): WorkspaceTerminalState {
   return {
-    ...DEFAULT_THREAD_TERMINAL_STATE,
-    terminalIds: [...DEFAULT_THREAD_TERMINAL_STATE.terminalIds],
-    runningTerminalIds: [...DEFAULT_THREAD_TERMINAL_STATE.runningTerminalIds],
-    terminalGroups: copyTerminalGroups(DEFAULT_THREAD_TERMINAL_STATE.terminalGroups),
+    ...DEFAULT_WORKSPACE_TERMINAL_STATE,
+    terminalIds: [...DEFAULT_WORKSPACE_TERMINAL_STATE.terminalIds],
+    runningTerminalIds: [...DEFAULT_WORKSPACE_TERMINAL_STATE.runningTerminalIds],
+    terminalGroups: copyTerminalGroups(DEFAULT_WORKSPACE_TERMINAL_STATE.terminalGroups),
   };
 }
 
-function getDefaultThreadTerminalState(): ThreadTerminalState {
-  return DEFAULT_THREAD_TERMINAL_STATE;
+function getDefaultWorkspaceTerminalState(): WorkspaceTerminalState {
+  return DEFAULT_WORKSPACE_TERMINAL_STATE;
 }
 
-function normalizeThreadTerminalState(state: ThreadTerminalState): ThreadTerminalState {
+function normalizeWorkspaceTerminalState(state: WorkspaceTerminalState): WorkspaceTerminalState {
   const terminalIds = normalizeTerminalIds(state.terminalIds);
-  const nextTerminalIds = terminalIds.length > 0 ? terminalIds : [DEFAULT_THREAD_TERMINAL_ID];
+  const nextTerminalIds = terminalIds.length > 0 ? terminalIds : [DEFAULT_WORKSPACE_TERMINAL_ID];
   const runningTerminalIds = normalizeRunningTerminalIds(state.runningTerminalIds, nextTerminalIds);
   const activeTerminalId = nextTerminalIds.includes(state.activeTerminalId)
     ? state.activeTerminalId
-    : (nextTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID);
+    : (nextTerminalIds[0] ?? DEFAULT_WORKSPACE_TERMINAL_ID);
   const terminalGroups = normalizeTerminalGroups(state.terminalGroups, nextTerminalIds);
   const activeGroupIdFromState = terminalGroups.some(
     (group) => group.id === state.activeTerminalGroupId,
@@ -212,12 +218,12 @@ function normalizeThreadTerminalState(state: ThreadTerminalState): ThreadTermina
   const activeGroupIdFromTerminal =
     terminalGroups.find((group) => group.terminalIds.includes(activeTerminalId))?.id ?? null;
 
-  const normalized: ThreadTerminalState = {
+  const normalized: WorkspaceTerminalState = {
     terminalOpen: state.terminalOpen,
     terminalHeight:
       Number.isFinite(state.terminalHeight) && state.terminalHeight > 0
         ? state.terminalHeight
-        : DEFAULT_THREAD_TERMINAL_HEIGHT,
+        : DEFAULT_WORKSPACE_TERMINAL_HEIGHT,
     terminalIds: nextTerminalIds,
     runningTerminalIds,
     activeTerminalId,
@@ -226,25 +232,25 @@ function normalizeThreadTerminalState(state: ThreadTerminalState): ThreadTermina
       activeGroupIdFromState ??
       activeGroupIdFromTerminal ??
       terminalGroups[0]?.id ??
-      fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
+      fallbackGroupId(DEFAULT_WORKSPACE_TERMINAL_ID),
   };
-  return threadTerminalStateEqual(state, normalized) ? state : normalized;
+  return workspaceTerminalStateEqual(state, normalized) ? state : normalized;
 }
 
-function isDefaultThreadTerminalState(state: ThreadTerminalState): boolean {
-  const normalized = normalizeThreadTerminalState(state);
-  return threadTerminalStateEqual(normalized, DEFAULT_THREAD_TERMINAL_STATE);
+function isDefaultWorkspaceTerminalState(state: WorkspaceTerminalState): boolean {
+  const normalized = normalizeWorkspaceTerminalState(state);
+  return workspaceTerminalStateEqual(normalized, DEFAULT_WORKSPACE_TERMINAL_STATE);
 }
 
 function isValidTerminalId(terminalId: string): boolean {
   return terminalId.trim().length > 0;
 }
 
-function terminalEventBufferKey(threadId: ThreadId, terminalId: string): string {
-  return `${threadId}\u0000${terminalId}`;
+function terminalEventBufferKey(workspaceId: WorkspaceId, terminalId: string): string {
+  return `${workspaceId}\u0000${terminalId}`;
 }
 
-function copyTerminalGroups(groups: ThreadTerminalGroup[]): ThreadTerminalGroup[] {
+function copyTerminalGroups(groups: WorkspaceTerminalGroup[]): WorkspaceTerminalGroup[] {
   return groups.map((group) => ({
     id: group.id,
     terminalIds: [...group.terminalIds],
@@ -256,7 +262,7 @@ function appendTerminalEventEntry(
   nextTerminalEventId: number,
   event: TerminalEvent,
 ) {
-  const key = terminalEventBufferKey(ThreadId.makeUnsafe(event.threadId), event.terminalId);
+  const key = terminalEventBufferKey(WorkspaceId.makeUnsafe(event.workspaceId), event.terminalId);
   const currentEntries = terminalEventEntriesByKey[key] ?? EMPTY_TERMINAL_EVENT_ENTRIES;
   const nextEntry: TerminalEventEntry = {
     id: nextTerminalEventId,
@@ -278,7 +284,7 @@ function appendTerminalEventEntry(
 
 function launchContextFromStartEvent(
   event: Extract<TerminalEvent, { type: "started" | "restarted" }>,
-): ThreadTerminalLaunchContext {
+): WorkspaceTerminalLaunchContext {
   return {
     cwd: event.snapshot.cwd,
     worktreePath: event.snapshot.worktreePath,
@@ -286,11 +292,11 @@ function launchContextFromStartEvent(
 }
 
 function upsertTerminalIntoGroups(
-  state: ThreadTerminalState,
+  state: WorkspaceTerminalState,
   terminalId: string,
   mode: "split" | "new",
-): ThreadTerminalState {
-  const normalized = normalizeThreadTerminalState(state);
+): WorkspaceTerminalState {
+  const normalized = normalizeWorkspaceTerminalState(state);
   if (!isValidTerminalId(terminalId)) {
     return normalized;
   }
@@ -315,7 +321,7 @@ function upsertTerminalIntoGroups(
     const usedGroupIds = new Set(terminalGroups.map((group) => group.id));
     const nextGroupId = assignUniqueGroupId(fallbackGroupId(terminalId), usedGroupIds);
     terminalGroups.push({ id: nextGroupId, terminalIds: [terminalId] });
-    return normalizeThreadTerminalState({
+    return normalizeWorkspaceTerminalState({
       ...normalized,
       terminalOpen: true,
       terminalIds,
@@ -363,7 +369,7 @@ function upsertTerminalIntoGroups(
     }
   }
 
-  return normalizeThreadTerminalState({
+  return normalizeWorkspaceTerminalState({
     ...normalized,
     terminalOpen: true,
     terminalIds,
@@ -373,33 +379,45 @@ function upsertTerminalIntoGroups(
   });
 }
 
-function setThreadTerminalOpen(state: ThreadTerminalState, open: boolean): ThreadTerminalState {
-  const normalized = normalizeThreadTerminalState(state);
+function setWorkspaceTerminalOpen(
+  state: WorkspaceTerminalState,
+  open: boolean,
+): WorkspaceTerminalState {
+  const normalized = normalizeWorkspaceTerminalState(state);
   if (normalized.terminalOpen === open) return normalized;
   return { ...normalized, terminalOpen: open };
 }
 
-function setThreadTerminalHeight(state: ThreadTerminalState, height: number): ThreadTerminalState {
-  const normalized = normalizeThreadTerminalState(state);
+function setWorkspaceTerminalHeight(
+  state: WorkspaceTerminalState,
+  height: number,
+): WorkspaceTerminalState {
+  const normalized = normalizeWorkspaceTerminalState(state);
   if (!Number.isFinite(height) || height <= 0 || normalized.terminalHeight === height) {
     return normalized;
   }
   return { ...normalized, terminalHeight: height };
 }
 
-function splitThreadTerminal(state: ThreadTerminalState, terminalId: string): ThreadTerminalState {
+function splitWorkspaceTerminal(
+  state: WorkspaceTerminalState,
+  terminalId: string,
+): WorkspaceTerminalState {
   return upsertTerminalIntoGroups(state, terminalId, "split");
 }
 
-function newThreadTerminal(state: ThreadTerminalState, terminalId: string): ThreadTerminalState {
+function newWorkspaceTerminal(
+  state: WorkspaceTerminalState,
+  terminalId: string,
+): WorkspaceTerminalState {
   return upsertTerminalIntoGroups(state, terminalId, "new");
 }
 
-function setThreadActiveTerminal(
-  state: ThreadTerminalState,
+function setWorkspaceActiveTerminal(
+  state: WorkspaceTerminalState,
   terminalId: string,
-): ThreadTerminalState {
-  const normalized = normalizeThreadTerminalState(state);
+): WorkspaceTerminalState {
+  const normalized = normalizeWorkspaceTerminalState(state);
   if (!normalized.terminalIds.includes(terminalId)) {
     return normalized;
   }
@@ -419,15 +437,18 @@ function setThreadActiveTerminal(
   };
 }
 
-function closeThreadTerminal(state: ThreadTerminalState, terminalId: string): ThreadTerminalState {
-  const normalized = normalizeThreadTerminalState(state);
+function closeWorkspaceTerminal(
+  state: WorkspaceTerminalState,
+  terminalId: string,
+): WorkspaceTerminalState {
+  const normalized = normalizeWorkspaceTerminalState(state);
   if (!normalized.terminalIds.includes(terminalId)) {
     return normalized;
   }
 
   const remainingTerminalIds = normalized.terminalIds.filter((id) => id !== terminalId);
   if (remainingTerminalIds.length === 0) {
-    return createDefaultThreadTerminalState();
+    return createDefaultWorkspaceTerminalState();
   }
 
   const closedTerminalIndex = normalized.terminalIds.indexOf(terminalId);
@@ -435,7 +456,7 @@ function closeThreadTerminal(state: ThreadTerminalState, terminalId: string): Th
     normalized.activeTerminalId === terminalId
       ? (remainingTerminalIds[Math.min(closedTerminalIndex, remainingTerminalIds.length - 1)] ??
         remainingTerminalIds[0] ??
-        DEFAULT_THREAD_TERMINAL_ID)
+        DEFAULT_WORKSPACE_TERMINAL_ID)
       : normalized.activeTerminalId;
 
   const terminalGroups = normalized.terminalGroups
@@ -450,7 +471,7 @@ function closeThreadTerminal(state: ThreadTerminalState, terminalId: string): Th
     terminalGroups[0]?.id ??
     fallbackGroupId(nextActiveTerminalId);
 
-  return normalizeThreadTerminalState({
+  return normalizeWorkspaceTerminalState({
     terminalOpen: normalized.terminalOpen,
     terminalHeight: normalized.terminalHeight,
     terminalIds: remainingTerminalIds,
@@ -461,12 +482,12 @@ function closeThreadTerminal(state: ThreadTerminalState, terminalId: string): Th
   });
 }
 
-function setThreadTerminalActivity(
-  state: ThreadTerminalState,
+function setWorkspaceTerminalActivity(
+  state: WorkspaceTerminalState,
   terminalId: string,
   hasRunningSubprocess: boolean,
-): ThreadTerminalState {
-  const normalized = normalizeThreadTerminalState(state);
+): WorkspaceTerminalState {
+  const normalized = normalizeWorkspaceTerminalState(state);
   if (!normalized.terminalIds.includes(terminalId)) {
     return normalized;
   }
@@ -483,129 +504,132 @@ function setThreadTerminalActivity(
   return { ...normalized, runningTerminalIds: [...runningTerminalIds] };
 }
 
-export function selectThreadTerminalState(
-  terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>,
-  threadId: ThreadId,
-): ThreadTerminalState {
-  if (threadId.length === 0) {
-    return getDefaultThreadTerminalState();
+export function selectWorkspaceTerminalState(
+  terminalStateByWorkspaceId: Record<WorkspaceId, WorkspaceTerminalState>,
+  workspaceId: WorkspaceId,
+): WorkspaceTerminalState {
+  if (workspaceId.length === 0) {
+    return getDefaultWorkspaceTerminalState();
   }
-  return terminalStateByThreadId[threadId] ?? getDefaultThreadTerminalState();
+  return terminalStateByWorkspaceId[workspaceId] ?? getDefaultWorkspaceTerminalState();
 }
 
-function updateTerminalStateByThreadId(
-  terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>,
-  threadId: ThreadId,
-  updater: (state: ThreadTerminalState) => ThreadTerminalState,
-): Record<ThreadId, ThreadTerminalState> {
-  if (threadId.length === 0) {
-    return terminalStateByThreadId;
+function updateTerminalStateByWorkspaceId(
+  terminalStateByWorkspaceId: Record<WorkspaceId, WorkspaceTerminalState>,
+  workspaceId: WorkspaceId,
+  updater: (state: WorkspaceTerminalState) => WorkspaceTerminalState,
+): Record<WorkspaceId, WorkspaceTerminalState> {
+  if (workspaceId.length === 0) {
+    return terminalStateByWorkspaceId;
   }
 
-  const current = selectThreadTerminalState(terminalStateByThreadId, threadId);
+  const current = selectWorkspaceTerminalState(terminalStateByWorkspaceId, workspaceId);
   const next = updater(current);
   if (next === current) {
-    return terminalStateByThreadId;
+    return terminalStateByWorkspaceId;
   }
 
-  if (isDefaultThreadTerminalState(next)) {
-    if (terminalStateByThreadId[threadId] === undefined) {
-      return terminalStateByThreadId;
+  if (isDefaultWorkspaceTerminalState(next)) {
+    if (terminalStateByWorkspaceId[workspaceId] === undefined) {
+      return terminalStateByWorkspaceId;
     }
-    const { [threadId]: _removed, ...rest } = terminalStateByThreadId;
-    return rest as Record<ThreadId, ThreadTerminalState>;
+    const { [workspaceId]: _removed, ...rest } = terminalStateByWorkspaceId;
+    return rest as Record<WorkspaceId, WorkspaceTerminalState>;
   }
 
   return {
-    ...terminalStateByThreadId,
-    [threadId]: next,
+    ...terminalStateByWorkspaceId,
+    [workspaceId]: next,
   };
 }
 
 export function selectTerminalEventEntries(
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   terminalId: string,
 ): ReadonlyArray<TerminalEventEntry> {
-  if (threadId.length === 0 || terminalId.trim().length === 0) {
+  if (workspaceId.length === 0 || terminalId.trim().length === 0) {
     return EMPTY_TERMINAL_EVENT_ENTRIES;
   }
   return (
-    terminalEventEntriesByKey[terminalEventBufferKey(threadId, terminalId)] ??
+    terminalEventEntriesByKey[terminalEventBufferKey(workspaceId, terminalId)] ??
     EMPTY_TERMINAL_EVENT_ENTRIES
   );
 }
 
 interface TerminalStateStoreState {
-  terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
-  terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
+  terminalStateByWorkspaceId: Record<WorkspaceId, WorkspaceTerminalState>;
+  terminalLaunchContextByWorkspaceId: Record<WorkspaceId, WorkspaceTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
   nextTerminalEventId: number;
-  setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
-  setTerminalHeight: (threadId: ThreadId, height: number) => void;
-  splitTerminal: (threadId: ThreadId, terminalId: string) => void;
-  newTerminal: (threadId: ThreadId, terminalId: string) => void;
+  setTerminalOpen: (workspaceId: WorkspaceId, open: boolean) => void;
+  setTerminalHeight: (workspaceId: WorkspaceId, height: number) => void;
+  splitTerminal: (workspaceId: WorkspaceId, terminalId: string) => void;
+  newTerminal: (workspaceId: WorkspaceId, terminalId: string) => void;
   ensureTerminal: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     terminalId: string,
     options?: { open?: boolean; active?: boolean },
   ) => void;
-  setActiveTerminal: (threadId: ThreadId, terminalId: string) => void;
-  closeTerminal: (threadId: ThreadId, terminalId: string) => void;
-  setTerminalLaunchContext: (threadId: ThreadId, context: ThreadTerminalLaunchContext) => void;
-  clearTerminalLaunchContext: (threadId: ThreadId) => void;
+  setActiveTerminal: (workspaceId: WorkspaceId, terminalId: string) => void;
+  closeTerminal: (workspaceId: WorkspaceId, terminalId: string) => void;
+  setTerminalLaunchContext: (
+    workspaceId: WorkspaceId,
+    context: WorkspaceTerminalLaunchContext,
+  ) => void;
+  clearTerminalLaunchContext: (workspaceId: WorkspaceId) => void;
   setTerminalActivity: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     terminalId: string,
     hasRunningSubprocess: boolean,
   ) => void;
   recordTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvent: (event: TerminalEvent) => void;
-  clearTerminalState: (threadId: ThreadId) => void;
-  removeTerminalState: (threadId: ThreadId) => void;
-  removeOrphanedTerminalStates: (activeThreadIds: Set<ThreadId>) => void;
+  clearTerminalState: (workspaceId: WorkspaceId) => void;
+  removeTerminalState: (workspaceId: WorkspaceId) => void;
+  removeOrphanedTerminalStates: (activeWorkspaceIds: Set<WorkspaceId>) => void;
 }
 
 export const useTerminalStateStore = create<TerminalStateStoreState>()(
   persist(
     (set) => {
       const updateTerminal = (
-        threadId: ThreadId,
-        updater: (state: ThreadTerminalState) => ThreadTerminalState,
+        workspaceId: WorkspaceId,
+        updater: (state: WorkspaceTerminalState) => WorkspaceTerminalState,
       ) => {
         set((state) => {
-          const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
-            state.terminalStateByThreadId,
-            threadId,
+          const nextTerminalStateByWorkspaceId = updateTerminalStateByWorkspaceId(
+            state.terminalStateByWorkspaceId,
+            workspaceId,
             updater,
           );
-          if (nextTerminalStateByThreadId === state.terminalStateByThreadId) {
+          if (nextTerminalStateByWorkspaceId === state.terminalStateByWorkspaceId) {
             return state;
           }
           return {
-            terminalStateByThreadId: nextTerminalStateByThreadId,
+            terminalStateByWorkspaceId: nextTerminalStateByWorkspaceId,
           };
         });
       };
 
       return {
-        terminalStateByThreadId: {},
-        terminalLaunchContextByThreadId: {},
+        terminalStateByWorkspaceId: {},
+        terminalLaunchContextByWorkspaceId: {},
         terminalEventEntriesByKey: {},
         nextTerminalEventId: 1,
-        setTerminalOpen: (threadId, open) =>
-          updateTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
-        setTerminalHeight: (threadId, height) =>
-          updateTerminal(threadId, (state) => setThreadTerminalHeight(state, height)),
-        splitTerminal: (threadId, terminalId) =>
-          updateTerminal(threadId, (state) => splitThreadTerminal(state, terminalId)),
-        newTerminal: (threadId, terminalId) =>
-          updateTerminal(threadId, (state) => newThreadTerminal(state, terminalId)),
-        ensureTerminal: (threadId, terminalId, options) =>
-          updateTerminal(threadId, (state) => {
+        setTerminalOpen: (workspaceId, open) =>
+          updateTerminal(workspaceId, (state) => setWorkspaceTerminalOpen(state, open)),
+        setTerminalHeight: (workspaceId, height) =>
+          updateTerminal(workspaceId, (state) => setWorkspaceTerminalHeight(state, height)),
+        splitTerminal: (workspaceId, terminalId) =>
+          updateTerminal(workspaceId, (state) => splitWorkspaceTerminal(state, terminalId)),
+        newTerminal: (workspaceId, terminalId) =>
+          updateTerminal(workspaceId, (state) => newWorkspaceTerminal(state, terminalId)),
+        ensureTerminal: (workspaceId, terminalId, options) =>
+          updateTerminal(workspaceId, (state) => {
             let nextState = state;
             if (!state.terminalIds.includes(terminalId)) {
-              nextState = newThreadTerminal(nextState, terminalId);
+              nextState = newWorkspaceTerminal(nextState, terminalId);
             }
             if (options?.active === false) {
               nextState = {
@@ -615,35 +639,35 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               };
             }
             if (options?.active ?? true) {
-              nextState = setThreadActiveTerminal(nextState, terminalId);
+              nextState = setWorkspaceActiveTerminal(nextState, terminalId);
             }
             if (options?.open) {
-              nextState = setThreadTerminalOpen(nextState, true);
+              nextState = setWorkspaceTerminalOpen(nextState, true);
             }
-            return normalizeThreadTerminalState(nextState);
+            return normalizeWorkspaceTerminalState(nextState);
           }),
-        setActiveTerminal: (threadId, terminalId) =>
-          updateTerminal(threadId, (state) => setThreadActiveTerminal(state, terminalId)),
-        closeTerminal: (threadId, terminalId) =>
-          updateTerminal(threadId, (state) => closeThreadTerminal(state, terminalId)),
-        setTerminalLaunchContext: (threadId, context) =>
+        setActiveTerminal: (workspaceId, terminalId) =>
+          updateTerminal(workspaceId, (state) => setWorkspaceActiveTerminal(state, terminalId)),
+        closeTerminal: (workspaceId, terminalId) =>
+          updateTerminal(workspaceId, (state) => closeWorkspaceTerminal(state, terminalId)),
+        setTerminalLaunchContext: (workspaceId, context) =>
           set((state) => ({
-            terminalLaunchContextByThreadId: {
-              ...state.terminalLaunchContextByThreadId,
-              [threadId]: context,
+            terminalLaunchContextByWorkspaceId: {
+              ...state.terminalLaunchContextByWorkspaceId,
+              [workspaceId]: context,
             },
           })),
-        clearTerminalLaunchContext: (threadId) =>
+        clearTerminalLaunchContext: (workspaceId) =>
           set((state) => {
-            if (!state.terminalLaunchContextByThreadId[threadId]) {
+            if (!state.terminalLaunchContextByWorkspaceId[workspaceId]) {
               return state;
             }
-            const { [threadId]: _removed, ...rest } = state.terminalLaunchContextByThreadId;
-            return { terminalLaunchContextByThreadId: rest };
+            const { [workspaceId]: _removed, ...rest } = state.terminalLaunchContextByWorkspaceId;
+            return { terminalLaunchContextByWorkspaceId: rest };
           }),
-        setTerminalActivity: (threadId, terminalId, hasRunningSubprocess) =>
-          updateTerminal(threadId, (state) =>
-            setThreadTerminalActivity(state, terminalId, hasRunningSubprocess),
+        setTerminalActivity: (workspaceId, terminalId, hasRunningSubprocess) =>
+          updateTerminal(workspaceId, (state) =>
+            setWorkspaceTerminalActivity(state, terminalId, hasRunningSubprocess),
           ),
         recordTerminalEvent: (event) =>
           set((state) =>
@@ -655,37 +679,37 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           ),
         applyTerminalEvent: (event) =>
           set((state) => {
-            const threadId = ThreadId.makeUnsafe(event.threadId);
-            let nextTerminalStateByThreadId = state.terminalStateByThreadId;
-            let nextTerminalLaunchContextByThreadId = state.terminalLaunchContextByThreadId;
+            const workspaceId = WorkspaceId.makeUnsafe(event.workspaceId);
+            let nextTerminalStateByWorkspaceId = state.terminalStateByWorkspaceId;
+            let nextTerminalLaunchContextByWorkspaceId = state.terminalLaunchContextByWorkspaceId;
 
             if (event.type === "started" || event.type === "restarted") {
-              nextTerminalStateByThreadId = updateTerminalStateByThreadId(
-                nextTerminalStateByThreadId,
-                threadId,
+              nextTerminalStateByWorkspaceId = updateTerminalStateByWorkspaceId(
+                nextTerminalStateByWorkspaceId,
+                workspaceId,
                 (current) => {
                   let nextState = current;
                   if (!current.terminalIds.includes(event.terminalId)) {
-                    nextState = newThreadTerminal(nextState, event.terminalId);
+                    nextState = newWorkspaceTerminal(nextState, event.terminalId);
                   }
-                  nextState = setThreadActiveTerminal(nextState, event.terminalId);
-                  nextState = setThreadTerminalOpen(nextState, true);
-                  return normalizeThreadTerminalState(nextState);
+                  nextState = setWorkspaceActiveTerminal(nextState, event.terminalId);
+                  nextState = setWorkspaceTerminalOpen(nextState, true);
+                  return normalizeWorkspaceTerminalState(nextState);
                 },
               );
-              nextTerminalLaunchContextByThreadId = {
-                ...nextTerminalLaunchContextByThreadId,
-                [threadId]: launchContextFromStartEvent(event),
+              nextTerminalLaunchContextByWorkspaceId = {
+                ...nextTerminalLaunchContextByWorkspaceId,
+                [workspaceId]: launchContextFromStartEvent(event),
               };
             }
 
             const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);
             if (hasRunningSubprocess !== null) {
-              nextTerminalStateByThreadId = updateTerminalStateByThreadId(
-                nextTerminalStateByThreadId,
-                threadId,
+              nextTerminalStateByWorkspaceId = updateTerminalStateByWorkspaceId(
+                nextTerminalStateByWorkspaceId,
+                workspaceId,
                 (current) =>
-                  setThreadTerminalActivity(current, event.terminalId, hasRunningSubprocess),
+                  setWorkspaceTerminalActivity(current, event.terminalId, hasRunningSubprocess),
               );
             }
 
@@ -696,50 +720,52 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             );
 
             return {
-              terminalStateByThreadId: nextTerminalStateByThreadId,
-              terminalLaunchContextByThreadId: nextTerminalLaunchContextByThreadId,
+              terminalStateByWorkspaceId: nextTerminalStateByWorkspaceId,
+              terminalLaunchContextByWorkspaceId: nextTerminalLaunchContextByWorkspaceId,
               ...nextEventState,
             };
           }),
-        clearTerminalState: (threadId) =>
+        clearTerminalState: (workspaceId) =>
           set((state) => {
-            const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
-              state.terminalStateByThreadId,
-              threadId,
-              () => createDefaultThreadTerminalState(),
+            const nextTerminalStateByWorkspaceId = updateTerminalStateByWorkspaceId(
+              state.terminalStateByWorkspaceId,
+              workspaceId,
+              () => createDefaultWorkspaceTerminalState(),
             );
-            const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
-            const { [threadId]: _removed, ...remainingLaunchContexts } =
-              state.terminalLaunchContextByThreadId;
+            const hadLaunchContext =
+              state.terminalLaunchContextByWorkspaceId[workspaceId] !== undefined;
+            const { [workspaceId]: _removed, ...remainingLaunchContexts } =
+              state.terminalLaunchContextByWorkspaceId;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
-              if (key.startsWith(`${threadId}\u0000`)) {
+              if (key.startsWith(`${workspaceId}\u0000`)) {
                 delete nextTerminalEventEntriesByKey[key];
                 removedEventEntries = true;
               }
             }
             if (
-              nextTerminalStateByThreadId === state.terminalStateByThreadId &&
+              nextTerminalStateByWorkspaceId === state.terminalStateByWorkspaceId &&
               !hadLaunchContext &&
               !removedEventEntries
             ) {
               return state;
             }
             return {
-              terminalStateByThreadId: nextTerminalStateByThreadId,
-              terminalLaunchContextByThreadId: remainingLaunchContexts,
+              terminalStateByWorkspaceId: nextTerminalStateByWorkspaceId,
+              terminalLaunchContextByWorkspaceId: remainingLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
-        removeTerminalState: (threadId) =>
+        removeTerminalState: (workspaceId) =>
           set((state) => {
-            const hadTerminalState = state.terminalStateByThreadId[threadId] !== undefined;
-            const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
+            const hadTerminalState = state.terminalStateByWorkspaceId[workspaceId] !== undefined;
+            const hadLaunchContext =
+              state.terminalLaunchContextByWorkspaceId[workspaceId] !== undefined;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
-              if (key.startsWith(`${threadId}\u0000`)) {
+              if (key.startsWith(`${workspaceId}\u0000`)) {
                 delete nextTerminalEventEntriesByKey[key];
                 removedEventEntries = true;
               }
@@ -747,29 +773,29 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             if (!hadTerminalState && !hadLaunchContext && !removedEventEntries) {
               return state;
             }
-            const nextTerminalStateByThreadId = { ...state.terminalStateByThreadId };
-            delete nextTerminalStateByThreadId[threadId];
-            const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
-            delete nextLaunchContexts[threadId];
+            const nextTerminalStateByWorkspaceId = { ...state.terminalStateByWorkspaceId };
+            delete nextTerminalStateByWorkspaceId[workspaceId];
+            const nextLaunchContexts = { ...state.terminalLaunchContextByWorkspaceId };
+            delete nextLaunchContexts[workspaceId];
             return {
-              terminalStateByThreadId: nextTerminalStateByThreadId,
-              terminalLaunchContextByThreadId: nextLaunchContexts,
+              terminalStateByWorkspaceId: nextTerminalStateByWorkspaceId,
+              terminalLaunchContextByWorkspaceId: nextLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
-        removeOrphanedTerminalStates: (activeThreadIds) =>
+        removeOrphanedTerminalStates: (activeWorkspaceIds) =>
           set((state) => {
-            const orphanedIds = Object.keys(state.terminalStateByThreadId).filter(
-              (id) => !activeThreadIds.has(id as ThreadId),
+            const orphanedIds = Object.keys(state.terminalStateByWorkspaceId).filter(
+              (id) => !activeWorkspaceIds.has(id as WorkspaceId),
             );
             const orphanedLaunchContextIds = Object.keys(
-              state.terminalLaunchContextByThreadId,
-            ).filter((id) => !activeThreadIds.has(id as ThreadId));
+              state.terminalLaunchContextByWorkspaceId,
+            ).filter((id) => !activeWorkspaceIds.has(id as WorkspaceId));
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
-              const [threadId] = key.split("\u0000");
-              if (threadId && !activeThreadIds.has(threadId as ThreadId)) {
+              const [workspaceId] = key.split("\u0000");
+              if (workspaceId && !activeWorkspaceIds.has(workspaceId as WorkspaceId)) {
                 delete nextTerminalEventEntriesByKey[key];
                 removedEventEntries = true;
               }
@@ -781,17 +807,17 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             ) {
               return state;
             }
-            const next = { ...state.terminalStateByThreadId };
+            const next = { ...state.terminalStateByWorkspaceId };
             for (const id of orphanedIds) {
-              delete next[id as ThreadId];
+              delete next[id as WorkspaceId];
             }
-            const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
+            const nextLaunchContexts = { ...state.terminalLaunchContextByWorkspaceId };
             for (const id of orphanedLaunchContextIds) {
-              delete nextLaunchContexts[id as ThreadId];
+              delete nextLaunchContexts[id as WorkspaceId];
             }
             return {
-              terminalStateByThreadId: next,
-              terminalLaunchContextByThreadId: nextLaunchContexts,
+              terminalStateByWorkspaceId: next,
+              terminalLaunchContextByWorkspaceId: nextLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
@@ -802,7 +828,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       version: 1,
       storage: createJSONStorage(createTerminalStateStorage),
       partialize: (state) => ({
-        terminalStateByThreadId: state.terminalStateByThreadId,
+        terminalStateByWorkspaceId: state.terminalStateByWorkspaceId,
       }),
     },
   ),

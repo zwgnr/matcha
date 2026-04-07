@@ -2,12 +2,12 @@ import {
   ApprovalRequestId,
   isToolLifecycleItemType,
   type OrchestrationLatestTurn,
-  type OrchestrationThreadActivity,
+  type OrchestrationWorkspaceActivity,
   type OrchestrationProposedPlanId,
   type ProviderKind,
   type ToolLifecycleItemType,
   type UserInputQuestion,
-  type ThreadId,
+  type WorkspaceId,
   type TurnId,
 } from "@matcha/contracts";
 
@@ -15,8 +15,8 @@ import type {
   ChatMessage,
   ProposedPlan,
   SessionPhase,
-  Thread,
-  ThreadSession,
+  Workspace,
+  WorkspaceSession,
   TurnDiffSummary,
 } from "./types";
 
@@ -46,7 +46,7 @@ export interface WorkLogEntry {
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
-  activityKind: OrchestrationThreadActivity["kind"];
+  activityKind: OrchestrationWorkspaceActivity["kind"];
   collapseKey?: string;
 }
 
@@ -80,7 +80,7 @@ export interface LatestProposedPlanState {
   turnId: TurnId | null;
   planMarkdown: string;
   implementedAt: string | null;
-  implementationThreadId: ThreadId | null;
+  implementationWorkspaceId: WorkspaceId | null;
 }
 
 export type TimelineEntry =
@@ -126,7 +126,7 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 }
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
-type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
+type SessionActivityState = Pick<WorkspaceSession, "orchestrationStatus" | "activeTurnId">;
 
 export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
@@ -180,7 +180,7 @@ function isStalePendingRequestFailureDetail(detail: string | undefined): boolean
 }
 
 export function derivePendingApprovals(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationWorkspaceActivity>,
 ): PendingApproval[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingApproval>();
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -285,7 +285,7 @@ function parseUserInputQuestions(
 }
 
 export function derivePendingUserInputs(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationWorkspaceActivity>,
 ): PendingUserInput[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingUserInput>();
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -334,7 +334,7 @@ export function derivePendingUserInputs(
 }
 
 export function deriveActivePlanState(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationWorkspaceActivity>,
   latestTurnId: TurnId | undefined,
 ): ActivePlanState | null {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -425,19 +425,19 @@ export function findLatestProposedPlan(
 }
 
 export function findSidebarProposedPlan(input: {
-  threads: ReadonlyArray<Pick<Thread, "id" | "proposedPlans">>;
+  workspaces: ReadonlyArray<Pick<Workspace, "id" | "proposedPlans">>;
   latestTurn: Pick<OrchestrationLatestTurn, "turnId" | "sourceProposedPlan"> | null;
   latestTurnSettled: boolean;
-  threadId: ThreadId | string | null | undefined;
+  workspaceId: WorkspaceId | string | null | undefined;
 }): LatestProposedPlanState | null {
-  const activeThreadPlans =
-    input.threads.find((thread) => thread.id === input.threadId)?.proposedPlans ?? [];
+  const activeWorkspacePlans =
+    input.workspaces.find((workspace) => workspace.id === input.workspaceId)?.proposedPlans ?? [];
 
   if (!input.latestTurnSettled) {
     const sourceProposedPlan = input.latestTurn?.sourceProposedPlan;
     if (sourceProposedPlan) {
-      const sourcePlan = input.threads
-        .find((thread) => thread.id === sourceProposedPlan.threadId)
+      const sourcePlan = input.workspaces
+        .find((workspace) => workspace.id === sourceProposedPlan.workspaceId)
         ?.proposedPlans.find((plan) => plan.id === sourceProposedPlan.planId);
       if (sourcePlan) {
         return toLatestProposedPlanState(sourcePlan);
@@ -445,7 +445,7 @@ export function findSidebarProposedPlan(input: {
     }
   }
 
-  return findLatestProposedPlan(activeThreadPlans, input.latestTurn?.turnId ?? null);
+  return findLatestProposedPlan(activeWorkspacePlans, input.latestTurn?.turnId ?? null);
 }
 
 export function hasActionableProposedPlan(
@@ -455,7 +455,7 @@ export function hasActionableProposedPlan(
 }
 
 export function deriveWorkLogEntries(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationWorkspaceActivity>,
   latestTurnId: TurnId | undefined,
 ): WorkLogEntry[] {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -472,7 +472,7 @@ export function deriveWorkLogEntries(
   );
 }
 
-function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): boolean {
+function isPlanBoundaryToolActivity(activity: OrchestrationWorkspaceActivity): boolean {
   if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") {
     return false;
   }
@@ -484,7 +484,7 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
   return typeof payload?.detail === "string" && payload.detail.startsWith("ExitPlanMode:");
 }
 
-function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
+function toDerivedWorkLogEntry(activity: OrchestrationWorkspaceActivity): DerivedWorkLogEntry {
   const payload =
     activity.payload && typeof activity.payload === "object"
       ? (activity.payload as Record<string, unknown>)
@@ -620,7 +620,7 @@ function toLatestProposedPlanState(proposedPlan: ProposedPlan): LatestProposedPl
     turnId: proposedPlan.turnId,
     planMarkdown: proposedPlan.planMarkdown,
     implementedAt: proposedPlan.implementedAt,
-    implementationThreadId: proposedPlan.implementationThreadId,
+    implementationWorkspaceId: proposedPlan.implementationWorkspaceId,
   };
 }
 
@@ -776,8 +776,8 @@ function extractChangedFiles(payload: Record<string, unknown> | null): string[] 
 }
 
 function compareActivitiesByOrder(
-  left: OrchestrationThreadActivity,
-  right: OrchestrationThreadActivity,
+  left: OrchestrationWorkspaceActivity,
+  right: OrchestrationWorkspaceActivity,
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -817,7 +817,7 @@ function compareActivityLifecycleRank(kind: string): number {
 }
 
 export function hasToolActivityForTurn(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationWorkspaceActivity>,
   turnId: TurnId | null | undefined,
 ): boolean {
   if (!turnId) return false;
@@ -912,7 +912,7 @@ export function inferCheckpointTurnCountByTurnId(
   return result;
 }
 
-export function derivePhase(session: ThreadSession | null): SessionPhase {
+export function derivePhase(session: WorkspaceSession | null): SessionPhase {
   if (!session || session.status === "closed") return "disconnected";
   if (session.status === "connecting") return "connecting";
   if (session.status === "running") return "running";

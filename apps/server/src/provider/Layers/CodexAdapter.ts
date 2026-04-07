@@ -11,14 +11,14 @@ import {
   type CanonicalRequestType,
   type ProviderEvent,
   type ProviderRuntimeEvent,
-  type ThreadTokenUsageSnapshot,
+  type WorkspaceTokenUsageSnapshot,
   type ProviderUserInputAnswers,
   RuntimeItemId,
   RuntimeRequestId,
   RuntimeTaskId,
   ProviderApprovalDecision,
   ProviderItemId,
-  ThreadId,
+  WorkspaceId,
   TurnId,
   ProviderSendTurnInput,
 } from "@matcha/contracts";
@@ -59,29 +59,33 @@ function toMessage(cause: unknown, fallback: string): string {
 }
 
 function toSessionError(
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   cause: unknown,
 ): ProviderAdapterSessionNotFoundError | ProviderAdapterSessionClosedError | undefined {
   const normalized = toMessage(cause, "").toLowerCase();
   if (normalized.includes("unknown session") || normalized.includes("unknown provider session")) {
     return new ProviderAdapterSessionNotFoundError({
       provider: PROVIDER,
-      threadId,
+      workspaceId,
       cause,
     });
   }
   if (normalized.includes("session is closed")) {
     return new ProviderAdapterSessionClosedError({
       provider: PROVIDER,
-      threadId,
+      workspaceId,
       cause,
     });
   }
   return undefined;
 }
 
-function toRequestError(threadId: ThreadId, method: string, cause: unknown): ProviderAdapterError {
-  const sessionError = toSessionError(threadId, cause);
+function toRequestError(
+  workspaceId: WorkspaceId,
+  method: string,
+  cause: unknown,
+): ProviderAdapterError {
+  const sessionError = toSessionError(workspaceId, cause);
   if (sessionError) {
     return sessionError;
   }
@@ -119,7 +123,7 @@ function isFatalCodexProcessStderrMessage(message: string): boolean {
   return FATAL_CODEX_STDERR_SNIPPETS.some((snippet) => normalized.includes(snippet));
 }
 
-function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | undefined {
+function normalizeCodexTokenUsage(value: unknown): WorkspaceTokenUsageSnapshot | undefined {
   const usage = asObject(value);
   const totalUsage = asObject(usage?.total_token_usage ?? usage?.total);
   const lastUsage = asObject(usage?.last_token_usage ?? usage?.last);
@@ -398,7 +402,7 @@ function toUserInputQuestions(payload: Record<string, unknown> | undefined) {
   return parsedQuestions.length > 0 ? parsedQuestions : undefined;
 }
 
-function toThreadState(
+function toWorkspaceState(
   value: unknown,
 ): "active" | "idle" | "archived" | "closed" | "compacted" | "error" {
   switch (value) {
@@ -471,14 +475,14 @@ function codexEventMessage(
 
 function codexEventBase(
   event: ProviderEvent,
-  canonicalThreadId: ThreadId,
+  canonicalWorkspaceId: WorkspaceId,
 ): Omit<ProviderRuntimeEvent, "type" | "payload"> {
   const payload = asObject(event.payload);
   const msg = codexEventMessage(payload);
   const turnId = event.turnId ?? toTurnId(asString(msg?.turn_id) ?? asString(msg?.turnId));
   const itemId = event.itemId ?? toProviderItemId(asString(msg?.item_id) ?? asString(msg?.itemId));
   const requestId = asString(msg?.request_id) ?? asString(msg?.requestId);
-  const base = runtimeEventBase(event, canonicalThreadId);
+  const base = runtimeEventBase(event, canonicalWorkspaceId);
   const providerRefs = base.providerRefs
     ? {
         ...base.providerRefs,
@@ -518,13 +522,13 @@ function providerRefsFromEvent(
 
 function runtimeEventBase(
   event: ProviderEvent,
-  canonicalThreadId: ThreadId,
+  canonicalWorkspaceId: WorkspaceId,
 ): Omit<ProviderRuntimeEvent, "type" | "payload"> {
   const refs = providerRefsFromEvent(event);
   return {
     eventId: event.id,
     provider: event.provider,
-    threadId: canonicalThreadId,
+    workspaceId: canonicalWorkspaceId,
     createdAt: event.createdAt,
     ...(event.turnId ? { turnId: event.turnId } : {}),
     ...(event.itemId ? { itemId: asRuntimeItemId(event.itemId) } : {}),
@@ -540,7 +544,7 @@ function runtimeEventBase(
 
 function mapItemLifecycle(
   event: ProviderEvent,
-  canonicalThreadId: ThreadId,
+  canonicalWorkspaceId: WorkspaceId,
   lifecycle: "item.started" | "item.updated" | "item.completed",
 ): ProviderRuntimeEvent | undefined {
   const payload = asObject(event.payload);
@@ -564,7 +568,7 @@ function mapItemLifecycle(
         : undefined;
 
   return {
-    ...runtimeEventBase(event, canonicalThreadId),
+    ...runtimeEventBase(event, canonicalWorkspaceId),
     type: lifecycle,
     payload: {
       itemType,
@@ -578,7 +582,7 @@ function mapItemLifecycle(
 
 function mapToRuntimeEvents(
   event: ProviderEvent,
-  canonicalThreadId: ThreadId,
+  canonicalWorkspaceId: WorkspaceId,
 ): ReadonlyArray<ProviderRuntimeEvent> {
   const payload = asObject(event.payload);
   const turn = asObject(payload?.turn);
@@ -589,7 +593,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "runtime.error",
         payload: {
           message: event.message,
@@ -608,7 +612,7 @@ function mapToRuntimeEvents(
       }
       return [
         {
-          ...runtimeEventBase(event, canonicalThreadId),
+          ...runtimeEventBase(event, canonicalWorkspaceId),
           type: "user-input.requested",
           payload: {
             questions,
@@ -621,7 +625,7 @@ function mapToRuntimeEvents(
       asString(payload?.command) ?? asString(payload?.reason) ?? asString(payload?.prompt);
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "request.opened",
         payload: {
           requestType: toRequestTypeFromMethod(event.method),
@@ -640,7 +644,7 @@ function mapToRuntimeEvents(
         : toRequestTypeFromMethod(event.method);
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "request.resolved",
         payload: {
           requestType,
@@ -654,7 +658,7 @@ function mapToRuntimeEvents(
   if (event.method === "session/connecting") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "session.state.changed",
         payload: {
           state: "starting",
@@ -667,7 +671,7 @@ function mapToRuntimeEvents(
   if (event.method === "session/ready") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "session.state.changed",
         payload: {
           state: "ready",
@@ -680,7 +684,7 @@ function mapToRuntimeEvents(
   if (event.method === "session/started") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "session.started",
         payload: {
           ...(event.message ? { message: event.message } : {}),
@@ -693,7 +697,7 @@ function mapToRuntimeEvents(
   if (event.method === "session/exited" || event.method === "session/closed") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "session.exited",
         payload: {
           ...(event.message ? { reason: event.message } : {}),
@@ -703,18 +707,20 @@ function mapToRuntimeEvents(
     ];
   }
 
-  if (event.method === "thread/started") {
-    const payloadThreadId = asString(asObject(payload?.thread)?.id);
-    const providerThreadId = payloadThreadId ?? asString(payload?.threadId);
-    if (!providerThreadId) {
+  if (event.method === "thread/started" || event.method === "workspace/started") {
+    const payloadWorkspaceId =
+      asString(asObject(payload?.thread)?.id) ?? asString(asObject(payload?.workspace)?.id);
+    const providerWorkspaceId =
+      payloadWorkspaceId ?? asString(payload?.threadId) ?? asString(payload?.workspaceId);
+    if (!providerWorkspaceId) {
       return [];
     }
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
-        type: "thread.started",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
+        type: "workspace.started",
         payload: {
-          providerThreadId,
+          providerWorkspaceId,
         },
       },
     ];
@@ -725,41 +731,55 @@ function mapToRuntimeEvents(
     event.method === "thread/archived" ||
     event.method === "thread/unarchived" ||
     event.method === "thread/closed" ||
-    event.method === "thread/compacted"
+    event.method === "thread/compacted" ||
+    event.method === "workspace/status/changed" ||
+    event.method === "workspace/archived" ||
+    event.method === "workspace/unarchived" ||
+    event.method === "workspace/closed" ||
+    event.method === "workspace/compacted"
   ) {
     return [
       {
-        type: "thread.state.changed",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.state.changed",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           state:
-            event.method === "thread/archived"
+            event.method === "thread/archived" || event.method === "workspace/archived"
               ? "archived"
-              : event.method === "thread/closed"
+              : event.method === "thread/closed" || event.method === "workspace/closed"
                 ? "closed"
-                : event.method === "thread/compacted"
+                : event.method === "thread/compacted" || event.method === "workspace/compacted"
                   ? "compacted"
-                  : toThreadState(asObject(payload?.thread)?.state ?? payload?.state),
+                  : toWorkspaceState(
+                      asObject(payload?.thread)?.state ??
+                        asObject(payload?.workspace)?.state ??
+                        payload?.state,
+                    ),
           ...(event.payload !== undefined ? { detail: event.payload } : {}),
         },
       },
     ];
   }
 
-  if (event.method === "thread/name/updated") {
+  if (event.method === "thread/name/updated" || event.method === "workspace/name/updated") {
     return [
       {
-        type: "thread.metadata.updated",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.metadata.updated",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
-          ...(asString(payload?.threadName) ? { name: asString(payload?.threadName) } : {}),
+          ...(asString(payload?.threadName) || asString(payload?.workspaceName)
+            ? { name: asString(payload?.threadName) ?? asString(payload?.workspaceName) }
+            : {}),
           ...(event.payload !== undefined ? { metadata: asObject(event.payload) } : {}),
         },
       },
     ];
   }
 
-  if (event.method === "thread/tokenUsage/updated") {
+  if (
+    event.method === "thread/tokenUsage/updated" ||
+    event.method === "workspace/tokenUsage/updated"
+  ) {
     const tokenUsage = asObject(payload?.tokenUsage);
     const normalizedUsage = normalizeCodexTokenUsage(tokenUsage ?? event.payload);
     if (!normalizedUsage) {
@@ -767,8 +787,8 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        type: "thread.token-usage.updated",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.token-usage.updated",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           usage: normalizedUsage,
         },
@@ -783,7 +803,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         turnId,
         type: "turn.started",
         payload: {
@@ -798,7 +818,7 @@ function mapToRuntimeEvents(
     const errorMessage = asString(asObject(turn?.error)?.message);
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "turn.completed",
         payload: {
           state: toTurnStatus(turn?.status),
@@ -817,7 +837,7 @@ function mapToRuntimeEvents(
   if (event.method === "turn/aborted") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "turn.aborted",
         payload: {
           reason: event.message ?? "Turn aborted",
@@ -830,7 +850,7 @@ function mapToRuntimeEvents(
     const steps = Array.isArray(payload?.plan) ? payload.plan : [];
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "turn.plan.updated",
         payload: {
           ...(asString(payload?.explanation)
@@ -854,7 +874,7 @@ function mapToRuntimeEvents(
   if (event.method === "turn/diff/updated") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "turn.diff.updated",
         payload: {
           unifiedDiff:
@@ -868,7 +888,7 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "item/started") {
-    const started = mapItemLifecycle(event, canonicalThreadId, "item.started");
+    const started = mapItemLifecycle(event, canonicalWorkspaceId, "item.started");
     return started ? [started] : [];
   }
 
@@ -887,7 +907,7 @@ function mapToRuntimeEvents(
       }
       return [
         {
-          ...runtimeEventBase(event, canonicalThreadId),
+          ...runtimeEventBase(event, canonicalWorkspaceId),
           type: "turn.proposed.completed",
           payload: {
             planMarkdown: detail,
@@ -895,7 +915,7 @@ function mapToRuntimeEvents(
         },
       ];
     }
-    const completed = mapItemLifecycle(event, canonicalThreadId, "item.completed");
+    const completed = mapItemLifecycle(event, canonicalWorkspaceId, "item.completed");
     return completed ? [completed] : [];
   }
 
@@ -903,7 +923,7 @@ function mapToRuntimeEvents(
     event.method === "item/reasoning/summaryPartAdded" ||
     event.method === "item/commandExecution/terminalInteraction"
   ) {
-    const updated = mapItemLifecycle(event, canonicalThreadId, "item.updated");
+    const updated = mapItemLifecycle(event, canonicalWorkspaceId, "item.updated");
     return updated ? [updated] : [];
   }
 
@@ -918,7 +938,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "turn.proposed.delta",
         payload: {
           delta,
@@ -944,7 +964,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "content.delta",
         payload: {
           streamKind: contentStreamKindFromMethod(event.method),
@@ -963,7 +983,7 @@ function mapToRuntimeEvents(
   if (event.method === "item/mcpToolCall/progress") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "tool.progress",
         payload: {
           ...(asString(payload?.toolUseId) ? { toolUseId: asString(payload?.toolUseId) } : {}),
@@ -986,7 +1006,7 @@ function mapToRuntimeEvents(
           : "unknown";
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "request.resolved",
         payload: {
           requestType,
@@ -999,7 +1019,7 @@ function mapToRuntimeEvents(
   if (event.method === "item/tool/requestUserInput/answered") {
     return [
       {
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         type: "user-input.resolved",
         payload: {
           answers: toCanonicalUserInputAnswers(
@@ -1018,7 +1038,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...codexEventBase(event, canonicalThreadId),
+        ...codexEventBase(event, canonicalWorkspaceId),
         type: "task.started",
         payload: {
           taskId: asRuntimeTaskId(taskId),
@@ -1040,7 +1060,7 @@ function mapToRuntimeEvents(
       }
       return [
         {
-          ...codexEventBase(event, canonicalThreadId),
+          ...codexEventBase(event, canonicalWorkspaceId),
           type: "turn.proposed.completed",
           payload: {
             planMarkdown: proposedPlanMarkdown,
@@ -1050,7 +1070,7 @@ function mapToRuntimeEvents(
     }
     const events: ProviderRuntimeEvent[] = [
       {
-        ...codexEventBase(event, canonicalThreadId),
+        ...codexEventBase(event, canonicalWorkspaceId),
         type: "task.completed",
         payload: {
           taskId: asRuntimeTaskId(taskId),
@@ -1063,7 +1083,7 @@ function mapToRuntimeEvents(
     ];
     if (proposedPlanMarkdown) {
       events.push({
-        ...codexEventBase(event, canonicalThreadId),
+        ...codexEventBase(event, canonicalWorkspaceId),
         type: "turn.proposed.completed",
         payload: {
           planMarkdown: proposedPlanMarkdown,
@@ -1082,7 +1102,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...codexEventBase(event, canonicalThreadId),
+        ...codexEventBase(event, canonicalWorkspaceId),
         type: "task.progress",
         payload: {
           taskId: asRuntimeTaskId(taskId),
@@ -1100,7 +1120,7 @@ function mapToRuntimeEvents(
     }
     return [
       {
-        ...codexEventBase(event, canonicalThreadId),
+        ...codexEventBase(event, canonicalWorkspaceId),
         type: "content.delta",
         payload: {
           streamKind:
@@ -1120,7 +1140,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "model.rerouted",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           fromModel: asString(payload?.fromModel) ?? "unknown",
           toModel: asString(payload?.toModel) ?? "unknown",
@@ -1134,7 +1154,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "deprecation.notice",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           summary: asString(payload?.summary) ?? "Deprecation notice",
           ...(asString(payload?.details) ? { details: asString(payload?.details) } : {}),
@@ -1147,7 +1167,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "config.warning",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           summary: asString(payload?.summary) ?? "Configuration warning",
           ...(asString(payload?.details) ? { details: asString(payload?.details) } : {}),
@@ -1162,7 +1182,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "account.updated",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           account: event.payload ?? {},
         },
@@ -1174,7 +1194,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "account.rate-limits.updated",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           rateLimits: event.payload ?? {},
         },
@@ -1186,7 +1206,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "mcp.oauth.completed",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           success: payload?.success === true,
           ...(asString(payload?.name) ? { name: asString(payload?.name) } : {}),
@@ -1196,12 +1216,12 @@ function mapToRuntimeEvents(
     ];
   }
 
-  if (event.method === "thread/realtime/started") {
+  if (event.method === "thread/realtime/started" || event.method === "workspace/realtime/started") {
     const realtimeSessionId = asString(payload?.realtimeSessionId);
     return [
       {
-        type: "thread.realtime.started",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.realtime.started",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           realtimeSessionId,
         },
@@ -1209,11 +1229,14 @@ function mapToRuntimeEvents(
     ];
   }
 
-  if (event.method === "thread/realtime/itemAdded") {
+  if (
+    event.method === "thread/realtime/itemAdded" ||
+    event.method === "workspace/realtime/itemAdded"
+  ) {
     return [
       {
-        type: "thread.realtime.item-added",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.realtime.item-added",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           item: event.payload ?? {},
         },
@@ -1221,11 +1244,14 @@ function mapToRuntimeEvents(
     ];
   }
 
-  if (event.method === "thread/realtime/outputAudio/delta") {
+  if (
+    event.method === "thread/realtime/outputAudio/delta" ||
+    event.method === "workspace/realtime/outputAudio/delta"
+  ) {
     return [
       {
-        type: "thread.realtime.audio.delta",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.realtime.audio.delta",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           audio: event.payload ?? {},
         },
@@ -1233,12 +1259,12 @@ function mapToRuntimeEvents(
     ];
   }
 
-  if (event.method === "thread/realtime/error") {
+  if (event.method === "thread/realtime/error" || event.method === "workspace/realtime/error") {
     const message = asString(payload?.message) ?? event.message ?? "Realtime error";
     return [
       {
-        type: "thread.realtime.error",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.realtime.error",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           message,
         },
@@ -1246,11 +1272,11 @@ function mapToRuntimeEvents(
     ];
   }
 
-  if (event.method === "thread/realtime/closed") {
+  if (event.method === "thread/realtime/closed" || event.method === "workspace/realtime/closed") {
     return [
       {
-        type: "thread.realtime.closed",
-        ...runtimeEventBase(event, canonicalThreadId),
+        type: "workspace.realtime.closed",
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           reason: event.message,
         },
@@ -1265,7 +1291,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: willRetry ? "runtime.warning" : "runtime.error",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           message,
           ...(!willRetry ? { class: "provider_error" as const } : {}),
@@ -1282,7 +1308,7 @@ function mapToRuntimeEvents(
       isFatal
         ? {
             type: "runtime.error",
-            ...runtimeEventBase(event, canonicalThreadId),
+            ...runtimeEventBase(event, canonicalWorkspaceId),
             payload: {
               message,
               class: "provider_error" as const,
@@ -1291,7 +1317,7 @@ function mapToRuntimeEvents(
           }
         : {
             type: "runtime.warning",
-            ...runtimeEventBase(event, canonicalThreadId),
+            ...runtimeEventBase(event, canonicalWorkspaceId),
             payload: {
               message,
               ...(event.payload !== undefined ? { detail: event.payload } : {}),
@@ -1304,7 +1330,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "runtime.warning",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           message: event.message ?? "Windows world-writable warning",
           ...(event.payload !== undefined ? { detail: event.payload } : {}),
@@ -1322,7 +1348,7 @@ function mapToRuntimeEvents(
     return [
       {
         type: "session.state.changed",
-        ...runtimeEventBase(event, canonicalThreadId),
+        ...runtimeEventBase(event, canonicalWorkspaceId),
         payload: {
           state: success === false ? "error" : "ready",
           reason: success === false ? failureMessage : successMessage,
@@ -1333,7 +1359,7 @@ function mapToRuntimeEvents(
         ? [
             {
               type: "runtime.warning" as const,
-              ...runtimeEventBase(event, canonicalThreadId),
+              ...runtimeEventBase(event, canonicalWorkspaceId),
               payload: {
                 message: failureMessage,
                 ...(event.payload !== undefined ? { detail: event.payload } : {}),
@@ -1395,7 +1421,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           (error) =>
             new ProviderAdapterProcessError({
               provider: PROVIDER,
-              threadId: input.threadId,
+              workspaceId: input.workspaceId,
               detail: error.message,
               cause: error,
             }),
@@ -1404,7 +1430,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       const binaryPath = codexSettings.binaryPath;
       const homePath = codexSettings.homePath;
       const managerInput: CodexAppServerStartSessionInput = {
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         provider: "codex",
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
@@ -1424,7 +1450,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,
-            threadId: input.threadId,
+            workspaceId: input.workspaceId,
             detail: toMessage(cause, "Failed to start Codex adapter session."),
             cause,
           }),
@@ -1442,7 +1468,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     });
     if (!attachmentPath) {
       return yield* toRequestError(
-        input.threadId,
+        input.workspaceId,
         "turn/start",
         new Error(`Invalid attachment id '${attachment.id}'.`),
       );
@@ -1474,7 +1500,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     return yield* Effect.tryPromise({
       try: () => {
         const managerInput = {
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           ...(input.input !== undefined ? { input: input.input } : {}),
           ...(input.modelSelection?.provider === "codex"
             ? { model: input.modelSelection.model }
@@ -1493,80 +1519,84 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         };
         return manager.sendTurn(managerInput);
       },
-      catch: (cause) => toRequestError(input.threadId, "turn/start", cause),
+      catch: (cause) => toRequestError(input.workspaceId, "turn/start", cause),
     }).pipe(
       Effect.map((result) => ({
         ...result,
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
       })),
     );
   });
 
-  const interruptTurn: CodexAdapterShape["interruptTurn"] = (threadId, turnId) =>
+  const interruptTurn: CodexAdapterShape["interruptTurn"] = (workspaceId, turnId) =>
     Effect.tryPromise({
-      try: () => manager.interruptTurn(threadId, turnId),
-      catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
+      try: () => manager.interruptTurn(workspaceId, turnId),
+      catch: (cause) => toRequestError(workspaceId, "turn/interrupt", cause),
     });
 
-  const readThread: CodexAdapterShape["readThread"] = (threadId) =>
+  const readWorkspace: CodexAdapterShape["readWorkspace"] = (workspaceId) =>
     Effect.tryPromise({
-      try: () => manager.readThread(threadId),
-      catch: (cause) => toRequestError(threadId, "thread/read", cause),
+      try: () => manager.readWorkspace(workspaceId),
+      catch: (cause) => toRequestError(workspaceId, "workspace/read", cause),
     }).pipe(
       Effect.map((snapshot) => ({
-        threadId,
+        workspaceId,
         turns: snapshot.turns,
       })),
     );
 
-  const rollbackThread: CodexAdapterShape["rollbackThread"] = (threadId, numTurns) => {
+  const rollbackWorkspace: CodexAdapterShape["rollbackWorkspace"] = (workspaceId, numTurns) => {
     if (!Number.isInteger(numTurns) || numTurns < 1) {
       return Effect.fail(
         new ProviderAdapterValidationError({
           provider: PROVIDER,
-          operation: "rollbackThread",
+          operation: "rollbackWorkspace",
           issue: "numTurns must be an integer >= 1.",
         }),
       );
     }
 
     return Effect.tryPromise({
-      try: () => manager.rollbackThread(threadId, numTurns),
-      catch: (cause) => toRequestError(threadId, "thread/rollback", cause),
+      try: () => manager.rollbackWorkspace(workspaceId, numTurns),
+      catch: (cause) => toRequestError(workspaceId, "workspace/rollback", cause),
     }).pipe(
       Effect.map((snapshot) => ({
-        threadId,
+        workspaceId,
         turns: snapshot.turns,
       })),
     );
   };
 
-  const respondToRequest: CodexAdapterShape["respondToRequest"] = (threadId, requestId, decision) =>
+  const respondToRequest: CodexAdapterShape["respondToRequest"] = (
+    workspaceId,
+    requestId,
+    decision,
+  ) =>
     Effect.tryPromise({
-      try: () => manager.respondToRequest(threadId, requestId, decision),
-      catch: (cause) => toRequestError(threadId, "item/requestApproval/decision", cause),
+      try: () => manager.respondToRequest(workspaceId, requestId, decision),
+      catch: (cause) => toRequestError(workspaceId, "item/requestApproval/decision", cause),
     });
 
   const respondToUserInput: CodexAdapterShape["respondToUserInput"] = (
-    threadId,
+    workspaceId,
     requestId,
     answers,
   ) =>
     Effect.tryPromise({
-      try: () => manager.respondToUserInput(threadId, requestId, answers),
-      catch: (cause) => toRequestError(threadId, "item/tool/requestUserInput", cause),
+      try: () => manager.respondToUserInput(workspaceId, requestId, answers),
+      catch: (cause) => toRequestError(workspaceId, "item/tool/requestUserInput", cause),
     });
 
-  const stopSession: CodexAdapterShape["stopSession"] = (threadId) =>
+  const stopSession: CodexAdapterShape["stopSession"] = (workspaceId) =>
     Effect.sync(() => {
-      manager.stopSession(threadId);
+      manager.stopSession(workspaceId);
     });
 
   const listSessions: CodexAdapterShape["listSessions"] = () =>
     Effect.sync(() => manager.listSessions());
 
-  const hasSession: CodexAdapterShape["hasSession"] = (threadId) =>
-    Effect.sync(() => manager.hasSession(threadId));
+  const hasSession: CodexAdapterShape["hasSession"] = (workspaceId) =>
+    Effect.sync(() => manager.hasSession(workspaceId));
 
   const stopAll: CodexAdapterShape["stopAll"] = () =>
     Effect.sync(() => {
@@ -1579,18 +1609,18 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     if (!nativeEventLogger) {
       return;
     }
-    yield* nativeEventLogger.write(event, event.threadId);
+    yield* nativeEventLogger.write(event, event.workspaceId);
   });
 
   const registerListener = Effect.fn("registerListener")(function* () {
     const services = yield* Effect.services<never>();
     const listenerEffect = Effect.fn("listener")(function* (event: ProviderEvent) {
       yield* writeNativeEvent(event);
-      const runtimeEvents = mapToRuntimeEvents(event, event.threadId);
+      const runtimeEvents = mapToRuntimeEvents(event, event.workspaceId);
       if (runtimeEvents.length === 0) {
         yield* Effect.logDebug("ignoring unhandled Codex provider event", {
           method: event.method,
-          threadId: event.threadId,
+          workspaceId: event.workspaceId,
           turnId: event.turnId,
           itemId: event.itemId,
         });
@@ -1623,8 +1653,8 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     startSession,
     sendTurn,
     interruptTurn,
-    readThread,
-    rollbackThread,
+    readWorkspace,
+    rollbackWorkspace,
     respondToRequest,
     respondToUserInput,
     stopSession,

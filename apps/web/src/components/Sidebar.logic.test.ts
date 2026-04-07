@@ -1,31 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  createThreadJumpHintVisibilityController,
-  getVisibleSidebarThreadIds,
-  resolveAdjacentThreadId,
-  getFallbackThreadIdAfterDelete,
-  getVisibleThreadsForProject,
+  createWorkspaceJumpHintVisibilityController,
+  getVisibleSidebarWorkspaceIds,
+  resolveAdjacentWorkspaceId,
+  getFallbackWorkspaceIdAfterDelete,
+  getVisibleWorkspacesForProject,
   getProjectSortTimestamp,
   hasUnseenCompletion,
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
-  resolveSidebarNewThreadSeedContext,
-  resolveSidebarNewThreadEnvMode,
-  resolveThreadRowClassName,
-  resolveThreadStatusPill,
-  shouldClearThreadSelectionOnMouseDown,
+  resolveSidebarNewWorkspaceSeedContext,
+  resolveSidebarNewWorkspaceEnvMode,
+  resolveWorkspaceRowClassName,
+  resolveWorkspaceStatusPill,
+  shouldClearWorkspaceSelectionOnMouseDown,
   sortProjectsForSidebar,
-  sortThreadsForSidebar,
-  THREAD_JUMP_HINT_SHOW_DELAY_MS,
+  sortWorkspacesForSidebar,
+  WORKSPACE_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
-import { OrchestrationLatestTurn, ProjectId, ThreadId } from "@matcha/contracts";
+import { OrchestrationLatestTurn, ProjectId, WorkspaceId } from "@matcha/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   type Project,
-  type Thread,
+  type Workspace,
 } from "../types";
 
 function makeLatestTurn(overrides?: {
@@ -43,7 +43,7 @@ function makeLatestTurn(overrides?: {
 }
 
 describe("hasUnseenCompletion", () => {
-  it("returns true when a thread completed after its last visit", () => {
+  it("returns true when a workspace completed after its last visit", () => {
     expect(
       hasUnseenCompletion({
         hasActionableProposedPlan: false,
@@ -58,7 +58,7 @@ describe("hasUnseenCompletion", () => {
   });
 });
 
-describe("createThreadJumpHintVisibilityController", () => {
+describe("createWorkspaceJumpHintVisibilityController", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -69,15 +69,15 @@ describe("createThreadJumpHintVisibilityController", () => {
 
   it("delays showing jump hints until the configured delay elapses", () => {
     const visibilityChanges: boolean[] = [];
-    const controller = createThreadJumpHintVisibilityController({
-      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+    const controller = createWorkspaceJumpHintVisibilityController({
+      delayMs: WORKSPACE_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
         visibilityChanges.push(visible);
       },
     });
 
     controller.sync(true);
-    vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS - 1);
+    vi.advanceTimersByTime(WORKSPACE_JUMP_HINT_SHOW_DELAY_MS - 1);
 
     expect(visibilityChanges).toEqual([]);
 
@@ -88,15 +88,15 @@ describe("createThreadJumpHintVisibilityController", () => {
 
   it("hides immediately when the modifiers are released", () => {
     const visibilityChanges: boolean[] = [];
-    const controller = createThreadJumpHintVisibilityController({
-      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+    const controller = createWorkspaceJumpHintVisibilityController({
+      delayMs: WORKSPACE_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
         visibilityChanges.push(visible);
       },
     });
 
     controller.sync(true);
-    vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS);
+    vi.advanceTimersByTime(WORKSPACE_JUMP_HINT_SHOW_DELAY_MS);
     controller.sync(false);
 
     expect(visibilityChanges).toEqual([true, false]);
@@ -104,39 +104,39 @@ describe("createThreadJumpHintVisibilityController", () => {
 
   it("cancels a pending reveal when the modifier is released early", () => {
     const visibilityChanges: boolean[] = [];
-    const controller = createThreadJumpHintVisibilityController({
-      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+    const controller = createWorkspaceJumpHintVisibilityController({
+      delayMs: WORKSPACE_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
         visibilityChanges.push(visible);
       },
     });
 
     controller.sync(true);
-    vi.advanceTimersByTime(Math.floor(THREAD_JUMP_HINT_SHOW_DELAY_MS / 2));
+    vi.advanceTimersByTime(Math.floor(WORKSPACE_JUMP_HINT_SHOW_DELAY_MS / 2));
     controller.sync(false);
-    vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS);
+    vi.advanceTimersByTime(WORKSPACE_JUMP_HINT_SHOW_DELAY_MS);
 
     expect(visibilityChanges).toEqual([]);
   });
 });
 
-describe("shouldClearThreadSelectionOnMouseDown", () => {
-  it("preserves selection for thread items", () => {
+describe("shouldClearWorkspaceSelectionOnMouseDown", () => {
+  it("preserves selection for workspace items", () => {
     const child = {
       closest: (selector: string) =>
-        selector.includes("[data-thread-item]") ? ({} as Element) : null,
+        selector.includes("[data-workspace-item]") ? ({} as Element) : null,
     } as unknown as HTMLElement;
 
-    expect(shouldClearThreadSelectionOnMouseDown(child)).toBe(false);
+    expect(shouldClearWorkspaceSelectionOnMouseDown(child)).toBe(false);
   });
 
-  it("preserves selection for thread list toggle controls", () => {
+  it("preserves selection for workspace list toggle controls", () => {
     const selectionSafe = {
       closest: (selector: string) =>
-        selector.includes("[data-thread-selection-safe]") ? ({} as Element) : null,
+        selector.includes("[data-workspace-selection-safe]") ? ({} as Element) : null,
     } as unknown as HTMLElement;
 
-    expect(shouldClearThreadSelectionOnMouseDown(selectionSafe)).toBe(false);
+    expect(shouldClearWorkspaceSelectionOnMouseDown(selectionSafe)).toBe(false);
   });
 
   it("clears selection for unrelated sidebar clicks", () => {
@@ -144,14 +144,14 @@ describe("shouldClearThreadSelectionOnMouseDown", () => {
       closest: () => null,
     } as unknown as HTMLElement;
 
-    expect(shouldClearThreadSelectionOnMouseDown(unrelated)).toBe(true);
+    expect(shouldClearWorkspaceSelectionOnMouseDown(unrelated)).toBe(true);
   });
 });
 
-describe("resolveSidebarNewThreadEnvMode", () => {
+describe("resolveSidebarNewWorkspaceEnvMode", () => {
   it("uses the app default when the caller does not request a specific mode", () => {
     expect(
-      resolveSidebarNewThreadEnvMode({
+      resolveSidebarNewWorkspaceEnvMode({
         defaultEnvMode: "worktree",
       }),
     ).toBe("worktree");
@@ -159,7 +159,7 @@ describe("resolveSidebarNewThreadEnvMode", () => {
 
   it("preserves an explicit requested mode over the app default", () => {
     expect(
-      resolveSidebarNewThreadEnvMode({
+      resolveSidebarNewWorkspaceEnvMode({
         requestedEnvMode: "local",
         defaultEnvMode: "worktree",
       }),
@@ -167,18 +167,18 @@ describe("resolveSidebarNewThreadEnvMode", () => {
   });
 });
 
-describe("resolveSidebarNewThreadSeedContext", () => {
-  it("inherits the active server thread context when creating a new thread in the same project", () => {
+describe("resolveSidebarNewWorkspaceSeedContext", () => {
+  it("inherits the active server workspace context when creating a new workspace in the same project", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewWorkspaceSeedContext({
         projectId: "project-1",
         defaultEnvMode: "local",
-        activeThread: {
+        activeWorkspace: {
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
-        activeDraftThread: null,
+        activeDraftWorkspace: null,
       }),
     ).toEqual({
       branch: "effect-atom",
@@ -187,17 +187,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
     });
   });
 
-  it("prefers the active draft thread context when it matches the target project", () => {
+  it("prefers the active draft workspace context when it matches the target project", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewWorkspaceSeedContext({
         projectId: "project-1",
         defaultEnvMode: "local",
-        activeThread: {
+        activeWorkspace: {
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
-        activeDraftThread: {
+        activeDraftWorkspace: {
           projectId: "project-1",
           branch: "feature/new-draft",
           worktreePath: "/repo/worktree",
@@ -211,17 +211,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
     });
   });
 
-  it("falls back to the default env mode when there is no matching active thread context", () => {
+  it("falls back to the default env mode when there is no matching active workspace context", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewWorkspaceSeedContext({
         projectId: "project-2",
         defaultEnvMode: "worktree",
-        activeThread: {
+        activeWorkspace: {
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
-        activeDraftThread: null,
+        activeDraftWorkspace: null,
       }),
     ).toEqual({
       envMode: "worktree",
@@ -273,92 +273,98 @@ describe("orderItemsByPreferredIds", () => {
   });
 });
 
-describe("resolveAdjacentThreadId", () => {
-  it("resolves adjacent thread ids in ordered sidebar traversal", () => {
-    const threads = [
-      ThreadId.makeUnsafe("thread-1"),
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-3"),
+describe("resolveAdjacentWorkspaceId", () => {
+  it("resolves adjacent workspace ids in ordered sidebar traversal", () => {
+    const workspaces = [
+      WorkspaceId.makeUnsafe("workspace-1"),
+      WorkspaceId.makeUnsafe("workspace-2"),
+      WorkspaceId.makeUnsafe("workspace-3"),
     ];
 
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: threads[1] ?? null,
+      resolveAdjacentWorkspaceId({
+        workspaceIds: workspaces,
+        currentWorkspaceId: workspaces[1] ?? null,
         direction: "previous",
       }),
-    ).toBe(threads[0]);
+    ).toBe(workspaces[0]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: threads[1] ?? null,
+      resolveAdjacentWorkspaceId({
+        workspaceIds: workspaces,
+        currentWorkspaceId: workspaces[1] ?? null,
         direction: "next",
       }),
-    ).toBe(threads[2]);
+    ).toBe(workspaces[2]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: null,
+      resolveAdjacentWorkspaceId({
+        workspaceIds: workspaces,
+        currentWorkspaceId: null,
         direction: "next",
       }),
-    ).toBe(threads[0]);
+    ).toBe(workspaces[0]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: null,
+      resolveAdjacentWorkspaceId({
+        workspaceIds: workspaces,
+        currentWorkspaceId: null,
         direction: "previous",
       }),
-    ).toBe(threads[2]);
+    ).toBe(workspaces[2]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: threads[0] ?? null,
+      resolveAdjacentWorkspaceId({
+        workspaceIds: workspaces,
+        currentWorkspaceId: workspaces[0] ?? null,
         direction: "previous",
       }),
     ).toBeNull();
   });
 });
 
-describe("getVisibleSidebarThreadIds", () => {
-  it("returns only the rendered visible thread order across projects", () => {
+describe("getVisibleSidebarWorkspaceIds", () => {
+  it("returns only the rendered visible workspace order across projects", () => {
     expect(
-      getVisibleSidebarThreadIds([
+      getVisibleSidebarWorkspaceIds([
         {
-          renderedThreadIds: [
-            ThreadId.makeUnsafe("thread-12"),
-            ThreadId.makeUnsafe("thread-11"),
-            ThreadId.makeUnsafe("thread-10"),
+          renderedWorkspaceIds: [
+            WorkspaceId.makeUnsafe("workspace-12"),
+            WorkspaceId.makeUnsafe("workspace-11"),
+            WorkspaceId.makeUnsafe("workspace-10"),
           ],
         },
         {
-          renderedThreadIds: [ThreadId.makeUnsafe("thread-8"), ThreadId.makeUnsafe("thread-6")],
+          renderedWorkspaceIds: [
+            WorkspaceId.makeUnsafe("workspace-8"),
+            WorkspaceId.makeUnsafe("workspace-6"),
+          ],
         },
       ]),
     ).toEqual([
-      ThreadId.makeUnsafe("thread-12"),
-      ThreadId.makeUnsafe("thread-11"),
-      ThreadId.makeUnsafe("thread-10"),
-      ThreadId.makeUnsafe("thread-8"),
-      ThreadId.makeUnsafe("thread-6"),
+      WorkspaceId.makeUnsafe("workspace-12"),
+      WorkspaceId.makeUnsafe("workspace-11"),
+      WorkspaceId.makeUnsafe("workspace-10"),
+      WorkspaceId.makeUnsafe("workspace-8"),
+      WorkspaceId.makeUnsafe("workspace-6"),
     ]);
   });
 
-  it("skips threads from collapsed projects whose thread panels are not shown", () => {
+  it("skips workspaces from collapsed projects whose workspace panels are not shown", () => {
     expect(
-      getVisibleSidebarThreadIds([
+      getVisibleSidebarWorkspaceIds([
         {
-          shouldShowThreadPanel: false,
-          renderedThreadIds: [
-            ThreadId.makeUnsafe("thread-hidden-2"),
-            ThreadId.makeUnsafe("thread-hidden-1"),
+          shouldShowWorkspacePanel: false,
+          renderedWorkspaceIds: [
+            WorkspaceId.makeUnsafe("workspace-hidden-2"),
+            WorkspaceId.makeUnsafe("workspace-hidden-1"),
           ],
         },
         {
-          shouldShowThreadPanel: true,
-          renderedThreadIds: [ThreadId.makeUnsafe("thread-12"), ThreadId.makeUnsafe("thread-11")],
+          shouldShowWorkspacePanel: true,
+          renderedWorkspaceIds: [
+            WorkspaceId.makeUnsafe("workspace-12"),
+            WorkspaceId.makeUnsafe("workspace-11"),
+          ],
         },
       ]),
-    ).toEqual([ThreadId.makeUnsafe("thread-12"), ThreadId.makeUnsafe("thread-11")]);
+    ).toEqual([WorkspaceId.makeUnsafe("workspace-12"), WorkspaceId.makeUnsafe("workspace-11")]);
   });
 });
 
@@ -394,8 +400,8 @@ describe("isContextMenuPointerDown", () => {
   });
 });
 
-describe("resolveThreadStatusPill", () => {
-  const baseThread = {
+describe("resolveWorkspaceStatusPill", () => {
+  const baseWorkspace = {
     hasActionableProposedPlan: false,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
@@ -413,9 +419,9 @@ describe("resolveThreadStatusPill", () => {
 
   it("shows pending approval before all other statuses", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveWorkspaceStatusPill({
+        workspace: {
+          ...baseWorkspace,
           hasPendingApprovals: true,
           hasPendingUserInput: true,
         },
@@ -425,32 +431,32 @@ describe("resolveThreadStatusPill", () => {
 
   it("shows awaiting input when plan mode is blocked on user answers", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveWorkspaceStatusPill({
+        workspace: {
+          ...baseWorkspace,
           hasPendingUserInput: true,
         },
       }),
     ).toMatchObject({ label: "Awaiting Input", pulse: false });
   });
 
-  it("falls back to working when the thread is actively running without blockers", () => {
+  it("falls back to working when the workspace is actively running without blockers", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: baseThread,
+      resolveWorkspaceStatusPill({
+        workspace: baseWorkspace,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveWorkspaceStatusPill({
+        workspace: {
+          ...baseWorkspace,
           hasActionableProposedPlan: true,
           latestTurn: makeLatestTurn(),
           session: {
-            ...baseThread.session,
+            ...baseWorkspace.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
@@ -461,12 +467,12 @@ describe("resolveThreadStatusPill", () => {
 
   it("does not show plan ready after the proposed plan was implemented elsewhere", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveWorkspaceStatusPill({
+        workspace: {
+          ...baseWorkspace,
           latestTurn: makeLatestTurn(),
           session: {
-            ...baseThread.session,
+            ...baseWorkspace.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
@@ -477,14 +483,14 @@ describe("resolveThreadStatusPill", () => {
 
   it("shows completed when there is an unseen completion and no active blocker", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveWorkspaceStatusPill({
+        workspace: {
+          ...baseWorkspace,
           interactionMode: "default",
           latestTurn: makeLatestTurn(),
           lastVisitedAt: "2026-03-09T10:04:00.000Z",
           session: {
-            ...baseThread.session,
+            ...baseWorkspace.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
@@ -494,36 +500,36 @@ describe("resolveThreadStatusPill", () => {
   });
 });
 
-describe("resolveThreadRowClassName", () => {
-  it("uses the darker selected palette when a thread is both selected and active", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: true });
+describe("resolveWorkspaceRowClassName", () => {
+  it("uses the darker selected palette when a workspace is both selected and active", () => {
+    const className = resolveWorkspaceRowClassName({ isActive: true, isSelected: true });
     expect(className).toContain("bg-primary/22");
     expect(className).toContain("hover:bg-primary/26");
     expect(className).toContain("dark:bg-primary/30");
     expect(className).not.toContain("bg-accent/85");
   });
 
-  it("uses selected hover colors for selected threads", () => {
-    const className = resolveThreadRowClassName({ isActive: false, isSelected: true });
+  it("uses selected hover colors for selected workspaces", () => {
+    const className = resolveWorkspaceRowClassName({ isActive: false, isSelected: true });
     expect(className).toContain("bg-primary/15");
     expect(className).toContain("hover:bg-primary/19");
     expect(className).toContain("dark:bg-primary/22");
     expect(className).not.toContain("hover:bg-accent");
   });
 
-  it("keeps the accent palette for active-only threads", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
+  it("keeps the accent palette for active-only workspaces", () => {
+    const className = resolveWorkspaceRowClassName({ isActive: true, isSelected: false });
     expect(className).toContain("bg-accent/85");
     expect(className).toContain("hover:bg-accent");
   });
 });
 
 describe("resolveProjectStatusIndicator", () => {
-  it("returns null when no threads have a notable status", () => {
+  it("returns null when no workspaces have a notable status", () => {
     expect(resolveProjectStatusIndicator([null, null])).toBeNull();
   });
 
-  it("surfaces the highest-priority actionable state across project threads", () => {
+  it("surfaces the highest-priority actionable state across project workspaces", () => {
     expect(
       resolveProjectStatusIndicator([
         {
@@ -568,56 +574,56 @@ describe("resolveProjectStatusIndicator", () => {
   });
 });
 
-describe("getVisibleThreadsForProject", () => {
-  it("includes the active thread even when it falls below the folded preview", () => {
-    const threads = Array.from({ length: 8 }, (_, index) =>
-      makeThread({
-        id: ThreadId.makeUnsafe(`thread-${index + 1}`),
-        title: `Thread ${index + 1}`,
+describe("getVisibleWorkspacesForProject", () => {
+  it("includes the active workspace even when it falls below the folded preview", () => {
+    const workspaces = Array.from({ length: 8 }, (_, index) =>
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe(`workspace-${index + 1}`),
+        title: `Workspace ${index + 1}`,
       }),
     );
 
-    const result = getVisibleThreadsForProject({
-      threads,
-      activeThreadId: ThreadId.makeUnsafe("thread-8"),
-      isThreadListExpanded: false,
+    const result = getVisibleWorkspacesForProject({
+      workspaces,
+      activeWorkspaceId: WorkspaceId.makeUnsafe("workspace-8"),
+      isWorkspaceListExpanded: false,
       previewLimit: 6,
     });
 
-    expect(result.hasHiddenThreads).toBe(true);
-    expect(result.visibleThreads.map((thread) => thread.id)).toEqual([
-      ThreadId.makeUnsafe("thread-1"),
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-3"),
-      ThreadId.makeUnsafe("thread-4"),
-      ThreadId.makeUnsafe("thread-5"),
-      ThreadId.makeUnsafe("thread-6"),
-      ThreadId.makeUnsafe("thread-8"),
+    expect(result.hasHiddenWorkspaces).toBe(true);
+    expect(result.visibleWorkspaces.map((workspace) => workspace.id)).toEqual([
+      WorkspaceId.makeUnsafe("workspace-1"),
+      WorkspaceId.makeUnsafe("workspace-2"),
+      WorkspaceId.makeUnsafe("workspace-3"),
+      WorkspaceId.makeUnsafe("workspace-4"),
+      WorkspaceId.makeUnsafe("workspace-5"),
+      WorkspaceId.makeUnsafe("workspace-6"),
+      WorkspaceId.makeUnsafe("workspace-8"),
     ]);
-    expect(result.hiddenThreads.map((thread) => thread.id)).toEqual([
-      ThreadId.makeUnsafe("thread-7"),
+    expect(result.hiddenWorkspaces.map((workspace) => workspace.id)).toEqual([
+      WorkspaceId.makeUnsafe("workspace-7"),
     ]);
   });
 
-  it("returns all threads when the list is expanded", () => {
-    const threads = Array.from({ length: 8 }, (_, index) =>
-      makeThread({
-        id: ThreadId.makeUnsafe(`thread-${index + 1}`),
+  it("returns all workspaces when the list is expanded", () => {
+    const workspaces = Array.from({ length: 8 }, (_, index) =>
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe(`workspace-${index + 1}`),
       }),
     );
 
-    const result = getVisibleThreadsForProject({
-      threads,
-      activeThreadId: ThreadId.makeUnsafe("thread-8"),
-      isThreadListExpanded: true,
+    const result = getVisibleWorkspacesForProject({
+      workspaces,
+      activeWorkspaceId: WorkspaceId.makeUnsafe("workspace-8"),
+      isWorkspaceListExpanded: true,
       previewLimit: 6,
     });
 
-    expect(result.hasHiddenThreads).toBe(true);
-    expect(result.visibleThreads.map((thread) => thread.id)).toEqual(
-      threads.map((thread) => thread.id),
+    expect(result.hasHiddenWorkspaces).toBe(true);
+    expect(result.visibleWorkspaces.map((workspace) => workspace.id)).toEqual(
+      workspaces.map((workspace) => workspace.id),
     );
-    expect(result.hiddenThreads).toEqual([]);
+    expect(result.hiddenWorkspaces).toEqual([]);
   });
 });
 
@@ -639,12 +645,12 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
-    id: ThreadId.makeUnsafe("thread-1"),
-    codexThreadId: null,
+    id: WorkspaceId.makeUnsafe("workspace-1"),
+    codexWorkspaceId: null,
     projectId: ProjectId.makeUnsafe("project-1"),
-    title: "Thread",
+    title: "Workspace",
     modelSelection: {
       provider: "codex",
       model: "gpt-5.4",
@@ -668,12 +674,12 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-describe("sortThreadsForSidebar", () => {
-  it("sorts threads by the latest user message in recency mode", () => {
-    const sorted = sortThreadsForSidebar(
+describe("sortWorkspacesForSidebar", () => {
+  it("sorts workspaces by the latest user message in recency mode", () => {
+    const sorted = sortWorkspacesForSidebar(
       [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-1"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-1"),
           createdAt: "2026-03-09T10:00:00.000Z",
           updatedAt: "2026-03-09T10:10:00.000Z",
           messages: [
@@ -687,8 +693,8 @@ describe("sortThreadsForSidebar", () => {
             },
           ],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-2"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-2"),
           createdAt: "2026-03-09T10:05:00.000Z",
           updatedAt: "2026-03-09T10:05:00.000Z",
           messages: [
@@ -706,17 +712,17 @@ describe("sortThreadsForSidebar", () => {
       "updated_at",
     );
 
-    expect(sorted.map((thread) => thread.id)).toEqual([
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-1"),
+    expect(sorted.map((workspace) => workspace.id)).toEqual([
+      WorkspaceId.makeUnsafe("workspace-2"),
+      WorkspaceId.makeUnsafe("workspace-1"),
     ]);
   });
 
-  it("falls back to thread timestamps when there is no user message", () => {
-    const sorted = sortThreadsForSidebar(
+  it("falls back to workspace timestamps when there is no user message", () => {
+    const sorted = sortWorkspacesForSidebar(
       [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-1"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-1"),
           createdAt: "2026-03-09T10:00:00.000Z",
           updatedAt: "2026-03-09T10:01:00.000Z",
           messages: [
@@ -730,8 +736,8 @@ describe("sortThreadsForSidebar", () => {
             },
           ],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-2"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-2"),
           createdAt: "2026-03-09T10:05:00.000Z",
           updatedAt: "2026-03-09T10:05:00.000Z",
           messages: [],
@@ -740,23 +746,23 @@ describe("sortThreadsForSidebar", () => {
       "updated_at",
     );
 
-    expect(sorted.map((thread) => thread.id)).toEqual([
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-1"),
+    expect(sorted.map((workspace) => workspace.id)).toEqual([
+      WorkspaceId.makeUnsafe("workspace-2"),
+      WorkspaceId.makeUnsafe("workspace-1"),
     ]);
   });
 
-  it("falls back to id ordering when threads have no sortable timestamps", () => {
-    const sorted = sortThreadsForSidebar(
+  it("falls back to id ordering when workspaces have no sortable timestamps", () => {
+    const sorted = sortWorkspacesForSidebar(
       [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-1"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-1"),
           createdAt: "" as never,
           updatedAt: undefined,
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-2"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-2"),
           createdAt: "" as never,
           updatedAt: undefined,
           messages: [],
@@ -765,22 +771,22 @@ describe("sortThreadsForSidebar", () => {
       "updated_at",
     );
 
-    expect(sorted.map((thread) => thread.id)).toEqual([
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-1"),
+    expect(sorted.map((workspace) => workspace.id)).toEqual([
+      WorkspaceId.makeUnsafe("workspace-2"),
+      WorkspaceId.makeUnsafe("workspace-1"),
     ]);
   });
 
-  it("can sort threads by createdAt when configured", () => {
-    const sorted = sortThreadsForSidebar(
+  it("can sort workspaces by createdAt when configured", () => {
+    const sorted = sortWorkspacesForSidebar(
       [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-1"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
           updatedAt: "2026-03-09T10:05:00.000Z",
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-2"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-2"),
           createdAt: "2026-03-09T10:00:00.000Z",
           updatedAt: "2026-03-09T10:10:00.000Z",
         }),
@@ -788,91 +794,91 @@ describe("sortThreadsForSidebar", () => {
       "created_at",
     );
 
-    expect(sorted.map((thread) => thread.id)).toEqual([
-      ThreadId.makeUnsafe("thread-1"),
-      ThreadId.makeUnsafe("thread-2"),
+    expect(sorted.map((workspace) => workspace.id)).toEqual([
+      WorkspaceId.makeUnsafe("workspace-1"),
+      WorkspaceId.makeUnsafe("workspace-2"),
     ]);
   });
 });
 
-describe("getFallbackThreadIdAfterDelete", () => {
-  it("returns the top remaining thread in the deleted thread's project sidebar order", () => {
-    const fallbackThreadId = getFallbackThreadIdAfterDelete({
-      threads: [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-oldest"),
+describe("getFallbackWorkspaceIdAfterDelete", () => {
+  it("returns the top remaining workspace in the deleted workspace's project sidebar order", () => {
+    const fallbackWorkspaceId = getFallbackWorkspaceIdAfterDelete({
+      workspaces: [
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-oldest"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:00:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-active"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-active"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-newest"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-newest"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:10:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-other-project"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-other-project"),
           projectId: ProjectId.makeUnsafe("project-2"),
           createdAt: "2026-03-09T10:20:00.000Z",
           messages: [],
         }),
       ],
-      deletedThreadId: ThreadId.makeUnsafe("thread-active"),
+      deletedWorkspaceId: WorkspaceId.makeUnsafe("workspace-active"),
       sortOrder: "created_at",
     });
 
-    expect(fallbackThreadId).toBe(ThreadId.makeUnsafe("thread-newest"));
+    expect(fallbackWorkspaceId).toBe(WorkspaceId.makeUnsafe("workspace-newest"));
   });
 
-  it("skips other threads being deleted in the same action", () => {
-    const fallbackThreadId = getFallbackThreadIdAfterDelete({
-      threads: [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-active"),
+  it("skips other workspaces being deleted in the same action", () => {
+    const fallbackWorkspaceId = getFallbackWorkspaceIdAfterDelete({
+      workspaces: [
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-active"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-newest"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-newest"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:10:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-next"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-next"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:07:00.000Z",
           messages: [],
         }),
       ],
-      deletedThreadId: ThreadId.makeUnsafe("thread-active"),
-      deletedThreadIds: new Set([
-        ThreadId.makeUnsafe("thread-active"),
-        ThreadId.makeUnsafe("thread-newest"),
+      deletedWorkspaceId: WorkspaceId.makeUnsafe("workspace-active"),
+      deletedWorkspaceIds: new Set([
+        WorkspaceId.makeUnsafe("workspace-active"),
+        WorkspaceId.makeUnsafe("workspace-newest"),
       ]),
       sortOrder: "created_at",
     });
 
-    expect(fallbackThreadId).toBe(ThreadId.makeUnsafe("thread-next"));
+    expect(fallbackWorkspaceId).toBe(WorkspaceId.makeUnsafe("workspace-next"));
   });
 });
 
 describe("sortProjectsForSidebar", () => {
-  it("sorts projects by the most recent user message across their threads", () => {
+  it("sorts projects by the most recent user message across their workspaces", () => {
     const projects = [
       makeProject({ id: ProjectId.makeUnsafe("project-1"), name: "Older project" }),
       makeProject({ id: ProjectId.makeUnsafe("project-2"), name: "Newer project" }),
     ];
-    const threads = [
-      makeThread({
+    const workspaces = [
+      makeWorkspace({
         projectId: ProjectId.makeUnsafe("project-1"),
         updatedAt: "2026-03-09T10:20:00.000Z",
         messages: [
@@ -886,8 +892,8 @@ describe("sortProjectsForSidebar", () => {
           },
         ],
       }),
-      makeThread({
-        id: ThreadId.makeUnsafe("thread-2"),
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe("workspace-2"),
         projectId: ProjectId.makeUnsafe("project-2"),
         updatedAt: "2026-03-09T10:05:00.000Z",
         messages: [
@@ -903,7 +909,7 @@ describe("sortProjectsForSidebar", () => {
       }),
     ];
 
-    const sorted = sortProjectsForSidebar(projects, threads, "updated_at");
+    const sorted = sortProjectsForSidebar(projects, workspaces, "updated_at");
 
     expect(sorted.map((project) => project.id)).toEqual([
       ProjectId.makeUnsafe("project-2"),
@@ -911,7 +917,7 @@ describe("sortProjectsForSidebar", () => {
     ]);
   });
 
-  it("falls back to project timestamps when a project has no threads", () => {
+  it("falls back to project timestamps when a project has no workspaces", () => {
     const sorted = sortProjectsForSidebar(
       [
         makeProject({
@@ -975,7 +981,7 @@ describe("sortProjectsForSidebar", () => {
     ]);
   });
 
-  it("ignores archived threads when sorting projects", () => {
+  it("ignores archived workspaces when sorting projects", () => {
     const sorted = sortProjectsForSidebar(
       [
         makeProject({
@@ -990,19 +996,19 @@ describe("sortProjectsForSidebar", () => {
         }),
       ],
       [
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-visible"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-visible"),
           projectId: ProjectId.makeUnsafe("project-1"),
           updatedAt: "2026-03-09T10:02:00.000Z",
           archivedAt: null,
         }),
-        makeThread({
-          id: ThreadId.makeUnsafe("thread-archived"),
+        makeWorkspace({
+          id: WorkspaceId.makeUnsafe("workspace-archived"),
           projectId: ProjectId.makeUnsafe("project-2"),
           updatedAt: "2026-03-09T10:10:00.000Z",
           archivedAt: "2026-03-09T10:11:00.000Z",
         }),
-      ].filter((thread) => thread.archivedAt === null),
+      ].filter((workspace) => workspace.archivedAt === null),
       "updated_at",
     );
 
@@ -1012,7 +1018,7 @@ describe("sortProjectsForSidebar", () => {
     ]);
   });
 
-  it("returns the project timestamp when no threads are present", () => {
+  it("returns the project timestamp when no workspaces are present", () => {
     const timestamp = getProjectSortTimestamp(
       makeProject({ updatedAt: "2026-03-09T10:10:00.000Z" }),
       [],

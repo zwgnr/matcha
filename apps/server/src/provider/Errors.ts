@@ -26,12 +26,12 @@ export class ProviderAdapterSessionNotFoundError extends Schema.TaggedErrorClass
   "ProviderAdapterSessionNotFoundError",
   {
     provider: Schema.String,
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Unknown ${this.provider} adapter thread: ${this.threadId}`;
+    return `Unknown ${this.provider} adapter workspace: ${this.workspaceId}`;
   }
 }
 
@@ -42,12 +42,12 @@ export class ProviderAdapterSessionClosedError extends Schema.TaggedErrorClass<P
   "ProviderAdapterSessionClosedError",
   {
     provider: Schema.String,
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `${this.provider} adapter thread is closed: ${this.threadId}`;
+    return `${this.provider} adapter workspace is closed: ${this.workspaceId}`;
   }
 }
 
@@ -75,13 +75,13 @@ export class ProviderAdapterProcessError extends Schema.TaggedErrorClass<Provide
   "ProviderAdapterProcessError",
   {
     provider: Schema.String,
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Provider adapter process error (${this.provider}) for thread ${this.threadId}: ${this.detail}`;
+    return `Provider adapter process error (${this.provider}) for workspace ${this.workspaceId}: ${this.detail}`;
   }
 }
 
@@ -122,12 +122,12 @@ export class ProviderUnsupportedError extends Schema.TaggedErrorClass<ProviderUn
 export class ProviderSessionNotFoundError extends Schema.TaggedErrorClass<ProviderSessionNotFoundError>()(
   "ProviderSessionNotFoundError",
   {
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Unknown provider thread: ${this.threadId}`;
+    return `Unknown provider workspace: ${this.workspaceId}`;
   }
 }
 

@@ -1,5 +1,5 @@
 import type { ProviderRuntimeEvent } from "@matcha/contracts";
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import { DEFAULT_SERVER_SETTINGS } from "@matcha/contracts/settings";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, assert } from "@effect/vitest";
@@ -99,17 +99,17 @@ const collectEventsDuring = <A, E, R>(
 const runTurn = (input: {
   readonly provider: ProviderServiceShape;
   readonly harness: TestProviderAdapterHarness;
-  readonly threadId: ThreadId;
+  readonly workspaceId: WorkspaceId;
   readonly userText: string;
   readonly response: TestTurnResponse;
 }) =>
   Effect.gen(function* () {
-    yield* input.harness.queueTurnResponse(input.threadId, input.response);
+    yield* input.harness.queueTurnResponse(input.workspaceId, input.response);
     return yield* collectEventsDuring(
       input.provider.streamEvents,
       input.response.events.length,
       input.provider.sendTurn({
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         input: input.userText,
         attachments: [],
       }),
@@ -123,20 +123,20 @@ it.live("replays typed runtime fixture events", () =>
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(
-        ThreadId.makeUnsafe("thread-integration-typed"),
+        WorkspaceId.makeUnsafe("workspace-integration-typed"),
         {
-          threadId: ThreadId.makeUnsafe("thread-integration-typed"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-integration-typed"),
           provider: "codex",
           cwd: fixture.cwd,
           runtimeMode: "full-access",
         },
       );
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.workspaceId ?? "").length > 0, true);
 
       const observedEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         userText: "hello",
         response: { events: codexTurnTextFixture },
       });
@@ -158,20 +158,20 @@ it.live("replays file-changing fixture turn events", () =>
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(
-        ThreadId.makeUnsafe("thread-integration-tools"),
+        WorkspaceId.makeUnsafe("workspace-integration-tools"),
         {
-          threadId: ThreadId.makeUnsafe("thread-integration-tools"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-integration-tools"),
           provider: "codex",
           cwd: fixture.cwd,
           runtimeMode: "full-access",
         },
       );
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.workspaceId ?? "").length > 0, true);
 
       const observedEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         userText: "make a small change",
         response: {
           events: codexTurnToolFixture,
@@ -197,20 +197,20 @@ it.live("runs multi-turn tool/approval flow", () =>
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(
-        ThreadId.makeUnsafe("thread-integration-multi"),
+        WorkspaceId.makeUnsafe("workspace-integration-multi"),
         {
-          threadId: ThreadId.makeUnsafe("thread-integration-multi"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-integration-multi"),
           provider: "codex",
           cwd: fixture.cwd,
           runtimeMode: "full-access",
         },
       );
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.workspaceId ?? "").length > 0, true);
 
       const firstTurnEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         userText: "turn 1",
         response: {
           events: codexTurnToolFixture,
@@ -226,7 +226,7 @@ it.live("runs multi-turn tool/approval flow", () =>
       const secondTurnEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         userText: "turn 2 approval",
         response: {
           events: codexTurnApprovalFixture,
@@ -251,20 +251,20 @@ it.live("rolls back provider conversation state only", () =>
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(
-        ThreadId.makeUnsafe("thread-integration-rollback"),
+        WorkspaceId.makeUnsafe("workspace-integration-rollback"),
         {
-          threadId: ThreadId.makeUnsafe("thread-integration-rollback"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-integration-rollback"),
           provider: "codex",
           cwd: fixture.cwd,
           runtimeMode: "full-access",
         },
       );
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.workspaceId ?? "").length > 0, true);
 
       yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         userText: "turn 1",
         response: {
           events: codexTurnToolFixture,
@@ -276,7 +276,7 @@ it.live("rolls back provider conversation state only", () =>
       yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         userText: "turn 2 approval",
         response: {
           events: codexTurnApprovalFixture,
@@ -286,11 +286,11 @@ it.live("rolls back provider conversation state only", () =>
       });
 
       yield* provider.rollbackConversation({
-        threadId: session.threadId,
+        workspaceId: session.workspaceId,
         numTurns: 1,
       });
 
-      const rollbackCalls = fixture.harness.getRollbackCalls(session.threadId);
+      const rollbackCalls = fixture.harness.getRollbackCalls(session.workspaceId);
       assert.deepEqual(rollbackCalls, [1]);
 
       const readme = yield* readFileString(join(fixture.cwd, "README.md"));

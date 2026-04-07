@@ -8,9 +8,9 @@ import { Effect, FileSystem, Layer, PlatformError, Scope } from "effect";
 import { expect } from "vitest";
 import type {
   GitActionProgressEvent,
-  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestWorkspaceInput,
   ModelSelection,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 
 import { GitCommandError, GitHubCliError, TextGenerationError } from "@matcha/contracts";
@@ -79,7 +79,7 @@ interface FakeGitTextGeneration {
     message: string;
     modelSelection: ModelSelection;
   }) => Effect.Effect<{ branch: string }, TextGenerationError>;
-  generateThreadTitle: (input: {
+  generateWorkspaceTitle: (input: {
     cwd: string;
     message: string;
     modelSelection: ModelSelection;
@@ -270,7 +270,7 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
       Effect.succeed({
         branch: "update-workflow",
       }),
-    generateThreadTitle: () =>
+    generateWorkspaceTitle: () =>
       Effect.succeed({
         title: "Update workflow",
       }),
@@ -311,12 +311,12 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
             }),
         ),
       ),
-    generateThreadTitle: (input) =>
-      implementation.generateThreadTitle(input).pipe(
+    generateWorkspaceTitle: (input) =>
+      implementation.generateWorkspaceTitle(input).pipe(
         Effect.mapError(
           (cause) =>
             new TextGenerationError({
-              operation: "generateThreadTitle",
+              operation: "generateWorkspaceTitle",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),
@@ -601,11 +601,11 @@ function resolvePullRequest(manager: GitManagerShape, input: { cwd: string; refe
   return manager.resolvePullRequest(input);
 }
 
-function preparePullRequestThread(
+function preparePullRequestWorkspace(
   manager: GitManagerShape,
-  input: GitPreparePullRequestThreadInput,
+  input: GitPreparePullRequestWorkspaceInput,
 ) {
-  return manager.preparePullRequestThread(input);
+  return manager.preparePullRequestWorkspace(input);
 }
 
 function makeManager(input?: {
@@ -632,7 +632,7 @@ function makeManager(input?: {
     Layer.succeed(
       ProjectSetupScriptRunner,
       input?.setupScriptRunner ?? {
-        runForThread: () => Effect.succeed({ status: "no-script" as const }),
+        runForWorkspace: () => Effect.succeed({ status: "no-script" as const }),
       },
     ),
     gitCoreLayer,
@@ -645,7 +645,7 @@ function makeManager(input?: {
   );
 }
 
-const asThreadId = (threadId: string) => threadId as ThreadId;
+const asWorkspaceId = (workspaceId: string) => workspaceId as WorkspaceId;
 
 const GitManagerTestLayer = GitCoreLive.pipe(
   Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "matcha-git-manager-test-" })),
@@ -2114,7 +2114,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("prepares pull request threads in local mode by checking out the PR branch", () =>
+  it.effect("prepares pull request workspaces in local mode by checking out the PR branch", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("matcha-git-manager-");
       yield* initRepo(repoDir);
@@ -2136,7 +2136,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "#64",
         mode: "local",
@@ -2150,7 +2150,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("prepares pull request threads in worktree mode on the PR head branch", () =>
+  it.effect("prepares pull request workspaces in worktree mode on the PR head branch", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("matcha-git-manager-");
       yield* initRepo(repoDir);
@@ -2178,7 +2178,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "77",
         mode: "worktree",
@@ -2223,7 +2223,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: (setupInput) =>
+          runForWorkspace: (setupInput) =>
             Effect.sync(() => {
               setupCalls.push(setupInput);
               return { status: "no-script" as const };
@@ -2231,24 +2231,24 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "177",
         mode: "worktree",
-        threadId: asThreadId("thread-pr-setup"),
+        workspaceId: asWorkspaceId("workspace-pr-setup"),
       });
 
       expect(result.worktreePath).not.toBeNull();
       expect(setupCalls).toHaveLength(1);
       expect(setupCalls[0]).toEqual({
-        threadId: "thread-pr-setup",
+        workspaceId: "workspace-pr-setup",
         projectCwd: repoDir,
         worktreePath: result.worktreePath as string,
       });
     }),
   );
 
-  it.effect("preserves fork upstream tracking when preparing a worktree PR thread", () =>
+  it.effect("preserves fork upstream tracking when preparing a worktree PR workspace", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("matcha-git-manager-");
       yield* initRepo(repoDir);
@@ -2286,7 +2286,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "81",
         mode: "worktree",
@@ -2310,7 +2310,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("preserves fork upstream tracking when preparing a local PR thread", () =>
+  it.effect("preserves fork upstream tracking when preparing a local PR workspace", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("matcha-git-manager-");
       yield* initRepo(repoDir);
@@ -2349,7 +2349,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "82",
         mode: "local",
@@ -2406,7 +2406,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "642",
         mode: "local",
@@ -2445,7 +2445,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: (setupInput) =>
+          runForWorkspace: (setupInput) =>
             Effect.sync(() => {
               setupCalls.push(setupInput);
               return { status: "no-script" as const };
@@ -2453,11 +2453,11 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "78",
         mode: "worktree",
-        threadId: asThreadId("thread-pr-existing-worktree"),
+        workspaceId: asWorkspaceId("workspace-pr-existing-worktree"),
       });
 
       expect(result.worktreePath && fs.realpathSync.native(result.worktreePath)).toBe(
@@ -2509,7 +2509,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         });
 
-        const result = yield* preparePullRequestThread(manager, {
+        const result = yield* preparePullRequestWorkspace(manager, {
           cwd: repoDir,
           reference: "91",
           mode: "worktree",
@@ -2570,7 +2570,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         });
 
-        const result = yield* preparePullRequestThread(manager, {
+        const result = yield* preparePullRequestWorkspace(manager, {
           cwd: repoDir,
           reference: "92",
           mode: "worktree",
@@ -2629,7 +2629,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "83",
         mode: "worktree",
@@ -2671,15 +2671,15 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: () => Effect.fail(new Error("terminal start failed")),
+          runForWorkspace: () => Effect.fail(new Error("terminal start failed")),
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "184",
         mode: "worktree",
-        threadId: asThreadId("thread-pr-setup-failure"),
+        workspaceId: asWorkspaceId("workspace-pr-setup-failure"),
       });
 
       expect(result.branch).toBe("feature/pr-setup-failure");
@@ -2707,7 +2707,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const errorMessage = yield* preparePullRequestThread(manager, {
+      const errorMessage = yield* preparePullRequestWorkspace(manager, {
         cwd: repoDir,
         reference: "79",
         mode: "worktree",

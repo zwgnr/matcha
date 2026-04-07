@@ -10,7 +10,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   TurnId,
 } from "@matcha/contracts";
 import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
@@ -95,7 +95,7 @@ describe("ProviderCommandReactor", () => {
 
   async function createHarness(input?: {
     readonly baseDir?: string;
-    readonly threadModelSelection?: ModelSelection;
+    readonly workspaceModelSelection?: ModelSelection;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
   }) {
     const now = new Date().toISOString();
@@ -106,7 +106,7 @@ describe("ProviderCommandReactor", () => {
     const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
     let nextSessionIndex = 1;
     const runtimeSessions: Array<ProviderSession> = [];
-    const modelSelection = input?.threadModelSelection ?? {
+    const modelSelection = input?.workspaceModelSelection ?? {
       provider: "codex",
       model: "gpt-5-codex",
     };
@@ -116,13 +116,13 @@ describe("ProviderCommandReactor", () => {
         typeof input === "object" && input !== null && "resumeCursor" in input
           ? input.resumeCursor
           : undefined;
-      const threadId =
+      const workspaceId =
         typeof input === "object" &&
         input !== null &&
-        "threadId" in input &&
-        typeof input.threadId === "string"
-          ? ThreadId.makeUnsafe(input.threadId)
-          : ThreadId.makeUnsafe(`thread-${sessionIndex}`);
+        "workspaceId" in input &&
+        typeof input.workspaceId === "string"
+          ? WorkspaceId.makeUnsafe(input.workspaceId)
+          : WorkspaceId.makeUnsafe(`workspace-${sessionIndex}`);
       const session: ProviderSession = {
         provider: modelSelection.provider,
         status: "ready" as const,
@@ -134,7 +134,7 @@ describe("ProviderCommandReactor", () => {
             ? input.runtimeMode
             : "full-access",
         ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
-        threadId,
+        workspaceId,
         resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
         createdAt: now,
         updatedAt: now,
@@ -144,7 +144,7 @@ describe("ProviderCommandReactor", () => {
     });
     const sendTurn = vi.fn((_: unknown) =>
       Effect.succeed({
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         turnId: asTurnId("turn-1"),
       }),
     );
@@ -153,14 +153,14 @@ describe("ProviderCommandReactor", () => {
     const respondToUserInput = vi.fn<ProviderServiceShape["respondToUserInput"]>(() => Effect.void);
     const stopSession = vi.fn((input: unknown) =>
       Effect.sync(() => {
-        const threadId =
-          typeof input === "object" && input !== null && "threadId" in input
-            ? (input as { threadId?: ThreadId }).threadId
+        const workspaceId =
+          typeof input === "object" && input !== null && "workspaceId" in input
+            ? (input as { workspaceId?: WorkspaceId }).workspaceId
             : undefined;
-        if (!threadId) {
+        if (!workspaceId) {
           return;
         }
-        const index = runtimeSessions.findIndex((session) => session.threadId === threadId);
+        const index = runtimeSessions.findIndex((session) => session.workspaceId === workspaceId);
         if (index >= 0) {
           runtimeSessions.splice(index, 1);
         }
@@ -185,10 +185,10 @@ describe("ProviderCommandReactor", () => {
         }),
       ),
     );
-    const generateThreadTitle = vi.fn<TextGenerationShape["generateThreadTitle"]>((_) =>
+    const generateWorkspaceTitle = vi.fn<TextGenerationShape["generateWorkspaceTitle"]>((_) =>
       Effect.fail(
         new TextGenerationError({
-          operation: "generateThreadTitle",
+          operation: "generateWorkspaceTitle",
           detail: "disabled in test harness",
         }),
       ),
@@ -227,7 +227,7 @@ describe("ProviderCommandReactor", () => {
       Layer.provideMerge(
         Layer.mock(TextGeneration, {
           generateBranchName,
-          generateThreadTitle,
+          generateWorkspaceTitle,
         }),
       ),
       Layer.provideMerge(ServerSettingsService.layerTest()),
@@ -255,11 +255,11 @@ describe("ProviderCommandReactor", () => {
     );
     await Effect.runPromise(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.makeUnsafe("cmd-thread-create"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        type: "workspace.create",
+        commandId: CommandId.makeUnsafe("cmd-workspace-create"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         projectId: asProjectId("project-1"),
-        title: "Thread",
+        title: "Workspace",
         modelSelection: modelSelection,
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
@@ -279,21 +279,21 @@ describe("ProviderCommandReactor", () => {
       stopSession,
       renameBranch,
       generateBranchName,
-      generateThreadTitle,
+      generateWorkspaceTitle,
       stateDir,
       drain,
     };
   }
 
-  it("reacts to thread.turn.start by ensuring session and sending provider turn", async () => {
+  it("reacts to workspace.turn.start by ensuring session and sending provider turn", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-1"),
           role: "user",
@@ -308,7 +308,7 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.startSession.mock.calls.length === 1);
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
-    expect(harness.startSession.mock.calls[0]?.[0]).toEqual(ThreadId.makeUnsafe("thread-1"));
+    expect(harness.startSession.mock.calls[0]?.[0]).toEqual(WorkspaceId.makeUnsafe("workspace-1"));
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
       cwd: "/tmp/provider-project",
       modelSelection: {
@@ -319,31 +319,33 @@ describe("ProviderCommandReactor", () => {
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.runtimeMode).toBe("approval-required");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.session?.workspaceId).toBe("workspace-1");
+    expect(workspace?.session?.runtimeMode).toBe("approval-required");
   });
 
-  it("generates a thread title on the first turn", async () => {
+  it("generates a workspace title on the first turn", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
     const seededTitle = "Please investigate reconnect failures after restar...";
-    harness.generateThreadTitle.mockReturnValue(Effect.succeed({ title: "Generated title" }));
+    harness.generateWorkspaceTitle.mockReturnValue(Effect.succeed({ title: "Generated title" }));
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.makeUnsafe("cmd-thread-title-seed"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        type: "workspace.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-workspace-title-seed"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         title: seededTitle,
       }),
     );
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-title"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-title"),
           role: "user",
@@ -357,42 +359,44 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 1);
-    expect(harness.generateThreadTitle.mock.calls[0]?.[0]).toMatchObject({
+    await waitFor(() => harness.generateWorkspaceTitle.mock.calls.length === 1);
+    expect(harness.generateWorkspaceTitle.mock.calls[0]?.[0]).toMatchObject({
       message: "Please investigate reconnect failures after restarting the session.",
     });
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
       return (
-        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
-        "Generated title"
+        readModel.workspaces.find((entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"))
+          ?.title === "Generated title"
       );
     });
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.title).toBe("Generated title");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.title).toBe("Generated title");
   });
 
-  it("does not overwrite an existing custom thread title on the first turn", async () => {
+  it("does not overwrite an existing custom workspace title on the first turn", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
     const seededTitle = "Please investigate reconnect failures after restar...";
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.makeUnsafe("cmd-thread-title-custom"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        type: "workspace.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-workspace-title-custom"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         title: "Keep this custom title",
       }),
     );
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-title-preserve"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-title-preserve"),
           role: "user",
@@ -407,18 +411,20 @@ describe("ProviderCommandReactor", () => {
     );
 
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
-    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
+    expect(harness.generateWorkspaceTitle).not.toHaveBeenCalled();
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.title).toBe("Keep this custom title");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.title).toBe("Keep this custom title");
   });
 
   it("matches the client-seeded title even when the outgoing prompt is reformatted", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
     const seededTitle = "Fix reconnect spinner on resume";
-    harness.generateThreadTitle.mockReturnValue(
+    harness.generateWorkspaceTitle.mockReturnValue(
       Effect.succeed({
         title: "Reconnect spinner resume bug",
       }),
@@ -426,18 +432,18 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.makeUnsafe("cmd-thread-title-formatted-seed"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        type: "workspace.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-workspace-title-formatted-seed"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         title: seededTitle,
       }),
     );
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-title-formatted"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-title-formatted"),
           role: "user",
@@ -451,18 +457,20 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 1);
+    await waitFor(() => harness.generateWorkspaceTitle.mock.calls.length === 1);
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
       return (
-        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
-        "Reconnect spinner resume bug"
+        readModel.workspaces.find((entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"))
+          ?.title === "Reconnect spinner resume bug"
       );
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.title).toBe("Reconnect spinner resume bug");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.title).toBe("Reconnect spinner resume bug");
   });
 
   it("generates a worktree branch name for the first turn", async () => {
@@ -471,9 +479,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.makeUnsafe("cmd-thread-branch"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        type: "workspace.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-workspace-branch"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         branch: "matcha/1234abcd",
         worktreePath: "/tmp/provider-project-worktree",
       }),
@@ -496,9 +504,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-branch-model"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-branch-model"),
           role: "user",
@@ -523,9 +531,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-fast"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-fast"),
           role: "user",
@@ -559,7 +567,7 @@ describe("ProviderCommandReactor", () => {
       },
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       modelSelection: {
         provider: "codex",
         model: "gpt-5.3-codex",
@@ -573,15 +581,15 @@ describe("ProviderCommandReactor", () => {
 
   it("forwards claude effort options through session start and turn send", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
+      workspaceModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
     });
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-claude-effort"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-claude-effort"),
           role: "user",
@@ -613,7 +621,7 @@ describe("ProviderCommandReactor", () => {
       },
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-sonnet-4-6",
@@ -626,15 +634,15 @@ describe("ProviderCommandReactor", () => {
 
   it("forwards claude fast mode options through session start and turn send", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },
+      workspaceModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },
     });
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-claude-fast-mode"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-claude-fast-mode"),
           role: "user",
@@ -666,7 +674,7 @@ describe("ProviderCommandReactor", () => {
       },
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
@@ -683,9 +691,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.interaction-mode.set",
+        type: "workspace.interaction-mode.set",
         commandId: CommandId.makeUnsafe("cmd-interaction-mode-set-plan"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         interactionMode: "plan",
         createdAt: now,
       }),
@@ -693,9 +701,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-plan"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-plan"),
           role: "user",
@@ -710,22 +718,22 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       interactionMode: "plan",
     });
   });
 
-  it("rejects a first turn when requested provider conflicts with the thread model", async () => {
+  it("rejects a first turn when requested provider conflicts with the workspace model", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "codex", model: "gpt-5-codex" },
+      workspaceModelSelection: { provider: "codex", model: "gpt-5-codex" },
     });
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-provider-first"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-provider-first"),
           role: "user",
@@ -744,11 +752,11 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      const workspace = readModel.workspaces.find(
+        (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
       );
       return (
-        thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
+        workspace?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
         false
       );
     });
@@ -757,10 +765,12 @@ describe("ProviderCommandReactor", () => {
     expect(harness.sendTurn).not.toHaveBeenCalled();
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.session).toBeNull();
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.session).toBeNull();
     expect(
-      thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
+      workspace?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
     ).toMatchObject({
       summary: "Provider turn start failed",
       payload: {
@@ -775,9 +785,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-unsupported-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-unsupported-1"),
           role: "user",
@@ -794,9 +804,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-unsupported-2"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-unsupported-2"),
           role: "user",
@@ -812,7 +822,7 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
 
     expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       modelSelection: {
         provider: "codex",
         model: "gpt-5-codex",
@@ -826,9 +836,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-unchanged-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-unchanged-1"),
           role: "user",
@@ -846,9 +856,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-unchanged-2"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-unchanged-2"),
           role: "user",
@@ -868,15 +878,15 @@ describe("ProviderCommandReactor", () => {
 
   it("restarts claude sessions when claude effort changes", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
+      workspaceModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
     });
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-claude-effort-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-claude-effort-1"),
           role: "user",
@@ -901,9 +911,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-claude-effort-2"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-claude-effort-2"),
           role: "user",
@@ -937,15 +947,15 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
-  it("restarts the provider session when runtime mode is updated on the thread", async () => {
+  it("restarts the provider session when runtime mode is updated on the workspace", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.runtime-mode.set",
+        type: "workspace.runtime-mode.set",
         commandId: CommandId.makeUnsafe("cmd-runtime-mode-set-initial-full-access"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         runtimeMode: "full-access",
         createdAt: now,
       }),
@@ -953,9 +963,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-runtime-mode-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-runtime-mode-1"),
           role: "user",
@@ -973,9 +983,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.runtime-mode.set",
+        type: "workspace.runtime-mode.set",
         commandId: CommandId.makeUnsafe("cmd-runtime-mode-set-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         runtimeMode: "approval-required",
         createdAt: now,
       }),
@@ -983,17 +993,17 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      const workspace = readModel.workspaces.find(
+        (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
       );
-      return thread?.runtimeMode === "approval-required";
+      return workspace?.runtimeMode === "approval-required";
     });
     await waitFor(() => harness.startSession.mock.calls.length === 2);
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-runtime-mode-2"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-runtime-mode-2"),
           role: "user",
@@ -1010,33 +1020,35 @@ describe("ProviderCommandReactor", () => {
 
     expect(harness.stopSession.mock.calls.length).toBe(0);
     expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       resumeCursor: { opaque: "resume-1" },
       runtimeMode: "approval-required",
     });
     expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.runtimeMode).toBe("approval-required");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.session?.workspaceId).toBe("workspace-1");
+    expect(workspace?.session?.runtimeMode).toBe("approval-required");
   });
 
   it("does not inject derived model options when restarting claude on runtime mode changes", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },
+      workspaceModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },
     });
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set-runtime-mode-claude"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "ready",
           providerName: "claudeAgent",
           runtimeMode: "full-access",
@@ -1050,9 +1062,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.runtime-mode.set",
+        type: "workspace.runtime-mode.set",
         commandId: CommandId.makeUnsafe("cmd-runtime-mode-set-claude-no-options"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         runtimeMode: "approval-required",
         createdAt: now,
       }),
@@ -1069,15 +1081,15 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
-  it("rejects provider changes after a thread is already bound to a session provider", async () => {
+  it("rejects provider changes after a workspace is already bound to a session provider", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-provider-switch-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-provider-switch-1"),
           role: "user",
@@ -1095,9 +1107,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-provider-switch-2"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-provider-switch-2"),
           role: "user",
@@ -1116,11 +1128,11 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      const workspace = readModel.workspaces.find(
+        (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
       );
       return (
-        thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
+        workspace?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
         false
       );
     });
@@ -1130,12 +1142,14 @@ describe("ProviderCommandReactor", () => {
     expect(harness.stopSession.mock.calls.length).toBe(0);
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.providerName).toBe("codex");
-    expect(thread?.session?.runtimeMode).toBe("approval-required");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.session?.workspaceId).toBe("workspace-1");
+    expect(workspace?.session?.providerName).toBe("codex");
+    expect(workspace?.session?.runtimeMode).toBe("approval-required");
     expect(
-      thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
+      workspace?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
     ).toMatchObject({
       payload: {
         detail: expect.stringContaining("cannot switch to 'claudeAgent'"),
@@ -1149,9 +1163,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.runtime-mode.set",
+        type: "workspace.runtime-mode.set",
         commandId: CommandId.makeUnsafe("cmd-runtime-mode-set-initial-full-access-2"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         runtimeMode: "full-access",
         createdAt: now,
       }),
@@ -1159,9 +1173,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.start",
+        type: "workspace.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-restart-failure-1"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         message: {
           messageId: asMessageId("user-message-restart-failure-1"),
           role: "user",
@@ -1183,9 +1197,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.runtime-mode.set",
+        type: "workspace.runtime-mode.set",
         commandId: CommandId.makeUnsafe("cmd-runtime-mode-set-restart-failure"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         runtimeMode: "approval-required",
         createdAt: now,
       }),
@@ -1193,10 +1207,10 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      const workspace = readModel.workspaces.find(
+        (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
       );
-      return thread?.runtimeMode === "approval-required";
+      return workspace?.runtimeMode === "approval-required";
     });
     await waitFor(() => harness.startSession.mock.calls.length === 2);
     await harness.drain();
@@ -1205,22 +1219,24 @@ describe("ProviderCommandReactor", () => {
     expect(harness.sendTurn.mock.calls.length).toBe(1);
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.runtimeMode).toBe("full-access");
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.session?.workspaceId).toBe("workspace-1");
+    expect(workspace?.session?.runtimeMode).toBe("full-access");
   });
 
-  it("reacts to thread.turn.interrupt-requested by calling provider interrupt", async () => {
+  it("reacts to workspace.turn.interrupt-requested by calling provider interrupt", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "running",
           providerName: "codex",
           runtimeMode: "approval-required",
@@ -1234,9 +1250,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.turn.interrupt",
+        type: "workspace.turn.interrupt",
         commandId: CommandId.makeUnsafe("cmd-turn-interrupt"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         turnId: asTurnId("turn-1"),
         createdAt: now,
       }),
@@ -1244,21 +1260,21 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.interruptTurn.mock.calls.length === 1);
     expect(harness.interruptTurn.mock.calls[0]?.[0]).toEqual({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
     });
   });
 
-  it("reacts to thread.approval.respond by forwarding provider approval response", async () => {
+  it("reacts to workspace.approval.respond by forwarding provider approval response", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set-for-approval"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "running",
           providerName: "codex",
           runtimeMode: "approval-required",
@@ -1272,9 +1288,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.approval.respond",
+        type: "workspace.approval.respond",
         commandId: CommandId.makeUnsafe("cmd-approval-respond"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         requestId: asApprovalRequestId("approval-request-1"),
         decision: "accept",
         createdAt: now,
@@ -1283,23 +1299,23 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.respondToRequest.mock.calls.length === 1);
     expect(harness.respondToRequest.mock.calls[0]?.[0]).toEqual({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       requestId: "approval-request-1",
       decision: "accept",
     });
   });
 
-  it("reacts to thread.user-input.respond by forwarding structured user input answers", async () => {
+  it("reacts to workspace.user-input.respond by forwarding structured user input answers", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set-for-user-input"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "running",
           providerName: "codex",
           runtimeMode: "approval-required",
@@ -1313,9 +1329,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.user-input.respond",
+        type: "workspace.user-input.respond",
         commandId: CommandId.makeUnsafe("cmd-user-input-respond"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         requestId: asApprovalRequestId("user-input-request-1"),
         answers: {
           sandbox_mode: "workspace-write",
@@ -1326,7 +1342,7 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.respondToUserInput.mock.calls.length === 1);
     expect(harness.respondToUserInput.mock.calls[0]?.[0]).toEqual({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       requestId: "user-input-request-1",
       answers: {
         sandbox_mode: "workspace-write",
@@ -1349,11 +1365,11 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set-for-approval-error"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "running",
           providerName: "codex",
           runtimeMode: "approval-required",
@@ -1367,9 +1383,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.activity.append",
+        type: "workspace.activity.append",
         commandId: CommandId.makeUnsafe("cmd-approval-requested"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         activity: {
           id: EventId.makeUnsafe("activity-approval-requested"),
           tone: "approval",
@@ -1388,9 +1404,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.approval.respond",
+        type: "workspace.approval.respond",
         commandId: CommandId.makeUnsafe("cmd-approval-respond-stale"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         requestId: asApprovalRequestId("approval-request-1"),
         decision: "acceptForSession",
         createdAt: now,
@@ -1399,20 +1415,22 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      const workspace = readModel.workspaces.find(
+        (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
       );
-      if (!thread) return false;
-      return thread.activities.some(
+      if (!workspace) return false;
+      return workspace.activities.some(
         (activity) => activity.kind === "provider.approval.respond.failed",
       );
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread).toBeDefined();
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace).toBeDefined();
 
-    const failureActivity = thread?.activities.find(
+    const failureActivity = workspace?.activities.find(
       (activity) => activity.kind === "provider.approval.respond.failed",
     );
     expect(failureActivity).toBeDefined();
@@ -1421,7 +1439,7 @@ describe("ProviderCommandReactor", () => {
       detail: expect.stringContaining("Stale pending approval request: approval-request-1"),
     });
 
-    const resolvedActivity = thread?.activities.find(
+    const resolvedActivity = workspace?.activities.find(
       (activity) =>
         activity.kind === "approval.resolved" &&
         typeof activity.payload === "object" &&
@@ -1446,11 +1464,11 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set-for-user-input-error"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "running",
           providerName: "claudeAgent",
           runtimeMode: "approval-required",
@@ -1464,9 +1482,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.activity.append",
+        type: "workspace.activity.append",
         commandId: CommandId.makeUnsafe("cmd-user-input-requested"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         activity: {
           id: EventId.makeUnsafe("activity-user-input-requested"),
           tone: "info",
@@ -1497,9 +1515,9 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.user-input.respond",
+        type: "workspace.user-input.respond",
         commandId: CommandId.makeUnsafe("cmd-user-input-respond-stale"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         requestId: asApprovalRequestId("user-input-request-1"),
         answers: {
           sandbox_mode: "workspace-write",
@@ -1510,20 +1528,22 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      const workspace = readModel.workspaces.find(
+        (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
       );
-      if (!thread) return false;
-      return thread.activities.some(
+      if (!workspace) return false;
+      return workspace.activities.some(
         (activity) => activity.kind === "provider.user-input.respond.failed",
       );
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread).toBeDefined();
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace).toBeDefined();
 
-    const failureActivity = thread?.activities.find(
+    const failureActivity = workspace?.activities.find(
       (activity) => activity.kind === "provider.user-input.respond.failed",
     );
     expect(failureActivity).toBeDefined();
@@ -1532,7 +1552,7 @@ describe("ProviderCommandReactor", () => {
       detail: expect.stringContaining("Stale pending user-input request: user-input-request-1"),
     });
 
-    const resolvedActivity = thread?.activities.find(
+    const resolvedActivity = workspace?.activities.find(
       (activity) =>
         activity.kind === "user-input.resolved" &&
         typeof activity.payload === "object" &&
@@ -1542,17 +1562,17 @@ describe("ProviderCommandReactor", () => {
     expect(resolvedActivity).toBeUndefined();
   });
 
-  it("reacts to thread.session.stop by stopping provider session and clearing thread session state", async () => {
+  it("reacts to workspace.session.stop by stopping provider session and clearing workspace session state", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.set",
+        type: "workspace.session.set",
         commandId: CommandId.makeUnsafe("cmd-session-set-for-stop"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         session: {
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
           status: "ready",
           providerName: "codex",
           runtimeMode: "approval-required",
@@ -1566,19 +1586,21 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.session.stop",
+        type: "workspace.session.stop",
         commandId: CommandId.makeUnsafe("cmd-session-stop"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
         createdAt: now,
       }),
     );
 
     await waitFor(() => harness.stopSession.mock.calls.length === 1);
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.session).not.toBeNull();
-    expect(thread?.session?.status).toBe("stopped");
-    expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.activeTurnId).toBeNull();
+    const workspace = readModel.workspaces.find(
+      (entry) => entry.id === WorkspaceId.makeUnsafe("workspace-1"),
+    );
+    expect(workspace?.session).not.toBeNull();
+    expect(workspace?.session?.status).toBe("stopped");
+    expect(workspace?.session?.workspaceId).toBe("workspace-1");
+    expect(workspace?.session?.activeTurnId).toBeNull();
   });
 });

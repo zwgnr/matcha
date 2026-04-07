@@ -1,7 +1,7 @@
 import {
   OrchestrationEvent,
   type ServerLifecycleWelcomePayload,
-  type ThreadId,
+  type WorkspaceId,
 } from "@matcha/contracts";
 import {
   Outlet,
@@ -34,8 +34,8 @@ import {
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
 import {
-  clearPromotedDraftThread,
-  clearPromotedDraftThreads,
+  clearPromotedDraftWorkspace,
+  clearPromotedDraftWorkspaces,
   useComposerDraftStore,
 } from "../composerDraftStore";
 import { useStore } from "../store";
@@ -44,7 +44,7 @@ import { useTerminalStateStore } from "../terminalStateStore";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
-import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import { collectActiveTerminalWorkspaceIds } from "../lib/terminalStateCleanup";
 import { deriveOrchestrationBatchEffects } from "../orchestrationEventEffects";
 import { createOrchestrationRecoveryCoordinator } from "../orchestrationRecovery";
 import { deriveReplayRetryDecision } from "../orchestrationRecovery";
@@ -172,9 +172,9 @@ function coalesceOrchestrationUiEvents(
   for (const event of events) {
     const previous = coalesced.at(-1);
     if (
-      previous?.type === "thread.message-sent" &&
-      event.type === "thread.message-sent" &&
-      previous.payload.threadId === event.payload.threadId &&
+      previous?.type === "workspace.message-sent" &&
+      event.type === "workspace.message-sent" &&
+      previous.payload.workspaceId === event.payload.workspaceId &&
       previous.payload.messageId === event.payload.messageId
     ) {
       coalesced[coalesced.length - 1] = {
@@ -212,8 +212,8 @@ function EventRouter() {
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
-  const syncThreads = useUiStateStore((store) => store.syncThreads);
-  const clearThreadUi = useUiStateStore((store) => store.clearThreadUi);
+  const syncWorkspaces = useUiStateStore((store) => store.syncWorkspaces);
+  const clearWorkspaceUi = useUiStateStore((store) => store.clearWorkspaceUi);
   const removeTerminalState = useTerminalStateStore((store) => store.removeTerminalState);
   const removeOrphanedTerminalStates = useTerminalStateStore(
     (store) => store.removeOrphanedTerminalStates,
@@ -223,7 +223,7 @@ function EventRouter() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const readPathname = useEffectEvent(() => pathname);
-  const handledBootstrapThreadIdRef = useRef<string | null>(null);
+  const handledBootstrapWorkspaceIdRef = useRef<string | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
   const disposedRef = useRef(false);
   const bootstrapFromSnapshotRef = useRef<() => Promise<void>>(async () => undefined);
@@ -239,7 +239,7 @@ function EventRouter() {
         return;
       }
 
-      if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
+      if (!payload.bootstrapProjectId || !payload.bootstrapWorkspaceId) {
         return;
       }
       setProjectExpanded(payload.bootstrapProjectId, true);
@@ -247,15 +247,15 @@ function EventRouter() {
       if (readPathname() !== "/") {
         return;
       }
-      if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
+      if (handledBootstrapWorkspaceIdRef.current === payload.bootstrapWorkspaceId) {
         return;
       }
       await navigate({
-        to: "/$threadId",
-        params: { threadId: payload.bootstrapThreadId },
+        to: "/$workspaceId",
+        params: { workspaceId: payload.bootstrapWorkspaceId },
         replace: true,
       });
-      handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
+      handledBootstrapWorkspaceIdRef.current = payload.bootstrapWorkspaceId;
     })().catch(() => undefined);
   });
 
@@ -328,28 +328,28 @@ function EventRouter() {
     let flushPendingDomainEventsScheduled = false;
 
     const reconcileSnapshotDerivedState = () => {
-      const threads = useStore.getState().threads;
+      const workspaces = useStore.getState().workspaces;
       const projects = useStore.getState().projects;
       syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
-      syncThreads(
-        threads.map((thread) => ({
-          id: thread.id,
-          seedVisitedAt: thread.updatedAt ?? thread.createdAt,
+      syncWorkspaces(
+        workspaces.map((workspace) => ({
+          id: workspace.id,
+          seedVisitedAt: workspace.updatedAt ?? workspace.createdAt,
         })),
       );
-      clearPromotedDraftThreads(threads.map((thread) => thread.id));
-      const draftThreadIds = Object.keys(
-        useComposerDraftStore.getState().draftThreadsByThreadId,
-      ) as ThreadId[];
-      const activeThreadIds = collectActiveTerminalThreadIds({
-        snapshotThreads: threads.map((thread) => ({
-          id: thread.id,
+      clearPromotedDraftWorkspaces(workspaces.map((workspace) => workspace.id));
+      const draftWorkspaceIds = Object.keys(
+        useComposerDraftStore.getState().draftWorkspacesByWorkspaceId,
+      ) as WorkspaceId[];
+      const activeWorkspaceIds = collectActiveTerminalWorkspaceIds({
+        snapshotWorkspaces: workspaces.map((workspace) => ({
+          id: workspace.id,
           deletedAt: null,
-          archivedAt: thread.archivedAt,
+          archivedAt: workspace.archivedAt,
         })),
-        draftThreadIds,
+        draftWorkspaceIds,
       });
-      removeOrphanedTerminalStates(activeThreadIds);
+      removeOrphanedTerminalStates(activeWorkspaceIds);
     };
 
     const queryInvalidationThrottler = new Throttler(
@@ -395,28 +395,28 @@ function EventRouter() {
         const projects = useStore.getState().projects;
         syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
       }
-      const needsThreadUiSync = nextEvents.some(
-        (event) => event.type === "thread.created" || event.type === "thread.deleted",
+      const needsWorkspaceUiSync = nextEvents.some(
+        (event) => event.type === "workspace.created" || event.type === "workspace.deleted",
       );
-      if (needsThreadUiSync) {
-        const threads = useStore.getState().threads;
-        syncThreads(
-          threads.map((thread) => ({
-            id: thread.id,
-            seedVisitedAt: thread.updatedAt ?? thread.createdAt,
+      if (needsWorkspaceUiSync) {
+        const workspaces = useStore.getState().workspaces;
+        syncWorkspaces(
+          workspaces.map((workspace) => ({
+            id: workspace.id,
+            seedVisitedAt: workspace.updatedAt ?? workspace.createdAt,
           })),
         );
       }
       const draftStore = useComposerDraftStore.getState();
-      for (const threadId of batchEffects.clearPromotedDraftThreadIds) {
-        clearPromotedDraftThread(threadId);
+      for (const workspaceId of batchEffects.clearPromotedDraftWorkspaceIds) {
+        clearPromotedDraftWorkspace(workspaceId);
       }
-      for (const threadId of batchEffects.clearDeletedThreadIds) {
-        draftStore.clearDraftThread(threadId);
-        clearThreadUi(threadId);
+      for (const workspaceId of batchEffects.clearDeletedWorkspaceIds) {
+        draftStore.clearDraftWorkspace(workspaceId);
+        clearWorkspaceUi(workspaceId);
       }
-      for (const threadId of batchEffects.removeTerminalStateThreadIds) {
-        removeTerminalState(threadId);
+      for (const workspaceId of batchEffects.removeTerminalStateWorkspaceIds) {
+        removeTerminalState(workspaceId);
       }
     };
     const flushPendingDomainEvents = () => {
@@ -555,8 +555,10 @@ function EventRouter() {
       },
     );
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
-      const thread = useStore.getState().threads.find((entry) => entry.id === event.threadId);
-      if (thread && thread.archivedAt !== null) {
+      const workspace = useStore
+        .getState()
+        .workspaces.find((entry) => entry.id === event.workspaceId);
+      if (workspace && workspace.archivedAt !== null) {
         return;
       }
       applyTerminalEvent(event);
@@ -578,11 +580,11 @@ function EventRouter() {
     removeTerminalState,
     removeOrphanedTerminalStates,
     applyTerminalEvent,
-    clearThreadUi,
+    clearWorkspaceUi,
     setProjectExpanded,
     syncProjects,
     syncServerReadModel,
-    syncThreads,
+    syncWorkspaces,
   ]);
 
   useServerWelcomeSubscription(handleWelcome);

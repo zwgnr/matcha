@@ -1,14 +1,14 @@
 import {
   OrchestrationGetTurnDiffResult,
-  type OrchestrationGetFullThreadDiffInput,
-  type OrchestrationGetFullThreadDiffResult,
+  type OrchestrationGetFullWorkspaceDiffInput,
+  type OrchestrationGetFullWorkspaceDiffResult,
   type OrchestrationGetTurnDiffResult as OrchestrationGetTurnDiffResultType,
 } from "@matcha/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
 
 import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { CheckpointInvariantError, CheckpointUnavailableError } from "../Errors.ts";
-import { checkpointRefForThreadTurn } from "../Utils.ts";
+import { checkpointRefForWorkspaceTurn } from "../Utils.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import {
   CheckpointDiffQuery,
@@ -27,7 +27,7 @@ const make = Effect.gen(function* () {
 
       if (input.fromTurnCount === input.toTurnCount) {
         const emptyDiff: OrchestrationGetTurnDiffResultType = {
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           fromTurnCount: input.fromTurnCount,
           toTurnCount: input.toTurnCount,
           diff: "",
@@ -41,56 +41,57 @@ const make = Effect.gen(function* () {
         return emptyDiff;
       }
 
-      const threadContext = yield* projectionSnapshotQuery.getThreadCheckpointContext(
-        input.threadId,
+      const workspaceContext = yield* projectionSnapshotQuery.getWorkspaceCheckpointContext(
+        input.workspaceId,
       );
-      if (Option.isNone(threadContext)) {
+      if (Option.isNone(workspaceContext)) {
         return yield* new CheckpointInvariantError({
           operation,
-          detail: `Thread '${input.threadId}' not found.`,
+          detail: `Workspace '${input.workspaceId}' not found.`,
         });
       }
 
-      const maxTurnCount = threadContext.value.checkpoints.reduce(
+      const maxTurnCount = workspaceContext.value.checkpoints.reduce(
         (max, checkpoint) => Math.max(max, checkpoint.checkpointTurnCount),
         0,
       );
       if (input.toTurnCount > maxTurnCount) {
         return yield* new CheckpointUnavailableError({
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           turnCount: input.toTurnCount,
           detail: `Turn diff range exceeds current turn count: requested ${input.toTurnCount}, current ${maxTurnCount}.`,
         });
       }
 
-      const workspaceCwd = threadContext.value.worktreePath ?? threadContext.value.workspaceRoot;
+      const workspaceCwd =
+        workspaceContext.value.worktreePath ?? workspaceContext.value.workspaceRoot;
       if (!workspaceCwd) {
         return yield* new CheckpointInvariantError({
           operation,
-          detail: `Workspace path missing for thread '${input.threadId}' when computing turn diff.`,
+          detail: `Workspace path missing for workspace '${input.workspaceId}' when computing turn diff.`,
         });
       }
 
       const fromCheckpointRef =
         input.fromTurnCount === 0
-          ? checkpointRefForThreadTurn(input.threadId, 0)
-          : threadContext.value.checkpoints.find(
+          ? checkpointRefForWorkspaceTurn(input.workspaceId, 0)
+          : workspaceContext.value.checkpoints.find(
               (checkpoint) => checkpoint.checkpointTurnCount === input.fromTurnCount,
             )?.checkpointRef;
       if (!fromCheckpointRef) {
         return yield* new CheckpointUnavailableError({
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           turnCount: input.fromTurnCount,
           detail: `Checkpoint ref is unavailable for turn ${input.fromTurnCount}.`,
         });
       }
 
-      const toCheckpointRef = threadContext.value.checkpoints.find(
+      const toCheckpointRef = workspaceContext.value.checkpoints.find(
         (checkpoint) => checkpoint.checkpointTurnCount === input.toTurnCount,
       )?.checkpointRef;
       if (!toCheckpointRef) {
         return yield* new CheckpointUnavailableError({
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           turnCount: input.toTurnCount,
           detail: `Checkpoint ref is unavailable for turn ${input.toTurnCount}.`,
         });
@@ -112,7 +113,7 @@ const make = Effect.gen(function* () {
 
       if (!fromExists) {
         return yield* new CheckpointUnavailableError({
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           turnCount: input.fromTurnCount,
           detail: `Filesystem checkpoint is unavailable for turn ${input.fromTurnCount}.`,
         });
@@ -120,7 +121,7 @@ const make = Effect.gen(function* () {
 
       if (!toExists) {
         return yield* new CheckpointUnavailableError({
-          threadId: input.threadId,
+          workspaceId: input.workspaceId,
           turnCount: input.toTurnCount,
           detail: `Filesystem checkpoint is unavailable for turn ${input.toTurnCount}.`,
         });
@@ -134,7 +135,7 @@ const make = Effect.gen(function* () {
       });
 
       const turnDiff: OrchestrationGetTurnDiffResultType = {
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         fromTurnCount: input.fromTurnCount,
         toTurnCount: input.toTurnCount,
         diff,
@@ -150,18 +151,18 @@ const make = Effect.gen(function* () {
     },
   );
 
-  const getFullThreadDiff: CheckpointDiffQueryShape["getFullThreadDiff"] = (
-    input: OrchestrationGetFullThreadDiffInput,
+  const getFullWorkspaceDiff: CheckpointDiffQueryShape["getFullWorkspaceDiff"] = (
+    input: OrchestrationGetFullWorkspaceDiffInput,
   ) =>
     getTurnDiff({
-      threadId: input.threadId,
+      workspaceId: input.workspaceId,
       fromTurnCount: 0,
       toTurnCount: input.toTurnCount,
-    }).pipe(Effect.map((result): OrchestrationGetFullThreadDiffResult => result));
+    }).pipe(Effect.map((result): OrchestrationGetFullWorkspaceDiffResult => result));
 
   return {
     getTurnDiff,
-    getFullThreadDiff,
+    getFullWorkspaceDiff,
   } satisfies CheckpointDiffQueryShape;
 });
 

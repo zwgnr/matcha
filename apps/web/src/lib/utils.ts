@@ -1,4 +1,4 @@
-import { CommandId, MessageId, ProjectId, ThreadId } from "@matcha/contracts";
+import { CommandId, MessageId, ProjectId, WorkspaceId } from "@matcha/contracts";
 import { String, Predicate } from "effect";
 import { type CxOptions, cx } from "class-variance-authority";
 import { twMerge } from "tailwind-merge";
@@ -32,7 +32,7 @@ export const newCommandId = (): CommandId => CommandId.makeUnsafe(randomUUID());
 
 export const newProjectId = (): ProjectId => ProjectId.makeUnsafe(randomUUID());
 
-export const newThreadId = (): ThreadId => ThreadId.makeUnsafe(randomUUID());
+export const newWorkspaceId = (): WorkspaceId => WorkspaceId.makeUnsafe(randomUUID());
 
 export const newMessageId = (): MessageId => MessageId.makeUnsafe(randomUUID());
 

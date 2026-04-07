@@ -8,7 +8,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
   type ServerProvider,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { page } from "vitest/browser";
 import { useCallback } from "react";
@@ -18,16 +18,16 @@ import { render } from "vitest-browser-react";
 import { TraitsPicker } from "./TraitsPicker";
 import {
   COMPOSER_DRAFT_STORAGE_KEY,
-  ComposerThreadDraftState,
+  ComposerWorkspaceDraftState,
   useComposerDraftStore,
-  useComposerThreadDraft,
+  useComposerWorkspaceDraft,
   useEffectiveComposerModelState,
 } from "../../composerDraftStore";
 import { DEFAULT_CLIENT_SETTINGS } from "@matcha/contracts/settings";
 
 // ── Claude TraitsPicker tests ─────────────────────────────────────────
 
-const CLAUDE_THREAD_ID = ThreadId.makeUnsafe("thread-claude-traits");
+const CLAUDE_WORKSPACE_ID = WorkspaceId.makeUnsafe("workspace-claude-traits");
 const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
   {
     provider: "codex",
@@ -120,13 +120,13 @@ function ClaudeTraitsPickerHarness(props: {
   fallbackModelSelection: ModelSelection | null;
   triggerVariant?: "ghost" | "outline";
 }) {
-  const prompt = useComposerThreadDraft(CLAUDE_THREAD_ID).prompt;
+  const prompt = useComposerWorkspaceDraft(CLAUDE_WORKSPACE_ID).prompt;
   const setPrompt = useComposerDraftStore((store) => store.setPrompt);
   const { modelOptions, selectedModel } = useEffectiveComposerModelState({
-    threadId: CLAUDE_THREAD_ID,
+    workspaceId: CLAUDE_WORKSPACE_ID,
     providers: TEST_PROVIDERS,
     selectedProvider: "claudeAgent",
-    threadModelSelection: props.fallbackModelSelection,
+    workspaceModelSelection: props.fallbackModelSelection,
     projectModelSelection: null,
     settings: {
       ...DEFAULT_SERVER_SETTINGS,
@@ -135,7 +135,7 @@ function ClaudeTraitsPickerHarness(props: {
   });
   const handlePromptChange = useCallback(
     (nextPrompt: string) => {
-      setPrompt(CLAUDE_THREAD_ID, nextPrompt);
+      setPrompt(CLAUDE_WORKSPACE_ID, nextPrompt);
     },
     [setPrompt],
   );
@@ -144,7 +144,7 @@ function ClaudeTraitsPickerHarness(props: {
     <TraitsPicker
       provider="claudeAgent"
       models={TEST_PROVIDERS[1]!.models}
-      threadId={CLAUDE_THREAD_ID}
+      workspaceId={CLAUDE_WORKSPACE_ID}
       model={selectedModel ?? props.model}
       prompt={prompt}
       modelOptions={modelOptions?.claudeAgent}
@@ -168,8 +168,8 @@ async function mountClaudePicker(props?: {
 }) {
   const model = props?.model ?? "claude-opus-4-6";
   const claudeOptions = !props?.skipDraftModelOptions ? props?.options : undefined;
-  const draftsByThreadId: Record<ThreadId, ComposerThreadDraftState> = {
-    [CLAUDE_THREAD_ID]: {
+  const draftsByWorkspaceId: Record<WorkspaceId, ComposerWorkspaceDraftState> = {
+    [CLAUDE_WORKSPACE_ID]: {
       prompt: props?.prompt ?? "",
       images: [],
       nonPersistedImageIds: [],
@@ -192,9 +192,9 @@ async function mountClaudePicker(props?: {
     },
   };
   useComposerDraftStore.setState({
-    draftsByThreadId,
-    draftThreadsByThreadId: {},
-    projectDraftThreadIdByProjectId: {},
+    draftsByWorkspaceId,
+    draftWorkspacesByWorkspaceId: {},
+    projectDraftWorkspaceIdByProjectId: {},
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -230,9 +230,9 @@ describe("TraitsPicker (Claude)", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByWorkspaceId: {},
+      draftWorkspacesByWorkspaceId: {},
+      projectDraftWorkspaceIdByProjectId: {},
       stickyModelSelectionByProvider: {},
     });
   });
@@ -369,10 +369,10 @@ describe("TraitsPicker (Claude)", () => {
 // ── Codex TraitsPicker tests ──────────────────────────────────────────
 
 async function mountCodexPicker(props: { model?: string; options?: CodexModelOptions }) {
-  const threadId = ThreadId.makeUnsafe("thread-codex-traits");
+  const workspaceId = WorkspaceId.makeUnsafe("workspace-codex-traits");
   const model = props.model ?? DEFAULT_MODEL_BY_PROVIDER.codex;
-  const draftsByThreadId: Record<ThreadId, ComposerThreadDraftState> = {
-    [threadId]: {
+  const draftsByWorkspaceId: Record<WorkspaceId, ComposerWorkspaceDraftState> = {
+    [workspaceId]: {
       prompt: "",
       images: [],
       nonPersistedImageIds: [],
@@ -392,10 +392,10 @@ async function mountCodexPicker(props: { model?: string; options?: CodexModelOpt
   };
 
   useComposerDraftStore.setState({
-    draftsByThreadId,
-    draftThreadsByThreadId: {},
-    projectDraftThreadIdByProjectId: {
-      [ProjectId.makeUnsafe("project-codex-traits")]: threadId,
+    draftsByWorkspaceId,
+    draftWorkspacesByWorkspaceId: {},
+    projectDraftWorkspaceIdByProjectId: {
+      [ProjectId.makeUnsafe("project-codex-traits")]: workspaceId,
     },
   });
   const host = document.createElement("div");
@@ -404,7 +404,7 @@ async function mountCodexPicker(props: { model?: string; options?: CodexModelOpt
     <TraitsPicker
       provider="codex"
       models={TEST_PROVIDERS[0]!.models}
-      threadId={threadId}
+      workspaceId={workspaceId}
       model={props.model ?? DEFAULT_MODEL_BY_PROVIDER.codex}
       prompt=""
       modelOptions={props.options}
@@ -429,9 +429,9 @@ describe("TraitsPicker (Codex)", () => {
     document.body.innerHTML = "";
     localStorage.removeItem(COMPOSER_DRAFT_STORAGE_KEY);
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByWorkspaceId: {},
+      draftWorkspacesByWorkspaceId: {},
+      projectDraftWorkspaceIdByProjectId: {},
       stickyModelSelectionByProvider: {},
     });
   });

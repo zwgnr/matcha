@@ -6,9 +6,9 @@ import {
   requiresDefaultBranchConfirmation,
   resolveAutoFeatureBranchName,
   resolveDefaultBranchActionDialogCopy,
-  resolveLiveThreadBranchUpdate,
+  resolveLiveWorkspaceBranchUpdate,
   resolveQuickAction,
-  resolveThreadBranchUpdate,
+  resolveWorkspaceBranchUpdate,
 } from "./GitActionsControl.logic";
 
 function status(overrides: Partial<GitStatusResult> = {}): GitStatusResult {
@@ -933,9 +933,9 @@ describe("buildGitActionProgressStages", () => {
   });
 });
 
-describe("resolveThreadBranchUpdate", () => {
+describe("resolveWorkspaceBranchUpdate", () => {
   it("returns a branch update when the action created a new branch", () => {
-    const update = resolveThreadBranchUpdate({
+    const update = resolveWorkspaceBranchUpdate({
       action: "commit_push_pr",
       branch: {
         status: "created",
@@ -960,7 +960,7 @@ describe("resolveThreadBranchUpdate", () => {
   });
 
   it("returns null when the action stayed on the existing branch", () => {
-    const update = resolveThreadBranchUpdate({
+    const update = resolveWorkspaceBranchUpdate({
       action: "commit_push",
       branch: {
         status: "skipped_not_requested",
@@ -982,10 +982,10 @@ describe("resolveThreadBranchUpdate", () => {
   });
 });
 
-describe("resolveLiveThreadBranchUpdate", () => {
-  it("returns a branch update when live git status differs from stored thread metadata", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "feature/old-branch",
+describe("resolveLiveWorkspaceBranchUpdate", () => {
+  it("returns a branch update when live git status differs from stored workspace metadata", () => {
+    const update = resolveLiveWorkspaceBranchUpdate({
+      workspaceBranch: "feature/old-branch",
       gitStatus: status({ branch: "effect-atom" }),
     });
 
@@ -995,26 +995,26 @@ describe("resolveLiveThreadBranchUpdate", () => {
   });
 
   it("returns null when live git status is unavailable", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "feature/old-branch",
+    const update = resolveLiveWorkspaceBranchUpdate({
+      workspaceBranch: "feature/old-branch",
       gitStatus: null,
     });
 
     assert.equal(update, null);
   });
 
-  it("returns null when the stored thread branch already matches git status", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "effect-atom",
+  it("returns null when the stored workspace branch already matches git status", () => {
+    const update = resolveLiveWorkspaceBranchUpdate({
+      workspaceBranch: "effect-atom",
       gitStatus: status({ branch: "effect-atom" }),
     });
 
     assert.equal(update, null);
   });
 
-  it("returns null when git status is detached HEAD but the thread already has a branch", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "effect-atom",
+  it("returns null when git status is detached HEAD but the workspace already has a branch", () => {
+    const update = resolveLiveWorkspaceBranchUpdate({
+      workspaceBranch: "effect-atom",
       gitStatus: status({ branch: null }),
     });
 

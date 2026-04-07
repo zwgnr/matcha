@@ -2,7 +2,7 @@ import {
   type EditorId,
   type ProjectScript,
   type ResolvedKeybindingsConfig,
-  type ThreadId,
+  type WorkspaceId,
 } from "@matcha/contracts";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
@@ -15,8 +15,8 @@ import { Toggle } from "../ui/toggle";
 import { OpenInPicker } from "./OpenInPicker";
 
 interface ChatHeaderProps {
-  activeThreadId: ThreadId;
-  activeThreadTitle: string;
+  activeWorkspaceId: WorkspaceId;
+  activeWorkspaceTitle: string;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
   openInCwd: string | null;
@@ -35,8 +35,8 @@ interface ChatHeaderProps {
 }
 
 export const ChatHeader = memo(function ChatHeader({
-  activeThreadId,
-  activeThreadTitle,
+  activeWorkspaceId,
+  activeWorkspaceTitle,
   activeProjectName,
   isGitRepo,
   openInCwd,
@@ -59,9 +59,9 @@ export const ChatHeader = memo(function ChatHeader({
         <SidebarTrigger className="size-7 shrink-0 md:hidden" />
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
-          title={activeThreadTitle}
+          title={activeWorkspaceTitle}
         >
-          {activeThreadTitle}
+          {activeWorkspaceTitle}
         </h2>
         {activeProjectName && (
           <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
@@ -93,7 +93,9 @@ export const ChatHeader = memo(function ChatHeader({
             openInCwd={openInCwd}
           />
         )}
-        {activeProjectName && <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />}
+        {activeProjectName && (
+          <GitActionsControl gitCwd={gitCwd} activeWorkspaceId={activeWorkspaceId} />
+        )}
         <Tooltip>
           <TooltipTrigger
             render={

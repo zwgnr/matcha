@@ -1,9 +1,9 @@
-import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@matcha/contracts";
+import type { OrchestrationEvent, OrchestrationReadModel, WorkspaceId } from "@matcha/contracts";
 import {
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
   OrchestrationSession,
-  OrchestrationThread,
+  OrchestrationWorkspace,
 } from "@matcha/contracts";
 import { Effect, Schema } from "effect";
 
@@ -13,23 +13,23 @@ import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
-  ThreadActivityAppendedPayload,
-  ThreadArchivedPayload,
-  ThreadCreatedPayload,
-  ThreadDeletedPayload,
-  ThreadInteractionModeSetPayload,
-  ThreadMetaUpdatedPayload,
-  ThreadProposedPlanUpsertedPayload,
-  ThreadRuntimeModeSetPayload,
-  ThreadUnarchivedPayload,
-  ThreadRevertedPayload,
-  ThreadSessionSetPayload,
-  ThreadTurnDiffCompletedPayload,
+  WorkspaceActivityAppendedPayload,
+  WorkspaceArchivedPayload,
+  WorkspaceCreatedPayload,
+  WorkspaceDeletedPayload,
+  WorkspaceInteractionModeSetPayload,
+  WorkspaceMetaUpdatedPayload,
+  WorkspaceProposedPlanUpsertedPayload,
+  WorkspaceRuntimeModeSetPayload,
+  WorkspaceUnarchivedPayload,
+  WorkspaceRevertedPayload,
+  WorkspaceSessionSetPayload,
+  WorkspaceTurnDiffCompletedPayload,
 } from "./Schemas.ts";
 
-type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
-const MAX_THREAD_MESSAGES = 2_000;
-const MAX_THREAD_CHECKPOINTS = 500;
+type WorkspacePatch = Partial<Omit<OrchestrationWorkspace, "id" | "projectId">>;
+const MAX_WORKSPACE_MESSAGES = 2_000;
+const MAX_WORKSPACE_CHECKPOINTS = 500;
 
 function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error") {
   if (status === "error") return "error" as const;
@@ -37,12 +37,14 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
   return "completed" as const;
 }
 
-function updateThread(
-  threads: ReadonlyArray<OrchestrationThread>,
-  threadId: ThreadId,
-  patch: ThreadPatch,
-): OrchestrationThread[] {
-  return threads.map((thread) => (thread.id === threadId ? { ...thread, ...patch } : thread));
+function updateWorkspace(
+  workspaces: ReadonlyArray<OrchestrationWorkspace>,
+  workspaceId: WorkspaceId,
+  patch: WorkspacePatch,
+): OrchestrationWorkspace[] {
+  return workspaces.map((workspace) =>
+    workspace.id === workspaceId ? { ...workspace, ...patch } : workspace,
+  );
 }
 
 function decodeForEvent<A>(
@@ -57,7 +59,7 @@ function decodeForEvent<A>(
   });
 }
 
-function retainThreadMessagesAfterRevert(
+function retainWorkspaceMessagesAfterRevert(
   messages: ReadonlyArray<OrchestrationMessage>,
   retainedTurnIds: ReadonlySet<string>,
   turnCount: number,
@@ -120,27 +122,27 @@ function retainThreadMessagesAfterRevert(
   return messages.filter((message) => retainedMessageIds.has(message.id));
 }
 
-function retainThreadActivitiesAfterRevert(
-  activities: ReadonlyArray<OrchestrationThread["activities"][number]>,
+function retainWorkspaceActivitiesAfterRevert(
+  activities: ReadonlyArray<OrchestrationWorkspace["activities"][number]>,
   retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationThread["activities"][number]> {
+): ReadonlyArray<OrchestrationWorkspace["activities"][number]> {
   return activities.filter(
     (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
   );
 }
 
-function retainThreadProposedPlansAfterRevert(
-  proposedPlans: ReadonlyArray<OrchestrationThread["proposedPlans"][number]>,
+function retainWorkspaceProposedPlansAfterRevert(
+  proposedPlans: ReadonlyArray<OrchestrationWorkspace["proposedPlans"][number]>,
   retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationThread["proposedPlans"][number]> {
+): ReadonlyArray<OrchestrationWorkspace["proposedPlans"][number]> {
   return proposedPlans.filter(
     (proposedPlan) => proposedPlan.turnId === null || retainedTurnIds.has(proposedPlan.turnId),
   );
 }
 
-function compareThreadActivities(
-  left: OrchestrationThread["activities"][number],
-  right: OrchestrationThread["activities"][number],
+function compareWorkspaceActivities(
+  left: OrchestrationWorkspace["activities"][number],
+  right: OrchestrationWorkspace["activities"][number],
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -159,7 +161,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     projects: [],
-    threads: [],
+    workspaces: [],
     updatedAt: nowIso,
   };
 }
@@ -240,18 +242,18 @@ export function projectEvent(
         })),
       );
 
-    case "thread.created":
+    case "workspace.created":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadCreatedPayload,
+          WorkspaceCreatedPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread: OrchestrationThread = yield* decodeForEvent(
-          OrchestrationThread,
+        const workspace: OrchestrationWorkspace = yield* decodeForEvent(
+          OrchestrationWorkspace,
           {
-            id: payload.threadId,
+            id: payload.workspaceId,
             projectId: payload.projectId,
             title: payload.title,
             modelSelection: payload.modelSelection,
@@ -270,55 +272,55 @@ export function projectEvent(
             session: null,
           },
           event.type,
-          "thread",
+          "workspace",
         );
-        const existing = nextBase.threads.find((entry) => entry.id === thread.id);
+        const existing = nextBase.workspaces.find((entry) => entry.id === workspace.id);
         return {
           ...nextBase,
-          threads: existing
-            ? nextBase.threads.map((entry) => (entry.id === thread.id ? thread : entry))
-            : [...nextBase.threads, thread],
+          workspaces: existing
+            ? nextBase.workspaces.map((entry) => (entry.id === workspace.id ? workspace : entry))
+            : [...nextBase.workspaces, workspace],
         };
       });
 
-    case "thread.deleted":
-      return decodeForEvent(ThreadDeletedPayload, event.payload, event.type, "payload").pipe(
+    case "workspace.deleted":
+      return decodeForEvent(WorkspaceDeletedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             deletedAt: payload.deletedAt,
             updatedAt: payload.deletedAt,
           }),
         })),
       );
 
-    case "thread.archived":
-      return decodeForEvent(ThreadArchivedPayload, event.payload, event.type, "payload").pipe(
+    case "workspace.archived":
+      return decodeForEvent(WorkspaceArchivedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             archivedAt: payload.archivedAt,
             updatedAt: payload.updatedAt,
           }),
         })),
       );
 
-    case "thread.unarchived":
-      return decodeForEvent(ThreadUnarchivedPayload, event.payload, event.type, "payload").pipe(
+    case "workspace.unarchived":
+      return decodeForEvent(WorkspaceUnarchivedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             archivedAt: null,
             updatedAt: payload.updatedAt,
           }),
         })),
       );
 
-    case "thread.meta-updated":
-      return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
+    case "workspace.meta-updated":
+      return decodeForEvent(WorkspaceMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             ...(payload.title !== undefined ? { title: payload.title } : {}),
             ...(payload.modelSelection !== undefined
               ? { modelSelection: payload.modelSelection }
@@ -330,34 +332,39 @@ export function projectEvent(
         })),
       );
 
-    case "thread.runtime-mode-set":
-      return decodeForEvent(ThreadRuntimeModeSetPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            runtimeMode: payload.runtimeMode,
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
-
-    case "thread.interaction-mode-set":
+    case "workspace.runtime-mode-set":
       return decodeForEvent(
-        ThreadInteractionModeSetPayload,
+        WorkspaceRuntimeModeSetPayload,
         event.payload,
         event.type,
         "payload",
       ).pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
+            runtimeMode: payload.runtimeMode,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "workspace.interaction-mode-set":
+      return decodeForEvent(
+        WorkspaceInteractionModeSetPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             interactionMode: payload.interactionMode,
             updatedAt: payload.updatedAt,
           }),
         })),
       );
 
-    case "thread.message-sent":
+    case "workspace.message-sent":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
           MessageSentPayloadSchema,
@@ -365,8 +372,8 @@ export function projectEvent(
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const workspace = nextBase.workspaces.find((entry) => entry.id === payload.workspaceId);
+        if (!workspace) {
           return nextBase;
         }
 
@@ -386,9 +393,9 @@ export function projectEvent(
           "message",
         );
 
-        const existingMessage = thread.messages.find((entry) => entry.id === message.id);
+        const existingMessage = workspace.messages.find((entry) => entry.id === message.id);
         const messages = existingMessage
-          ? thread.messages.map((entry) =>
+          ? workspace.messages.map((entry) =>
               entry.id === message.id
                 ? {
                     ...entry,
@@ -406,28 +413,28 @@ export function projectEvent(
                   }
                 : entry,
             )
-          : [...thread.messages, message];
-        const cappedMessages = messages.slice(-MAX_THREAD_MESSAGES);
+          : [...workspace.messages, message];
+        const cappedMessages = messages.slice(-MAX_WORKSPACE_MESSAGES);
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             messages: cappedMessages,
             updatedAt: event.occurredAt,
           }),
         };
       });
 
-    case "thread.session-set":
+    case "workspace.session-set":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadSessionSetPayload,
+          WorkspaceSessionSetPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const workspace = nextBase.workspaces.find((entry) => entry.id === payload.workspaceId);
+        if (!workspace) {
           return nextBase;
         }
 
@@ -440,7 +447,7 @@ export function projectEvent(
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             session,
             latestTurn:
               session.status === "running" && session.activeTurnId !== null
@@ -448,40 +455,40 @@ export function projectEvent(
                     turnId: session.activeTurnId,
                     state: "running",
                     requestedAt:
-                      thread.latestTurn?.turnId === session.activeTurnId
-                        ? thread.latestTurn.requestedAt
+                      workspace.latestTurn?.turnId === session.activeTurnId
+                        ? workspace.latestTurn.requestedAt
                         : session.updatedAt,
                     startedAt:
-                      thread.latestTurn?.turnId === session.activeTurnId
-                        ? (thread.latestTurn.startedAt ?? session.updatedAt)
+                      workspace.latestTurn?.turnId === session.activeTurnId
+                        ? (workspace.latestTurn.startedAt ?? session.updatedAt)
                         : session.updatedAt,
                     completedAt: null,
                     assistantMessageId:
-                      thread.latestTurn?.turnId === session.activeTurnId
-                        ? thread.latestTurn.assistantMessageId
+                      workspace.latestTurn?.turnId === session.activeTurnId
+                        ? workspace.latestTurn.assistantMessageId
                         : null,
                   }
-                : thread.latestTurn,
+                : workspace.latestTurn,
             updatedAt: event.occurredAt,
           }),
         };
       });
 
-    case "thread.proposed-plan-upserted":
+    case "workspace.proposed-plan-upserted":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadProposedPlanUpsertedPayload,
+          WorkspaceProposedPlanUpsertedPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const workspace = nextBase.workspaces.find((entry) => entry.id === payload.workspaceId);
+        if (!workspace) {
           return nextBase;
         }
 
         const proposedPlans = [
-          ...thread.proposedPlans.filter((entry) => entry.id !== payload.proposedPlan.id),
+          ...workspace.proposedPlans.filter((entry) => entry.id !== payload.proposedPlan.id),
           payload.proposedPlan,
         ]
           .toSorted(
@@ -492,23 +499,23 @@ export function projectEvent(
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             proposedPlans,
             updatedAt: event.occurredAt,
           }),
         };
       });
 
-    case "thread.turn-diff-completed":
+    case "workspace.turn-diff-completed":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadTurnDiffCompletedPayload,
+          WorkspaceTurnDiffCompletedPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const workspace = nextBase.workspaces.find((entry) => entry.id === payload.workspaceId);
+        if (!workspace) {
           return nextBase;
         }
 
@@ -532,32 +539,32 @@ export function projectEvent(
         // ProviderRuntimeIngestion may fire multiple turn.diff.updated events
         // per turn; without this guard later placeholders would clobber the
         // real capture dispatched by CheckpointReactor.
-        const existing = thread.checkpoints.find((entry) => entry.turnId === checkpoint.turnId);
+        const existing = workspace.checkpoints.find((entry) => entry.turnId === checkpoint.turnId);
         if (existing && existing.status !== "missing" && checkpoint.status === "missing") {
           return nextBase;
         }
 
         const checkpoints = [
-          ...thread.checkpoints.filter((entry) => entry.turnId !== checkpoint.turnId),
+          ...workspace.checkpoints.filter((entry) => entry.turnId !== checkpoint.turnId),
           checkpoint,
         ]
           .toSorted((left, right) => left.checkpointTurnCount - right.checkpointTurnCount)
-          .slice(-MAX_THREAD_CHECKPOINTS);
+          .slice(-MAX_WORKSPACE_CHECKPOINTS);
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
             checkpoints,
             latestTurn: {
               turnId: payload.turnId,
               state: checkpointStatusToLatestTurnState(payload.status),
               requestedAt:
-                thread.latestTurn?.turnId === payload.turnId
-                  ? thread.latestTurn.requestedAt
+                workspace.latestTurn?.turnId === payload.turnId
+                  ? workspace.latestTurn.requestedAt
                   : payload.completedAt,
               startedAt:
-                thread.latestTurn?.turnId === payload.turnId
-                  ? (thread.latestTurn.startedAt ?? payload.completedAt)
+                workspace.latestTurn?.turnId === payload.turnId
+                  ? (workspace.latestTurn.startedAt ?? payload.completedAt)
                   : payload.completedAt,
               completedAt: payload.completedAt,
               assistantMessageId: payload.assistantMessageId,
@@ -567,29 +574,32 @@ export function projectEvent(
         };
       });
 
-    case "thread.reverted":
-      return decodeForEvent(ThreadRevertedPayload, event.payload, event.type, "payload").pipe(
+    case "workspace.reverted":
+      return decodeForEvent(WorkspaceRevertedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => {
-          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-          if (!thread) {
+          const workspace = nextBase.workspaces.find((entry) => entry.id === payload.workspaceId);
+          if (!workspace) {
             return nextBase;
           }
 
-          const checkpoints = thread.checkpoints
+          const checkpoints = workspace.checkpoints
             .filter((entry) => entry.checkpointTurnCount <= payload.turnCount)
             .toSorted((left, right) => left.checkpointTurnCount - right.checkpointTurnCount)
-            .slice(-MAX_THREAD_CHECKPOINTS);
+            .slice(-MAX_WORKSPACE_CHECKPOINTS);
           const retainedTurnIds = new Set(checkpoints.map((checkpoint) => checkpoint.turnId));
-          const messages = retainThreadMessagesAfterRevert(
-            thread.messages,
+          const messages = retainWorkspaceMessagesAfterRevert(
+            workspace.messages,
             retainedTurnIds,
             payload.turnCount,
-          ).slice(-MAX_THREAD_MESSAGES);
-          const proposedPlans = retainThreadProposedPlansAfterRevert(
-            thread.proposedPlans,
+          ).slice(-MAX_WORKSPACE_MESSAGES);
+          const proposedPlans = retainWorkspaceProposedPlansAfterRevert(
+            workspace.proposedPlans,
             retainedTurnIds,
           ).slice(-200);
-          const activities = retainThreadActivitiesAfterRevert(thread.activities, retainedTurnIds);
+          const activities = retainWorkspaceActivitiesAfterRevert(
+            workspace.activities,
+            retainedTurnIds,
+          );
 
           const latestCheckpoint = checkpoints.at(-1) ?? null;
           const latestTurn =
@@ -606,7 +616,7 @@ export function projectEvent(
 
           return {
             ...nextBase,
-            threads: updateThread(nextBase.threads, payload.threadId, {
+            workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
               checkpoints,
               messages,
               proposedPlans,
@@ -618,29 +628,29 @@ export function projectEvent(
         }),
       );
 
-    case "thread.activity-appended":
+    case "workspace.activity-appended":
       return decodeForEvent(
-        ThreadActivityAppendedPayload,
+        WorkspaceActivityAppendedPayload,
         event.payload,
         event.type,
         "payload",
       ).pipe(
         Effect.map((payload) => {
-          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-          if (!thread) {
+          const workspace = nextBase.workspaces.find((entry) => entry.id === payload.workspaceId);
+          if (!workspace) {
             return nextBase;
           }
 
           const activities = [
-            ...thread.activities.filter((entry) => entry.id !== payload.activity.id),
+            ...workspace.activities.filter((entry) => entry.id !== payload.activity.id),
             payload.activity,
           ]
-            .toSorted(compareThreadActivities)
+            .toSorted(compareWorkspaceActivities)
             .slice(-500);
 
           return {
             ...nextBase,
-            threads: updateThread(nextBase.threads, payload.threadId, {
+            workspaces: updateWorkspace(nextBase.workspaces, payload.workspaceId, {
               activities,
               updatedAt: event.occurredAt,
             }),

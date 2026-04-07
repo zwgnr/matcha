@@ -1,8 +1,8 @@
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
+  GitPreparePullRequestWorkspaceInput,
+  GitPreparePullRequestWorkspaceResult,
   GitPullRequestRefInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
@@ -40,8 +40,8 @@ import type {
 import type { ServerUpsertKeybindingInput } from "./server";
 import type {
   ClientOrchestrationCommand,
-  OrchestrationGetFullThreadDiffInput,
-  OrchestrationGetFullThreadDiffResult,
+  OrchestrationGetFullWorkspaceDiffInput,
+  OrchestrationGetFullWorkspaceDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
@@ -152,9 +152,9 @@ export interface NativeApi {
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
-    preparePullRequestThread: (
-      input: GitPreparePullRequestThreadInput,
-    ) => Promise<GitPreparePullRequestThreadResult>;
+    preparePullRequestWorkspace: (
+      input: GitPreparePullRequestWorkspaceInput,
+    ) => Promise<GitPreparePullRequestWorkspaceResult>;
     // Stacked action API
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
@@ -176,9 +176,9 @@ export interface NativeApi {
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
-    getFullThreadDiff: (
-      input: OrchestrationGetFullThreadDiffInput,
-    ) => Promise<OrchestrationGetFullThreadDiffResult>;
+    getFullWorkspaceDiff: (
+      input: OrchestrationGetFullWorkspaceDiffInput,
+    ) => Promise<OrchestrationGetFullWorkspaceDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
     onDomainEvent: (
       callback: (event: OrchestrationEvent) => void,

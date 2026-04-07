@@ -10,7 +10,7 @@ import {
   NonNegativeInt,
   ProjectId,
   ProviderItemId,
-  ThreadId,
+  WorkspaceId,
   TrimmedNonEmptyString,
   TurnId,
 } from "./baseSchemas";
@@ -19,7 +19,7 @@ export const ORCHESTRATION_WS_METHODS = {
   getSnapshot: "orchestration.getSnapshot",
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
-  getFullThreadDiff: "orchestration.getFullThreadDiff",
+  getFullWorkspaceDiff: "orchestration.getFullWorkspaceDiff",
   replayEvents: "orchestration.replayEvents",
 } as const;
 
@@ -172,14 +172,16 @@ export const OrchestrationProposedPlan = Schema.Struct({
   turnId: Schema.NullOr(TurnId),
   planMarkdown: TrimmedNonEmptyString,
   implementedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
-  implementationThreadId: Schema.NullOr(ThreadId).pipe(Schema.withDecodingDefault(() => null)),
+  implementationWorkspaceId: Schema.NullOr(WorkspaceId).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
 export type OrchestrationProposedPlan = typeof OrchestrationProposedPlan.Type;
 
 const SourceProposedPlanReference = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   planId: OrchestrationProposedPlanId,
 });
 
@@ -195,7 +197,7 @@ export const OrchestrationSessionStatus = Schema.Literals([
 export type OrchestrationSessionStatus = typeof OrchestrationSessionStatus.Type;
 
 export const OrchestrationSession = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   status: OrchestrationSessionStatus,
   providerName: Schema.NullOr(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
@@ -227,17 +229,17 @@ export const OrchestrationCheckpointSummary = Schema.Struct({
 });
 export type OrchestrationCheckpointSummary = typeof OrchestrationCheckpointSummary.Type;
 
-export const OrchestrationThreadActivityTone = Schema.Literals([
+export const OrchestrationWorkspaceActivityTone = Schema.Literals([
   "info",
   "tool",
   "approval",
   "error",
 ]);
-export type OrchestrationThreadActivityTone = typeof OrchestrationThreadActivityTone.Type;
+export type OrchestrationWorkspaceActivityTone = typeof OrchestrationWorkspaceActivityTone.Type;
 
-export const OrchestrationThreadActivity = Schema.Struct({
+export const OrchestrationWorkspaceActivity = Schema.Struct({
   id: EventId,
-  tone: OrchestrationThreadActivityTone,
+  tone: OrchestrationWorkspaceActivityTone,
   kind: TrimmedNonEmptyString,
   summary: TrimmedNonEmptyString,
   payload: Schema.Unknown,
@@ -245,7 +247,7 @@ export const OrchestrationThreadActivity = Schema.Struct({
   sequence: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
 });
-export type OrchestrationThreadActivity = typeof OrchestrationThreadActivity.Type;
+export type OrchestrationWorkspaceActivity = typeof OrchestrationWorkspaceActivity.Type;
 
 const OrchestrationLatestTurnState = Schema.Literals([
   "running",
@@ -266,8 +268,8 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
-export const OrchestrationThread = Schema.Struct({
-  id: ThreadId,
+export const OrchestrationWorkspace = Schema.Struct({
+  id: WorkspaceId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
@@ -284,16 +286,16 @@ export const OrchestrationThread = Schema.Struct({
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(Schema.withDecodingDefault(() => [])),
-  activities: Schema.Array(OrchestrationThreadActivity),
+  activities: Schema.Array(OrchestrationWorkspaceActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
 });
-export type OrchestrationThread = typeof OrchestrationThread.Type;
+export type OrchestrationWorkspace = typeof OrchestrationWorkspace.Type;
 
 export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProject),
-  threads: Schema.Array(OrchestrationThread),
+  workspaces: Schema.Array(OrchestrationWorkspace),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
@@ -324,10 +326,10 @@ const ProjectDeleteCommand = Schema.Struct({
   projectId: ProjectId,
 });
 
-const ThreadCreateCommand = Schema.Struct({
-  type: Schema.Literal("thread.create"),
+const WorkspaceCreateCommand = Schema.Struct({
+  type: Schema.Literal("workspace.create"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
@@ -340,51 +342,51 @@ const ThreadCreateCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-const ThreadDeleteCommand = Schema.Struct({
-  type: Schema.Literal("thread.delete"),
+const WorkspaceDeleteCommand = Schema.Struct({
+  type: Schema.Literal("workspace.delete"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 });
 
-const ThreadArchiveCommand = Schema.Struct({
-  type: Schema.Literal("thread.archive"),
+const WorkspaceArchiveCommand = Schema.Struct({
+  type: Schema.Literal("workspace.archive"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 });
 
-const ThreadUnarchiveCommand = Schema.Struct({
-  type: Schema.Literal("thread.unarchive"),
+const WorkspaceUnarchiveCommand = Schema.Struct({
+  type: Schema.Literal("workspace.unarchive"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 });
 
-const ThreadMetaUpdateCommand = Schema.Struct({
-  type: Schema.Literal("thread.meta.update"),
+const WorkspaceMetaUpdateCommand = Schema.Struct({
+  type: Schema.Literal("workspace.meta.update"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   title: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
 
-const ThreadRuntimeModeSetCommand = Schema.Struct({
-  type: Schema.Literal("thread.runtime-mode.set"),
+const WorkspaceRuntimeModeSetCommand = Schema.Struct({
+  type: Schema.Literal("workspace.runtime-mode.set"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   runtimeMode: RuntimeMode,
   createdAt: IsoDateTime,
 });
 
-const ThreadInteractionModeSetCommand = Schema.Struct({
-  type: Schema.Literal("thread.interaction-mode.set"),
+const WorkspaceInteractionModeSetCommand = Schema.Struct({
+  type: Schema.Literal("workspace.interaction-mode.set"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   interactionMode: ProviderInteractionMode,
   createdAt: IsoDateTime,
 });
 
-const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
+const WorkspaceTurnStartBootstrapCreateWorkspace = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
@@ -395,24 +397,24 @@ const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-const ThreadTurnStartBootstrapPrepareWorktree = Schema.Struct({
+const WorkspaceTurnStartBootstrapPrepareWorktree = Schema.Struct({
   projectCwd: TrimmedNonEmptyString,
   baseBranch: TrimmedNonEmptyString,
   branch: Schema.optional(TrimmedNonEmptyString),
 });
 
-const ThreadTurnStartBootstrap = Schema.Struct({
-  createThread: Schema.optional(ThreadTurnStartBootstrapCreateThread),
-  prepareWorktree: Schema.optional(ThreadTurnStartBootstrapPrepareWorktree),
+const WorkspaceTurnStartBootstrap = Schema.Struct({
+  createWorkspace: Schema.optional(WorkspaceTurnStartBootstrapCreateWorkspace),
+  prepareWorktree: Schema.optional(WorkspaceTurnStartBootstrapPrepareWorktree),
   runSetupScript: Schema.optional(Schema.Boolean),
 });
 
-export type ThreadTurnStartBootstrap = typeof ThreadTurnStartBootstrap.Type;
+export type WorkspaceTurnStartBootstrap = typeof WorkspaceTurnStartBootstrap.Type;
 
-export const ThreadTurnStartCommand = Schema.Struct({
-  type: Schema.Literal("thread.turn.start"),
+export const WorkspaceTurnStartCommand = Schema.Struct({
+  type: Schema.Literal("workspace.turn.start"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   message: Schema.Struct({
     messageId: MessageId,
     role: Schema.Literal("user"),
@@ -425,15 +427,15 @@ export const ThreadTurnStartCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
-  bootstrap: Schema.optional(ThreadTurnStartBootstrap),
+  bootstrap: Schema.optional(WorkspaceTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });
 
-const ClientThreadTurnStartCommand = Schema.Struct({
-  type: Schema.Literal("thread.turn.start"),
+const ClientWorkspaceTurnStartCommand = Schema.Struct({
+  type: Schema.Literal("workspace.turn.start"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   message: Schema.Struct({
     messageId: MessageId,
     role: Schema.Literal("user"),
@@ -444,49 +446,49 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
-  bootstrap: Schema.optional(ThreadTurnStartBootstrap),
+  bootstrap: Schema.optional(WorkspaceTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });
 
-const ThreadTurnInterruptCommand = Schema.Struct({
-  type: Schema.Literal("thread.turn.interrupt"),
+const WorkspaceTurnInterruptCommand = Schema.Struct({
+  type: Schema.Literal("workspace.turn.interrupt"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });
 
-const ThreadApprovalRespondCommand = Schema.Struct({
-  type: Schema.Literal("thread.approval.respond"),
+const WorkspaceApprovalRespondCommand = Schema.Struct({
+  type: Schema.Literal("workspace.approval.respond"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   requestId: ApprovalRequestId,
   decision: ProviderApprovalDecision,
   createdAt: IsoDateTime,
 });
 
-const ThreadUserInputRespondCommand = Schema.Struct({
-  type: Schema.Literal("thread.user-input.respond"),
+const WorkspaceUserInputRespondCommand = Schema.Struct({
+  type: Schema.Literal("workspace.user-input.respond"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   requestId: ApprovalRequestId,
   answers: ProviderUserInputAnswers,
   createdAt: IsoDateTime,
 });
 
-const ThreadCheckpointRevertCommand = Schema.Struct({
-  type: Schema.Literal("thread.checkpoint.revert"),
+const WorkspaceCheckpointRevertCommand = Schema.Struct({
+  type: Schema.Literal("workspace.checkpoint.revert"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnCount: NonNegativeInt,
   createdAt: IsoDateTime,
 });
 
-const ThreadSessionStopCommand = Schema.Struct({
-  type: Schema.Literal("thread.session.stop"),
+const WorkspaceSessionStopCommand = Schema.Struct({
+  type: Schema.Literal("workspace.session.stop"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   createdAt: IsoDateTime,
 });
 
@@ -494,19 +496,19 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
-  ThreadCreateCommand,
-  ThreadDeleteCommand,
-  ThreadArchiveCommand,
-  ThreadUnarchiveCommand,
-  ThreadMetaUpdateCommand,
-  ThreadRuntimeModeSetCommand,
-  ThreadInteractionModeSetCommand,
-  ThreadTurnStartCommand,
-  ThreadTurnInterruptCommand,
-  ThreadApprovalRespondCommand,
-  ThreadUserInputRespondCommand,
-  ThreadCheckpointRevertCommand,
-  ThreadSessionStopCommand,
+  WorkspaceCreateCommand,
+  WorkspaceDeleteCommand,
+  WorkspaceArchiveCommand,
+  WorkspaceUnarchiveCommand,
+  WorkspaceMetaUpdateCommand,
+  WorkspaceRuntimeModeSetCommand,
+  WorkspaceInteractionModeSetCommand,
+  WorkspaceTurnStartCommand,
+  WorkspaceTurnInterruptCommand,
+  WorkspaceApprovalRespondCommand,
+  WorkspaceUserInputRespondCommand,
+  WorkspaceCheckpointRevertCommand,
+  WorkspaceSessionStopCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -515,61 +517,61 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
-  ThreadCreateCommand,
-  ThreadDeleteCommand,
-  ThreadArchiveCommand,
-  ThreadUnarchiveCommand,
-  ThreadMetaUpdateCommand,
-  ThreadRuntimeModeSetCommand,
-  ThreadInteractionModeSetCommand,
-  ClientThreadTurnStartCommand,
-  ThreadTurnInterruptCommand,
-  ThreadApprovalRespondCommand,
-  ThreadUserInputRespondCommand,
-  ThreadCheckpointRevertCommand,
-  ThreadSessionStopCommand,
+  WorkspaceCreateCommand,
+  WorkspaceDeleteCommand,
+  WorkspaceArchiveCommand,
+  WorkspaceUnarchiveCommand,
+  WorkspaceMetaUpdateCommand,
+  WorkspaceRuntimeModeSetCommand,
+  WorkspaceInteractionModeSetCommand,
+  ClientWorkspaceTurnStartCommand,
+  WorkspaceTurnInterruptCommand,
+  WorkspaceApprovalRespondCommand,
+  WorkspaceUserInputRespondCommand,
+  WorkspaceCheckpointRevertCommand,
+  WorkspaceSessionStopCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
-const ThreadSessionSetCommand = Schema.Struct({
-  type: Schema.Literal("thread.session.set"),
+const WorkspaceSessionSetCommand = Schema.Struct({
+  type: Schema.Literal("workspace.session.set"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   session: OrchestrationSession,
   createdAt: IsoDateTime,
 });
 
-const ThreadMessageAssistantDeltaCommand = Schema.Struct({
-  type: Schema.Literal("thread.message.assistant.delta"),
+const WorkspaceMessageAssistantDeltaCommand = Schema.Struct({
+  type: Schema.Literal("workspace.message.assistant.delta"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   messageId: MessageId,
   delta: Schema.String,
   turnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });
 
-const ThreadMessageAssistantCompleteCommand = Schema.Struct({
-  type: Schema.Literal("thread.message.assistant.complete"),
+const WorkspaceMessageAssistantCompleteCommand = Schema.Struct({
+  type: Schema.Literal("workspace.message.assistant.complete"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   messageId: MessageId,
   turnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });
 
-const ThreadProposedPlanUpsertCommand = Schema.Struct({
-  type: Schema.Literal("thread.proposed-plan.upsert"),
+const WorkspaceProposedPlanUpsertCommand = Schema.Struct({
+  type: Schema.Literal("workspace.proposed-plan.upsert"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   proposedPlan: OrchestrationProposedPlan,
   createdAt: IsoDateTime,
 });
 
-const ThreadTurnDiffCompleteCommand = Schema.Struct({
-  type: Schema.Literal("thread.turn.diff.complete"),
+const WorkspaceTurnDiffCompleteCommand = Schema.Struct({
+  type: Schema.Literal("workspace.turn.diff.complete"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: TurnId,
   completedAt: IsoDateTime,
   checkpointRef: CheckpointRef,
@@ -580,30 +582,30 @@ const ThreadTurnDiffCompleteCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-const ThreadActivityAppendCommand = Schema.Struct({
-  type: Schema.Literal("thread.activity.append"),
+const WorkspaceActivityAppendCommand = Schema.Struct({
+  type: Schema.Literal("workspace.activity.append"),
   commandId: CommandId,
-  threadId: ThreadId,
-  activity: OrchestrationThreadActivity,
+  workspaceId: WorkspaceId,
+  activity: OrchestrationWorkspaceActivity,
   createdAt: IsoDateTime,
 });
 
-const ThreadRevertCompleteCommand = Schema.Struct({
-  type: Schema.Literal("thread.revert.complete"),
+const WorkspaceRevertCompleteCommand = Schema.Struct({
+  type: Schema.Literal("workspace.revert.complete"),
   commandId: CommandId,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnCount: NonNegativeInt,
   createdAt: IsoDateTime,
 });
 
 const InternalOrchestrationCommand = Schema.Union([
-  ThreadSessionSetCommand,
-  ThreadMessageAssistantDeltaCommand,
-  ThreadMessageAssistantCompleteCommand,
-  ThreadProposedPlanUpsertCommand,
-  ThreadTurnDiffCompleteCommand,
-  ThreadActivityAppendCommand,
-  ThreadRevertCompleteCommand,
+  WorkspaceSessionSetCommand,
+  WorkspaceMessageAssistantDeltaCommand,
+  WorkspaceMessageAssistantCompleteCommand,
+  WorkspaceProposedPlanUpsertCommand,
+  WorkspaceTurnDiffCompleteCommand,
+  WorkspaceActivityAppendCommand,
+  WorkspaceRevertCompleteCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -617,29 +619,29 @@ export const OrchestrationEventType = Schema.Literals([
   "project.created",
   "project.meta-updated",
   "project.deleted",
-  "thread.created",
-  "thread.deleted",
-  "thread.archived",
-  "thread.unarchived",
-  "thread.meta-updated",
-  "thread.runtime-mode-set",
-  "thread.interaction-mode-set",
-  "thread.message-sent",
-  "thread.turn-start-requested",
-  "thread.turn-interrupt-requested",
-  "thread.approval-response-requested",
-  "thread.user-input-response-requested",
-  "thread.checkpoint-revert-requested",
-  "thread.reverted",
-  "thread.session-stop-requested",
-  "thread.session-set",
-  "thread.proposed-plan-upserted",
-  "thread.turn-diff-completed",
-  "thread.activity-appended",
+  "workspace.created",
+  "workspace.deleted",
+  "workspace.archived",
+  "workspace.unarchived",
+  "workspace.meta-updated",
+  "workspace.runtime-mode-set",
+  "workspace.interaction-mode-set",
+  "workspace.message-sent",
+  "workspace.turn-start-requested",
+  "workspace.turn-interrupt-requested",
+  "workspace.approval-response-requested",
+  "workspace.user-input-response-requested",
+  "workspace.checkpoint-revert-requested",
+  "workspace.reverted",
+  "workspace.session-stop-requested",
+  "workspace.session-set",
+  "workspace.proposed-plan-upserted",
+  "workspace.turn-diff-completed",
+  "workspace.activity-appended",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["project", "thread"]);
+export const OrchestrationAggregateKind = Schema.Literals(["project", "workspace"]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -667,8 +669,8 @@ export const ProjectDeletedPayload = Schema.Struct({
   deletedAt: IsoDateTime,
 });
 
-export const ThreadCreatedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceCreatedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
@@ -682,24 +684,24 @@ export const ThreadCreatedPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 
-export const ThreadDeletedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceDeletedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   deletedAt: IsoDateTime,
 });
 
-export const ThreadArchivedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceArchivedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   archivedAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
 
-export const ThreadUnarchivedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceUnarchivedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   updatedAt: IsoDateTime,
 });
 
-export const ThreadMetaUpdatedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceMetaUpdatedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   title: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -707,22 +709,22 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 
-export const ThreadRuntimeModeSetPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceRuntimeModeSetPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   runtimeMode: RuntimeMode,
   updatedAt: IsoDateTime,
 });
 
-export const ThreadInteractionModeSetPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceInteractionModeSetPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
   updatedAt: IsoDateTime,
 });
 
-export const ThreadMessageSentPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceMessageSentPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   messageId: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
@@ -733,8 +735,8 @@ export const ThreadMessageSentPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 
-export const ThreadTurnStartRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceTurnStartRequestedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   messageId: MessageId,
   modelSelection: Schema.optional(ModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
@@ -746,54 +748,54 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-export const ThreadTurnInterruptRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceTurnInterruptRequestedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   turnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });
 
-export const ThreadApprovalResponseRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceApprovalResponseRequestedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   requestId: ApprovalRequestId,
   decision: ProviderApprovalDecision,
   createdAt: IsoDateTime,
 });
 
-const ThreadUserInputResponseRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
+const WorkspaceUserInputResponseRequestedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   requestId: ApprovalRequestId,
   answers: ProviderUserInputAnswers,
   createdAt: IsoDateTime,
 });
 
-export const ThreadCheckpointRevertRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceCheckpointRevertRequestedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   turnCount: NonNegativeInt,
   createdAt: IsoDateTime,
 });
 
-export const ThreadRevertedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceRevertedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   turnCount: NonNegativeInt,
 });
 
-export const ThreadSessionStopRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceSessionStopRequestedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   createdAt: IsoDateTime,
 });
 
-export const ThreadSessionSetPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceSessionSetPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   session: OrchestrationSession,
 });
 
-export const ThreadProposedPlanUpsertedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceProposedPlanUpsertedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   proposedPlan: OrchestrationProposedPlan,
 });
 
-export const ThreadTurnDiffCompletedPayload = Schema.Struct({
-  threadId: ThreadId,
+export const WorkspaceTurnDiffCompletedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
@@ -803,9 +805,9 @@ export const ThreadTurnDiffCompletedPayload = Schema.Struct({
   completedAt: IsoDateTime,
 });
 
-export const ThreadActivityAppendedPayload = Schema.Struct({
-  threadId: ThreadId,
-  activity: OrchestrationThreadActivity,
+export const WorkspaceActivityAppendedPayload = Schema.Struct({
+  workspaceId: WorkspaceId,
+  activity: OrchestrationWorkspaceActivity,
 });
 
 export const OrchestrationEventMetadata = Schema.Struct({
@@ -821,7 +823,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId]),
+  aggregateId: Schema.Union([ProjectId, WorkspaceId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -847,98 +849,98 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.created"),
-    payload: ThreadCreatedPayload,
+    type: Schema.Literal("workspace.created"),
+    payload: WorkspaceCreatedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.deleted"),
-    payload: ThreadDeletedPayload,
+    type: Schema.Literal("workspace.deleted"),
+    payload: WorkspaceDeletedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.archived"),
-    payload: ThreadArchivedPayload,
+    type: Schema.Literal("workspace.archived"),
+    payload: WorkspaceArchivedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.unarchived"),
-    payload: ThreadUnarchivedPayload,
+    type: Schema.Literal("workspace.unarchived"),
+    payload: WorkspaceUnarchivedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.meta-updated"),
-    payload: ThreadMetaUpdatedPayload,
+    type: Schema.Literal("workspace.meta-updated"),
+    payload: WorkspaceMetaUpdatedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.runtime-mode-set"),
-    payload: ThreadRuntimeModeSetPayload,
+    type: Schema.Literal("workspace.runtime-mode-set"),
+    payload: WorkspaceRuntimeModeSetPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.interaction-mode-set"),
-    payload: ThreadInteractionModeSetPayload,
+    type: Schema.Literal("workspace.interaction-mode-set"),
+    payload: WorkspaceInteractionModeSetPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.message-sent"),
-    payload: ThreadMessageSentPayload,
+    type: Schema.Literal("workspace.message-sent"),
+    payload: WorkspaceMessageSentPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.turn-start-requested"),
-    payload: ThreadTurnStartRequestedPayload,
+    type: Schema.Literal("workspace.turn-start-requested"),
+    payload: WorkspaceTurnStartRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.turn-interrupt-requested"),
-    payload: ThreadTurnInterruptRequestedPayload,
+    type: Schema.Literal("workspace.turn-interrupt-requested"),
+    payload: WorkspaceTurnInterruptRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.approval-response-requested"),
-    payload: ThreadApprovalResponseRequestedPayload,
+    type: Schema.Literal("workspace.approval-response-requested"),
+    payload: WorkspaceApprovalResponseRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.user-input-response-requested"),
-    payload: ThreadUserInputResponseRequestedPayload,
+    type: Schema.Literal("workspace.user-input-response-requested"),
+    payload: WorkspaceUserInputResponseRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.checkpoint-revert-requested"),
-    payload: ThreadCheckpointRevertRequestedPayload,
+    type: Schema.Literal("workspace.checkpoint-revert-requested"),
+    payload: WorkspaceCheckpointRevertRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.reverted"),
-    payload: ThreadRevertedPayload,
+    type: Schema.Literal("workspace.reverted"),
+    payload: WorkspaceRevertedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.session-stop-requested"),
-    payload: ThreadSessionStopRequestedPayload,
+    type: Schema.Literal("workspace.session-stop-requested"),
+    payload: WorkspaceSessionStopRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.session-set"),
-    payload: ThreadSessionSetPayload,
+    type: Schema.Literal("workspace.session-set"),
+    payload: WorkspaceSessionSetPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.proposed-plan-upserted"),
-    payload: ThreadProposedPlanUpsertedPayload,
+    type: Schema.Literal("workspace.proposed-plan-upserted"),
+    payload: WorkspaceProposedPlanUpsertedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.turn-diff-completed"),
-    payload: ThreadTurnDiffCompletedPayload,
+    type: Schema.Literal("workspace.turn-diff-completed"),
+    payload: WorkspaceTurnDiffCompletedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
-    type: Schema.Literal("thread.activity-appended"),
-    payload: ThreadActivityAppendedPayload,
+    type: Schema.Literal("workspace.activity-appended"),
+    payload: WorkspaceActivityAppendedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;
@@ -960,9 +962,9 @@ export const TurnCountRange = Schema.Struct({
   ),
 );
 
-export const ThreadTurnDiff = TurnCountRange.mapFields(
+export const WorkspaceTurnDiff = TurnCountRange.mapFields(
   Struct.assign({
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     diff: Schema.String,
   }),
   { unsafePreserveChecks: true },
@@ -976,16 +978,16 @@ export const ProviderSessionRuntimeStatus = Schema.Literals([
 ]);
 export type ProviderSessionRuntimeStatus = typeof ProviderSessionRuntimeStatus.Type;
 
-const ProjectionThreadTurnStatus = Schema.Literals([
+const ProjectionWorkspaceTurnStatus = Schema.Literals([
   "running",
   "completed",
   "interrupted",
   "error",
 ]);
-export type ProjectionThreadTurnStatus = typeof ProjectionThreadTurnStatus.Type;
+export type ProjectionWorkspaceTurnStatus = typeof ProjectionWorkspaceTurnStatus.Type;
 
 const ProjectionCheckpointRow = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
@@ -1013,22 +1015,24 @@ const OrchestrationGetSnapshotResult = OrchestrationReadModel;
 export type OrchestrationGetSnapshotResult = typeof OrchestrationGetSnapshotResult.Type;
 
 export const OrchestrationGetTurnDiffInput = TurnCountRange.mapFields(
-  Struct.assign({ threadId: ThreadId }),
+  Struct.assign({ workspaceId: WorkspaceId }),
   { unsafePreserveChecks: true },
 );
 export type OrchestrationGetTurnDiffInput = typeof OrchestrationGetTurnDiffInput.Type;
 
-export const OrchestrationGetTurnDiffResult = ThreadTurnDiff;
+export const OrchestrationGetTurnDiffResult = WorkspaceTurnDiff;
 export type OrchestrationGetTurnDiffResult = typeof OrchestrationGetTurnDiffResult.Type;
 
-export const OrchestrationGetFullThreadDiffInput = Schema.Struct({
-  threadId: ThreadId,
+export const OrchestrationGetFullWorkspaceDiffInput = Schema.Struct({
+  workspaceId: WorkspaceId,
   toTurnCount: NonNegativeInt,
 });
-export type OrchestrationGetFullThreadDiffInput = typeof OrchestrationGetFullThreadDiffInput.Type;
+export type OrchestrationGetFullWorkspaceDiffInput =
+  typeof OrchestrationGetFullWorkspaceDiffInput.Type;
 
-export const OrchestrationGetFullThreadDiffResult = ThreadTurnDiff;
-export type OrchestrationGetFullThreadDiffResult = typeof OrchestrationGetFullThreadDiffResult.Type;
+export const OrchestrationGetFullWorkspaceDiffResult = WorkspaceTurnDiff;
+export type OrchestrationGetFullWorkspaceDiffResult =
+  typeof OrchestrationGetFullWorkspaceDiffResult.Type;
 
 export const OrchestrationReplayEventsInput = Schema.Struct({
   fromSequenceExclusive: NonNegativeInt,
@@ -1051,9 +1055,9 @@ export const OrchestrationRpcSchemas = {
     input: OrchestrationGetTurnDiffInput,
     output: OrchestrationGetTurnDiffResult,
   },
-  getFullThreadDiff: {
-    input: OrchestrationGetFullThreadDiffInput,
-    output: OrchestrationGetFullThreadDiffResult,
+  getFullWorkspaceDiff: {
+    input: OrchestrationGetFullWorkspaceDiffInput,
+    output: OrchestrationGetFullWorkspaceDiffResult,
   },
   replayEvents: {
     input: OrchestrationReplayEventsInput,
@@ -1085,8 +1089,8 @@ export class OrchestrationGetTurnDiffError extends Schema.TaggedErrorClass<Orche
   },
 ) {}
 
-export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass<OrchestrationGetFullThreadDiffError>()(
-  "OrchestrationGetFullThreadDiffError",
+export class OrchestrationGetFullWorkspaceDiffError extends Schema.TaggedErrorClass<OrchestrationGetFullWorkspaceDiffError>()(
+  "OrchestrationGetFullWorkspaceDiffError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

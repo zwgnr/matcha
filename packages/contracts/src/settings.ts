@@ -19,19 +19,19 @@ export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_a
 export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
 export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
 
-export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at"]);
-export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
-export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
+export const SidebarWorkspaceSortOrder = Schema.Literals(["updated_at", "created_at"]);
+export type SidebarWorkspaceSortOrder = typeof SidebarWorkspaceSortOrder.Type;
+export const DEFAULT_SIDEBAR_WORKSPACE_SORT_ORDER: SidebarWorkspaceSortOrder = "updated_at";
 
 export const ClientSettingsSchema = Schema.Struct({
-  confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  confirmWorkspaceArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  confirmWorkspaceDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
     Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_PROJECT_SORT_ORDER),
   ),
-  sidebarThreadSortOrder: SidebarThreadSortOrder.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_THREAD_SORT_ORDER),
+  sidebarWorkspaceSortOrder: SidebarWorkspaceSortOrder.pipe(
+    Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_WORKSPACE_SORT_ORDER),
   ),
   timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
 });
@@ -41,8 +41,8 @@ export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientS
 
 // ── Server Settings (server-authoritative) ────────────────────
 
-export const ThreadEnvMode = Schema.Literals(["local", "worktree"]);
-export type ThreadEnvMode = typeof ThreadEnvMode.Type;
+export const WorkspaceEnvMode = Schema.Literals(["local", "worktree"]);
+export type WorkspaceEnvMode = typeof WorkspaceEnvMode.Type;
 
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
@@ -79,8 +79,8 @@ export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
 export const ServerSettings = Schema.Struct({
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  defaultThreadEnvMode: ThreadEnvMode.pipe(
-    Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
+  defaultWorkspaceEnvMode: WorkspaceEnvMode.pipe(
+    Schema.withDecodingDefault(() => "local" as const satisfies WorkspaceEnvMode),
   ),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(() => ({
@@ -163,7 +163,7 @@ const ClaudeSettingsPatch = Schema.Struct({
 
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
-  defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
+  defaultWorkspaceEnvMode: Schema.optionalKey(WorkspaceEnvMode),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({

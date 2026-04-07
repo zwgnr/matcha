@@ -5,14 +5,14 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, PlatformError, Scope } from "effect";
 import { describe, expect } from "vitest";
 
-import { checkpointRefForThreadTurn } from "../Utils.ts";
+import { checkpointRefForWorkspaceTurn } from "../Utils.ts";
 import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitCommandError } from "@matcha/contracts";
 import { ServerConfig } from "../../config.ts";
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "matcha-checkpoint-store-test-",
@@ -93,9 +93,9 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
         const tmp = yield* makeTmpDir();
         yield* initRepoWithCommit(tmp);
         const checkpointStore = yield* CheckpointStore;
-        const threadId = ThreadId.makeUnsafe("thread-checkpoint-store");
-        const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
-        const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+        const workspaceId = WorkspaceId.makeUnsafe("workspace-checkpoint-store");
+        const fromCheckpointRef = checkpointRefForWorkspaceTurn(workspaceId, 0);
+        const toCheckpointRef = checkpointRefForWorkspaceTurn(workspaceId, 1);
 
         yield* checkpointStore.captureCheckpoint({
           cwd: tmp,

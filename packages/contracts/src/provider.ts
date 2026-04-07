@@ -5,7 +5,7 @@ import {
   EventId,
   IsoDateTime,
   ProviderItemId,
-  ThreadId,
+  WorkspaceId,
   TurnId,
 } from "./baseSchemas";
 import {
@@ -37,7 +37,7 @@ export const ProviderSession = Schema.Struct({
   runtimeMode: RuntimeMode,
   cwd: Schema.optional(TrimmedNonEmptyString),
   model: Schema.optional(TrimmedNonEmptyString),
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   resumeCursor: Schema.optional(Schema.Unknown),
   activeTurnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
@@ -47,7 +47,7 @@ export const ProviderSession = Schema.Struct({
 export type ProviderSession = typeof ProviderSession.Type;
 
 export const ProviderSessionStartInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   provider: Schema.optional(ProviderKind),
   cwd: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
@@ -59,7 +59,7 @@ export const ProviderSessionStartInput = Schema.Struct({
 export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;
 
 export const ProviderSendTurnInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   input: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
   ),
@@ -72,32 +72,32 @@ export const ProviderSendTurnInput = Schema.Struct({
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 
 export const ProviderTurnStartResult = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: TurnId,
   resumeCursor: Schema.optional(Schema.Unknown),
 });
 export type ProviderTurnStartResult = typeof ProviderTurnStartResult.Type;
 
 export const ProviderInterruptTurnInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   turnId: Schema.optional(TurnId),
 });
 export type ProviderInterruptTurnInput = typeof ProviderInterruptTurnInput.Type;
 
 export const ProviderStopSessionInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 });
 export type ProviderStopSessionInput = typeof ProviderStopSessionInput.Type;
 
 export const ProviderRespondToRequestInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   requestId: ApprovalRequestId,
   decision: ProviderApprovalDecision,
 });
 export type ProviderRespondToRequestInput = typeof ProviderRespondToRequestInput.Type;
 
 export const ProviderRespondToUserInputInput = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   requestId: ApprovalRequestId,
   answers: ProviderUserInputAnswers,
 });
@@ -109,7 +109,7 @@ export const ProviderEvent = Schema.Struct({
   id: EventId,
   kind: ProviderEventKind,
   provider: ProviderKind,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   createdAt: IsoDateTime,
   method: TrimmedNonEmptyString,
   message: Schema.optional(TrimmedNonEmptyString),

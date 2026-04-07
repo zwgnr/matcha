@@ -15,7 +15,7 @@ import {
   ORCHESTRATION_WS_METHODS,
   ProjectId,
   ResolvedKeybindingRule,
-  ThreadId,
+  WorkspaceId,
   WS_METHODS,
   WsRpcGroup,
   EditorId,
@@ -78,7 +78,7 @@ import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 
 const defaultProjectId = ProjectId.makeUnsafe("project-default");
-const defaultThreadId = ThreadId.makeUnsafe("thread-default");
+const defaultWorkspaceId = WorkspaceId.makeUnsafe("workspace-default");
 const defaultModelSelection = {
   provider: "codex",
   model: "gpt-5-codex",
@@ -101,11 +101,11 @@ const makeDefaultOrchestrationReadModel = () => {
         deletedAt: null,
       },
     ],
-    threads: [
+    workspaces: [
       {
-        id: defaultThreadId,
+        id: defaultWorkspaceId,
         projectId: defaultProjectId,
-        title: "Default Thread",
+        title: "Default Workspace",
         modelSelection: defaultModelSelection,
         interactionMode: "default" as const,
         runtimeMode: "full-access" as const,
@@ -342,7 +342,7 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provide(
         Layer.mock(ProjectSetupScriptRunner)({
-          runForThread: () => Effect.succeed({ status: "no-script" as const }),
+          runForWorkspace: () => Effect.succeed({ status: "no-script" as const }),
           ...options?.layers?.projectSetupScriptRunner,
         }),
       ),
@@ -370,14 +370,14 @@ const buildAppUnderTest = (options?: {
         Layer.mock(CheckpointDiffQuery)({
           getTurnDiff: () =>
             Effect.succeed({
-              threadId: defaultThreadId,
+              workspaceId: defaultWorkspaceId,
               fromTurnCount: 0,
               toTurnCount: 0,
               diff: "",
             }),
-          getFullThreadDiff: () =>
+          getFullWorkspaceDiff: () =>
             Effect.succeed({
-              threadId: defaultThreadId,
+              workspaceId: defaultWorkspaceId,
               fromTurnCount: 0,
               toTurnCount: 0,
               diff: "",
@@ -527,7 +527,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const attachmentId = "thread-11111111-1111-4111-8111-111111111111";
+      const attachmentId = "workspace-11111111-1111-4111-8111-111111111111";
 
       const config = yield* buildAppUnderTest();
       const attachmentPath = resolveAttachmentRelativePath({
@@ -553,7 +553,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const config = yield* buildAppUnderTest();
       const attachmentPath = resolveAttachmentRelativePath({
         attachmentsDir: config.attachmentsDir,
-        relativePath: "thread%20folder/message%20folder/file%20name.png",
+        relativePath: "workspace%20folder/message%20folder/file%20name.png",
       });
       assert.isNotNull(attachmentPath, "Attachment path should be resolvable");
 
@@ -561,7 +561,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* fileSystem.writeFileString(attachmentPath, "attachment-encoded-ok");
 
       const response = yield* HttpClient.get(
-        "/attachments/thread%20folder/message%20folder/file%20name.png",
+        "/attachments/workspace%20folder/message%20folder/file%20name.png",
       );
       assert.equal(response.status, 200);
       assert.equal(yield* response.text, "attachment-encoded-ok");
@@ -1344,7 +1344,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                   state: "open",
                 },
               }),
-            preparePullRequestThread: () =>
+            preparePullRequestWorkspace: () =>
               Effect.succeed({
                 pullRequest: {
                   number: 1,
@@ -1434,7 +1434,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const prepared = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
-          client[WS_METHODS.gitPreparePullRequestThread]({
+          client[WS_METHODS.gitPreparePullRequestWorkspace]({
             cwd: "/tmp/repo",
             reference: "1",
             mode: "local",
@@ -1543,11 +1543,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             deletedAt: null,
           },
         ],
-        threads: [
+        workspaces: [
           {
-            id: ThreadId.makeUnsafe("thread-1"),
+            id: WorkspaceId.makeUnsafe("workspace-1"),
             projectId: ProjectId.makeUnsafe("project-a"),
-            title: "Thread A",
+            title: "Workspace A",
             modelSelection: defaultModelSelection,
             interactionMode: "default" as const,
             runtimeMode: "full-access" as const,
@@ -1579,14 +1579,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           checkpointDiffQuery: {
             getTurnDiff: () =>
               Effect.succeed({
-                threadId: ThreadId.makeUnsafe("thread-1"),
+                workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
                 fromTurnCount: 0,
                 toTurnCount: 1,
                 diff: "turn-diff",
               }),
-            getFullThreadDiff: () =>
+            getFullWorkspaceDiff: () =>
               Effect.succeed({
-                threadId: ThreadId.makeUnsafe("thread-1"),
+                workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
                 fromTurnCount: 0,
                 toTurnCount: 1,
                 diff: "full-diff",
@@ -1604,9 +1604,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const dispatchResult = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-            type: "thread.session.stop",
+            type: "workspace.session.stop",
             commandId: CommandId.makeUnsafe("cmd-1"),
-            threadId: ThreadId.makeUnsafe("thread-1"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
             createdAt: now,
           }),
         ),
@@ -1616,7 +1616,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const turnDiffResult = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[ORCHESTRATION_WS_METHODS.getTurnDiff]({
-            threadId: ThreadId.makeUnsafe("thread-1"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
             fromTurnCount: 0,
             toTurnCount: 1,
           }),
@@ -1626,8 +1626,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const fullDiffResult = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
-          client[ORCHESTRATION_WS_METHODS.getFullThreadDiff]({
-            threadId: ThreadId.makeUnsafe("thread-1"),
+          client[ORCHESTRATION_WS_METHODS.getFullWorkspaceDiff]({
+            workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
             toTurnCount: 1,
           }),
         ),
@@ -1645,9 +1645,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("closes thread terminals after a successful archive command", () =>
+  it.effect("closes workspace terminals after a successful archive command", () =>
     Effect.gen(function* () {
-      const threadId = ThreadId.makeUnsafe("thread-archive");
+      const workspaceId = WorkspaceId.makeUnsafe("workspace-archive");
       const closeInputs: Array<Parameters<TerminalManagerShape["close"]>[0]> = [];
 
       yield* buildAppUnderTest({
@@ -1668,15 +1668,15 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const dispatchResult = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-            type: "thread.archive",
-            commandId: CommandId.makeUnsafe("cmd-thread-archive"),
-            threadId,
+            type: "workspace.archive",
+            commandId: CommandId.makeUnsafe("cmd-workspace-archive"),
+            workspaceId,
           }),
         ),
       );
 
       assert.equal(dispatchResult.sequence, 8);
-      assert.deepEqual(closeInputs, [{ threadId }]);
+      assert.deepEqual(closeInputs, [{ workspaceId }]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -1693,8 +1693,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             },
           }),
         );
-        const runForThread = vi.fn(
-          (_: Parameters<ProjectSetupScriptRunnerShape["runForThread"]>[0]) =>
+        const runForWorkspace = vi.fn(
+          (_: Parameters<ProjectSetupScriptRunnerShape["runForWorkspace"]>[0]) =>
             Effect.succeed({
               status: "started" as const,
               scriptId: "setup",
@@ -1718,7 +1718,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               readEvents: () => Stream.empty,
             },
             projectSetupScriptRunner: {
-              runForThread,
+              runForWorkspace,
             },
           },
         });
@@ -1728,9 +1728,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         const response = yield* Effect.scoped(
           withWsRpcClient(wsUrl, (client) =>
             client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-              type: "thread.turn.start",
+              type: "workspace.turn.start",
               commandId: CommandId.makeUnsafe("cmd-bootstrap-turn-start"),
-              threadId: ThreadId.makeUnsafe("thread-bootstrap"),
+              workspaceId: WorkspaceId.makeUnsafe("workspace-bootstrap"),
               message: {
                 messageId: MessageId.makeUnsafe("msg-bootstrap"),
                 role: "user",
@@ -1741,9 +1741,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               runtimeMode: "full-access",
               interactionMode: "default",
               bootstrap: {
-                createThread: {
+                createWorkspace: {
                   projectId: defaultProjectId,
-                  title: "Bootstrap Thread",
+                  title: "Bootstrap Workspace",
                   modelSelection: defaultModelSelection,
                   runtimeMode: "full-access",
                   interactionMode: "default",
@@ -1767,11 +1767,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.deepEqual(
           dispatchedCommands.map((command) => command.type),
           [
-            "thread.create",
-            "thread.meta.update",
-            "thread.activity.append",
-            "thread.activity.append",
-            "thread.turn.start",
+            "workspace.create",
+            "workspace.meta.update",
+            "workspace.activity.append",
+            "workspace.activity.append",
+            "workspace.turn.start",
           ],
         );
         assert.deepEqual(createWorktree.mock.calls[0]?.[0], {
@@ -1780,24 +1780,26 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           newBranch: "matcha/bootstrap-branch",
           path: null,
         });
-        assert.deepEqual(runForThread.mock.calls[0]?.[0], {
-          threadId: ThreadId.makeUnsafe("thread-bootstrap"),
+        assert.deepEqual(runForWorkspace.mock.calls[0]?.[0], {
+          workspaceId: WorkspaceId.makeUnsafe("workspace-bootstrap"),
           projectId: defaultProjectId,
           projectCwd: "/tmp/project",
           worktreePath: "/tmp/bootstrap-worktree",
         });
 
         const setupActivities = dispatchedCommands.filter(
-          (command): command is Extract<OrchestrationCommand, { type: "thread.activity.append" }> =>
-            command.type === "thread.activity.append",
+          (
+            command,
+          ): command is Extract<OrchestrationCommand, { type: "workspace.activity.append" }> =>
+            command.type === "workspace.activity.append",
         );
         assert.deepEqual(
           setupActivities.map((command) => command.activity.kind),
           ["setup-script.requested", "setup-script.started"],
         );
         const finalCommand = dispatchedCommands[4];
-        assertTrue(finalCommand?.type === "thread.turn.start");
-        if (finalCommand?.type === "thread.turn.start") {
+        assertTrue(finalCommand?.type === "workspace.turn.start");
+        if (finalCommand?.type === "workspace.turn.start") {
           assert.equal(finalCommand.bootstrap, undefined);
         }
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
@@ -1814,8 +1816,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           },
         }),
       );
-      const runForThread = vi.fn(
-        (_: Parameters<ProjectSetupScriptRunnerShape["runForThread"]>[0]) =>
+      const runForWorkspace = vi.fn(
+        (_: Parameters<ProjectSetupScriptRunnerShape["runForWorkspace"]>[0]) =>
           Effect.fail(new Error("pty unavailable")),
       );
 
@@ -1833,7 +1835,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             readEvents: () => Stream.empty,
           },
           projectSetupScriptRunner: {
-            runForThread,
+            runForWorkspace,
           },
         },
       });
@@ -1843,9 +1845,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const response = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-            type: "thread.turn.start",
+            type: "workspace.turn.start",
             commandId: CommandId.makeUnsafe("cmd-bootstrap-turn-start-setup-failure"),
-            threadId: ThreadId.makeUnsafe("thread-bootstrap-setup-failure"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-bootstrap-setup-failure"),
             message: {
               messageId: MessageId.makeUnsafe("msg-bootstrap-setup-failure"),
               role: "user",
@@ -1856,9 +1858,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             runtimeMode: "full-access",
             interactionMode: "default",
             bootstrap: {
-              createThread: {
+              createWorkspace: {
                 projectId: defaultProjectId,
-                title: "Bootstrap Thread",
+                title: "Bootstrap Workspace",
                 modelSelection: defaultModelSelection,
                 runtimeMode: "full-access",
                 interactionMode: "default",
@@ -1881,18 +1883,25 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(response.sequence, 4);
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
-        ["thread.create", "thread.meta.update", "thread.activity.append", "thread.turn.start"],
+        [
+          "workspace.create",
+          "workspace.meta.update",
+          "workspace.activity.append",
+          "workspace.turn.start",
+        ],
       );
       const setupFailureActivity = dispatchedCommands.find(
-        (command): command is Extract<OrchestrationCommand, { type: "thread.activity.append" }> =>
-          command.type === "thread.activity.append",
+        (
+          command,
+        ): command is Extract<OrchestrationCommand, { type: "workspace.activity.append" }> =>
+          command.type === "workspace.activity.append",
       );
       assert.equal(setupFailureActivity?.activity.kind, "setup-script.failed");
       assert.deepEqual(setupFailureActivity?.activity.payload, {
         detail: "pty unavailable",
         worktreePath: "/tmp/bootstrap-worktree",
       });
-      assertTrue(dispatchedCommands.every((command) => command.type !== "thread.delete"));
+      assertTrue(dispatchedCommands.every((command) => command.type !== "workspace.delete"));
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -1907,8 +1916,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           },
         }),
       );
-      const runForThread = vi.fn(
-        (_: Parameters<ProjectSetupScriptRunnerShape["runForThread"]>[0]) =>
+      const runForWorkspace = vi.fn(
+        (_: Parameters<ProjectSetupScriptRunnerShape["runForWorkspace"]>[0]) =>
           Effect.succeed({
             status: "started" as const,
             scriptId: "setup",
@@ -1927,7 +1936,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           orchestrationEngine: {
             dispatch: (command) => {
               if (
-                command.type === "thread.activity.append" &&
+                command.type === "workspace.activity.append" &&
                 command.activity.kind.startsWith("setup-script.")
               ) {
                 setupActivityAppendAttempt += 1;
@@ -1949,7 +1958,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             readEvents: () => Stream.empty,
           },
           projectSetupScriptRunner: {
-            runForThread,
+            runForWorkspace,
           },
         },
       });
@@ -1959,9 +1968,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const response = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-            type: "thread.turn.start",
+            type: "workspace.turn.start",
             commandId: CommandId.makeUnsafe("cmd-bootstrap-turn-start-setup-activity-failure"),
-            threadId: ThreadId.makeUnsafe("thread-bootstrap-setup-activity-failure"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-bootstrap-setup-activity-failure"),
             message: {
               messageId: MessageId.makeUnsafe("msg-bootstrap-setup-activity-failure"),
               role: "user",
@@ -1972,9 +1981,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             runtimeMode: "full-access",
             interactionMode: "default",
             bootstrap: {
-              createThread: {
+              createWorkspace: {
                 projectId: defaultProjectId,
-                title: "Bootstrap Thread",
+                title: "Bootstrap Workspace",
                 modelSelection: defaultModelSelection,
                 runtimeMode: "full-access",
                 interactionMode: "default",
@@ -1997,11 +2006,18 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(response.sequence, 4);
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
-        ["thread.create", "thread.meta.update", "thread.activity.append", "thread.turn.start"],
+        [
+          "workspace.create",
+          "workspace.meta.update",
+          "workspace.activity.append",
+          "workspace.turn.start",
+        ],
       );
       const setupActivities = dispatchedCommands.filter(
-        (command): command is Extract<OrchestrationCommand, { type: "thread.activity.append" }> =>
-          command.type === "thread.activity.append",
+        (
+          command,
+        ): command is Extract<OrchestrationCommand, { type: "workspace.activity.append" }> =>
+          command.type === "workspace.activity.append",
       );
       assert.deepEqual(
         setupActivities.map((command) => command.activity.kind),
@@ -2010,11 +2026,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assertTrue(
         setupActivities.every((command) => command.activity.kind !== "setup-script.failed"),
       );
-      assertTrue(dispatchedCommands.every((command) => command.type !== "thread.delete"));
+      assertTrue(dispatchedCommands.every((command) => command.type !== "workspace.delete"));
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("cleans up created bootstrap threads when worktree creation defects", () =>
+  it.effect("cleans up created bootstrap workspaces when worktree creation defects", () =>
     Effect.gen(function* () {
       const dispatchedCommands: Array<OrchestrationCommand> = [];
       const createWorktree = vi.fn((_: Parameters<GitCoreShape["createWorktree"]>[0]) =>
@@ -2042,9 +2058,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const result = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-            type: "thread.turn.start",
+            type: "workspace.turn.start",
             commandId: CommandId.makeUnsafe("cmd-bootstrap-turn-start-defect"),
-            threadId: ThreadId.makeUnsafe("thread-bootstrap-defect"),
+            workspaceId: WorkspaceId.makeUnsafe("workspace-bootstrap-defect"),
             message: {
               messageId: MessageId.makeUnsafe("msg-bootstrap-defect"),
               role: "user",
@@ -2055,9 +2071,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             runtimeMode: "full-access",
             interactionMode: "default",
             bootstrap: {
-              createThread: {
+              createWorkspace: {
                 projectId: defaultProjectId,
-                title: "Bootstrap Thread",
+                title: "Bootstrap Workspace",
                 modelSelection: defaultModelSelection,
                 runtimeMode: "full-access",
                 interactionMode: "default",
@@ -2082,7 +2098,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.include(result.failure.message, "worktree exploded");
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
-        ["thread.create", "thread.delete"],
+        ["workspace.create", "workspace.delete"],
       );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
@@ -2092,22 +2108,22 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     () =>
       Effect.gen(function* () {
         const now = new Date().toISOString();
-        const threadId = ThreadId.makeUnsafe("thread-1");
+        const workspaceId = WorkspaceId.makeUnsafe("workspace-1");
         let replayCursor: number | null = null;
         const makeEvent = (sequence: number): OrchestrationEvent =>
           ({
             sequence,
             eventId: `event-${sequence}`,
-            aggregateKind: "thread",
-            aggregateId: threadId,
+            aggregateKind: "workspace",
+            aggregateId: workspaceId,
             occurredAt: now,
             commandId: null,
             causationEventId: null,
             correlationId: null,
             metadata: {},
-            type: "thread.reverted",
+            type: "workspace.reverted",
             payload: {
-              threadId,
+              workspaceId,
               turnCount: sequence,
             },
           }) as OrchestrationEvent;
@@ -2179,7 +2195,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   it.effect("routes websocket rpc terminal methods", () =>
     Effect.gen(function* () {
       const snapshot = {
-        threadId: "thread-1",
+        workspaceId: "workspace-1",
         terminalId: "default",
         cwd: "/tmp/project",
         worktreePath: null,
@@ -2209,7 +2225,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const opened = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalOpen]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
             cwd: "/tmp/project",
           }),
@@ -2220,7 +2236,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalWrite]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
             data: "echo hi\n",
           }),
@@ -2230,7 +2246,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalResize]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
             cols: 120,
             rows: 40,
@@ -2241,7 +2257,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalClear]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
           }),
         ),
@@ -2250,7 +2266,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const restarted = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalRestart]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
             cwd: "/tmp/project",
             cols: 120,
@@ -2263,7 +2279,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalClose]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
           }),
         ),
@@ -2274,7 +2290,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   it.effect("routes websocket rpc terminal.write errors", () =>
     Effect.gen(function* () {
       const terminalError = new TerminalNotRunningError({
-        threadId: "thread-1",
+        workspaceId: "workspace-1",
         terminalId: "default",
       });
       yield* buildAppUnderTest({
@@ -2289,7 +2305,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const result = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.terminalWrite]({
-            threadId: "thread-1",
+            workspaceId: "workspace-1",
             terminalId: "default",
             data: "echo fail\n",
           }),

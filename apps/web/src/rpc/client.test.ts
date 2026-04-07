@@ -126,7 +126,7 @@ describe("WsRpcAtomClient", () => {
     const expectedSettings = {
       ...DEFAULT_SERVER_SETTINGS,
       enableAssistantStreaming: true,
-      defaultThreadEnvMode: "worktree" as const,
+      defaultWorkspaceEnvMode: "worktree" as const,
       textGenerationModelSelection: {
         provider: "codex" as const,
         model: "gpt-5.4",
@@ -176,7 +176,7 @@ describe("WsRpcAtomClient", () => {
     const expectedSettings = {
       ...DEFAULT_SERVER_SETTINGS,
       enableAssistantStreaming: true,
-      defaultThreadEnvMode: "worktree" as const,
+      defaultWorkspaceEnvMode: "worktree" as const,
       textGenerationModelSelection: {
         provider: "codex" as const,
         model: "gpt-5.4",

@@ -1,7 +1,7 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
   type ResolvedKeybindingsConfig,
   type ServerConfig,
   type ServerConfigStreamEvent,
@@ -197,7 +197,7 @@ describe("serverState", () => {
         cwd: "/tmp/workspace",
         projectName: "t3-code",
         bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
-        bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
+        bootstrapWorkspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       },
     });
 
@@ -205,7 +205,7 @@ describe("serverState", () => {
       cwd: "/tmp/workspace",
       projectName: "t3-code",
       bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
-      bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
+      bootstrapWorkspaceId: WorkspaceId.makeUnsafe("workspace-1"),
     });
 
     const lateListener = vi.fn();
@@ -214,7 +214,7 @@ describe("serverState", () => {
       cwd: "/tmp/workspace",
       projectName: "t3-code",
       bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
-      bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
+      bootstrapWorkspaceId: WorkspaceId.makeUnsafe("workspace-1"),
     });
 
     unsubscribeLate();

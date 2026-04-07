@@ -44,12 +44,12 @@ import { toastManager } from "./ui/toast";
 
 interface BranchToolbarBranchSelectorProps {
   activeProjectCwd: string;
-  activeThreadBranch: string | null;
+  activeWorkspaceBranch: string | null;
   activeWorktreePath: string | null;
   branchCwd: string | null;
   effectiveEnvMode: EnvMode;
   envLocked: boolean;
-  onSetThreadBranch: (branch: string | null, worktreePath: string | null) => void;
+  onSetWorkspaceBranch: (branch: string | null, worktreePath: string | null) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
 }
@@ -75,12 +75,12 @@ function getBranchTriggerLabel(input: {
 
 export function BranchToolbarBranchSelector({
   activeProjectCwd,
-  activeThreadBranch,
+  activeWorkspaceBranch,
   activeWorktreePath,
   branchCwd,
   effectiveEnvMode,
   envLocked,
-  onSetThreadBranch,
+  onSetWorkspaceBranch,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
 }: BranchToolbarBranchSelectorProps) {
@@ -122,7 +122,7 @@ export function BranchToolbarBranchSelector({
   const canonicalActiveBranch = resolveBranchToolbarValue({
     envMode: effectiveEnvMode,
     activeWorktreePath,
-    activeThreadBranch,
+    activeWorkspaceBranch,
     currentGitBranch,
   });
   const branchNames = useMemo(() => branches.map((branch) => branch.name), [branches]);
@@ -198,7 +198,7 @@ export function BranchToolbarBranchSelector({
 
     // In new-worktree mode, selecting a branch sets the base branch.
     if (isSelectingWorktreeBase) {
-      onSetThreadBranch(branch.name, null);
+      onSetWorkspaceBranch(branch.name, null);
       setIsBranchMenuOpen(false);
       onComposerFocusRequest?.();
       return;
@@ -210,9 +210,9 @@ export function BranchToolbarBranchSelector({
       branch,
     });
 
-    // If the branch already lives in a worktree, point the thread there.
+    // If the branch already lives in a worktree, point the workspace there.
     if (selectionTarget.reuseExistingWorktree) {
-      onSetThreadBranch(branch.name, selectionTarget.nextWorktreePath);
+      onSetWorkspaceBranch(branch.name, selectionTarget.nextWorktreePath);
       setIsBranchMenuOpen(false);
       onComposerFocusRequest?.();
       return;
@@ -248,7 +248,7 @@ export function BranchToolbarBranchSelector({
       }
 
       setOptimisticBranch(nextBranchName);
-      onSetThreadBranch(nextBranchName, selectionTarget.nextWorktreePath);
+      onSetWorkspaceBranch(nextBranchName, selectionTarget.nextWorktreePath);
     });
   };
 
@@ -285,7 +285,7 @@ export function BranchToolbarBranchSelector({
       }
 
       setOptimisticBranch(name);
-      onSetThreadBranch(name, activeWorktreePath);
+      onSetWorkspaceBranch(name, activeWorktreePath);
       setBranchQuery("");
     });
   };
@@ -294,18 +294,18 @@ export function BranchToolbarBranchSelector({
     if (
       effectiveEnvMode !== "worktree" ||
       activeWorktreePath ||
-      activeThreadBranch ||
+      activeWorkspaceBranch ||
       !currentGitBranch
     ) {
       return;
     }
-    onSetThreadBranch(currentGitBranch, null);
+    onSetWorkspaceBranch(currentGitBranch, null);
   }, [
-    activeThreadBranch,
+    activeWorkspaceBranch,
     activeWorktreePath,
     currentGitBranch,
     effectiveEnvMode,
-    onSetThreadBranch,
+    onSetWorkspaceBranch,
   ]);
 
   const handleOpenChange = useCallback(

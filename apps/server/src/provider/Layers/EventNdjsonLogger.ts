@@ -2,29 +2,29 @@
  * Provider event logger helper.
  *
  * Best-effort writer for observability logs. Each record is formatted as a
- * single effect-style text line in a thread-scoped file. Failures are
+ * single effect-style text line in a workspace-scoped file. Failures are
  * downgraded to warnings so provider runtime behavior is unaffected.
  */
 import fs from "node:fs";
 import path from "node:path";
 
-import type { ThreadId } from "@matcha/contracts";
+import type { WorkspaceId } from "@matcha/contracts";
 import { RotatingFileSink } from "@matcha/shared/logging";
 import { Effect, Exit, Logger, Scope, SynchronizedRef } from "effect";
 
-import { toSafeThreadAttachmentSegment } from "../../attachmentStore.ts";
+import { toSafeWorkspaceAttachmentSegment } from "../../attachmentStore.ts";
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_FILES = 10;
 const DEFAULT_BATCH_WINDOW_MS = 200;
-const GLOBAL_THREAD_SEGMENT = "_global";
+const GLOBAL_WORKSPACE_SEGMENT = "_global";
 const LOG_SCOPE = "provider-observability";
 
 export type EventNdjsonStream = "native" | "canonical" | "orchestration";
 
 export interface EventNdjsonLogger {
   readonly filePath: string;
-  write: (event: unknown, threadId: ThreadId | null) => Effect.Effect<void>;
+  write: (event: unknown, workspaceId: WorkspaceId | null) => Effect.Effect<void>;
   close: () => Effect.Effect<void>;
 }
 
@@ -35,13 +35,13 @@ export interface EventNdjsonLoggerOptions {
   readonly batchWindowMs?: number;
 }
 
-interface ThreadWriter {
+interface WorkspaceWriter {
   writeMessage: (message: string) => Effect.Effect<void>;
   close: () => Effect.Effect<void>;
 }
 
 interface LoggerState {
-  readonly threadWriters: Map<string, ThreadWriter>;
+  readonly workspaceWriters: Map<string, WorkspaceWriter>;
   readonly failedSegments: Set<string>;
 }
 
@@ -49,9 +49,9 @@ function logWarning(message: string, context: Record<string, unknown>): Effect.E
   return Effect.logWarning(message, context).pipe(Effect.annotateLogs({ scope: LOG_SCOPE }));
 }
 
-function resolveThreadSegment(raw: string | null | undefined): string {
-  const normalized = typeof raw === "string" ? toSafeThreadAttachmentSegment(raw) : null;
-  return normalized ?? GLOBAL_THREAD_SEGMENT;
+function resolveWorkspaceSegment(raw: string | null | undefined): string {
+  const normalized = typeof raw === "string" ? toSafeWorkspaceAttachmentSegment(raw) : null;
+  return normalized ?? GLOBAL_WORKSPACE_SEGMENT;
 }
 
 function formatLoggerMessage(message: unknown): string {
@@ -104,13 +104,13 @@ const toLogMessage = Effect.fn("toLogMessage")(function* (
   return serialized.value;
 });
 
-const makeThreadWriter = Effect.fn("makeThreadWriter")(function* (input: {
+const makeWorkspaceWriter = Effect.fn("makeWorkspaceWriter")(function* (input: {
   readonly filePath: string;
   readonly maxBytes: number;
   readonly maxFiles: number;
   readonly batchWindowMs: number;
   readonly streamLabel: string;
-}): Effect.fn.Return<ThreadWriter | undefined> {
+}): Effect.fn.Return<WorkspaceWriter | undefined> {
   const sinkResult = yield* Effect.sync(() => {
     try {
       return {
@@ -128,7 +128,7 @@ const makeThreadWriter = Effect.fn("makeThreadWriter")(function* (input: {
   });
 
   if (!sinkResult.ok) {
-    yield* logWarning("failed to initialize provider thread log file", {
+    yield* logWarning("failed to initialize provider workspace log file", {
       filePath: input.filePath,
       error: sinkResult.error,
     });
@@ -140,7 +140,7 @@ const makeThreadWriter = Effect.fn("makeThreadWriter")(function* (input: {
   const lineLogger = makeLineLogger(input.streamLabel);
   const batchedLogger = yield* Logger.batched(lineLogger, {
     window: input.batchWindowMs,
-    flush: Effect.fn("makeThreadWriter.flush")(function* (messages) {
+    flush: Effect.fn("makeWorkspaceWriter.flush")(function* (messages) {
       const flushResult = yield* Effect.sync(() => {
         try {
           for (const message of messages) {
@@ -170,7 +170,7 @@ const makeThreadWriter = Effect.fn("makeThreadWriter")(function* (input: {
     close() {
       return Scope.close(scope, Exit.void);
     },
-  } satisfies ThreadWriter;
+  } satisfies WorkspaceWriter;
 });
 
 export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function* (
@@ -199,25 +199,25 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
   }
 
   const stateRef = yield* SynchronizedRef.make<LoggerState>({
-    threadWriters: new Map(),
+    workspaceWriters: new Map(),
     failedSegments: new Set(),
   });
 
-  const resolveThreadWriter = Effect.fn("resolveThreadWriter")(function* (
-    threadSegment: string,
-  ): Effect.fn.Return<ThreadWriter | undefined> {
+  const resolveWorkspaceWriter = Effect.fn("resolveWorkspaceWriter")(function* (
+    workspaceSegment: string,
+  ): Effect.fn.Return<WorkspaceWriter | undefined> {
     return yield* SynchronizedRef.modifyEffect(stateRef, (state) => {
-      if (state.failedSegments.has(threadSegment)) {
+      if (state.failedSegments.has(workspaceSegment)) {
         return Effect.succeed([undefined, state] as const);
       }
 
-      const existing = state.threadWriters.get(threadSegment);
+      const existing = state.workspaceWriters.get(workspaceSegment);
       if (existing) {
         return Effect.succeed([existing, state] as const);
       }
 
-      return makeThreadWriter({
-        filePath: path.join(path.dirname(filePath), `${threadSegment}.log`),
+      return makeWorkspaceWriter({
+        filePath: path.join(path.dirname(filePath), `${workspaceSegment}.log`),
         maxBytes,
         maxFiles,
         batchWindowMs,
@@ -226,7 +226,7 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
         Effect.map((writer) => {
           if (!writer) {
             const nextFailedSegments = new Set(state.failedSegments);
-            nextFailedSegments.add(threadSegment);
+            nextFailedSegments.add(workspaceSegment);
             return [
               undefined,
               {
@@ -236,13 +236,13 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
             ] as const;
           }
 
-          const nextThreadWriters = new Map(state.threadWriters);
-          nextThreadWriters.set(threadSegment, writer);
+          const nextWorkspaceWriters = new Map(state.workspaceWriters);
+          nextWorkspaceWriters.set(workspaceSegment, writer);
           return [
             writer,
             {
               ...state,
-              threadWriters: nextThreadWriters,
+              workspaceWriters: nextWorkspaceWriters,
             },
           ] as const;
         }),
@@ -250,14 +250,14 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
     });
   });
 
-  const write = Effect.fn("write")(function* (event: unknown, threadId: ThreadId | null) {
-    const threadSegment = resolveThreadSegment(threadId);
+  const write = Effect.fn("write")(function* (event: unknown, workspaceId: WorkspaceId | null) {
+    const workspaceSegment = resolveWorkspaceSegment(workspaceId);
     const message = yield* toLogMessage(event);
     if (!message) {
       return;
     }
 
-    const writer = yield* resolveThreadWriter(threadSegment);
+    const writer = yield* resolveWorkspaceWriter(workspaceSegment);
     if (!writer) {
       return;
     }
@@ -268,14 +268,14 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
   const close = Effect.fn("close")(function* () {
     yield* SynchronizedRef.modifyEffect(stateRef, (state) =>
       Effect.gen(function* () {
-        for (const writer of state.threadWriters.values()) {
+        for (const writer of state.workspaceWriters.values()) {
           yield* writer.close();
         }
 
         return [
           undefined,
           {
-            threadWriters: new Map<string, ThreadWriter>(),
+            workspaceWriters: new Map<string, WorkspaceWriter>(),
             failedSegments: new Set<string>(),
           },
         ] as const;

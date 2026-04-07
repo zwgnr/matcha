@@ -1,18 +1,18 @@
-import { ProjectId, ThreadId } from "@matcha/contracts";
+import { ProjectId, WorkspaceId } from "@matcha/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { ProjectionProjectRepositoryLive } from "./ProjectionProjects.ts";
-import { ProjectionThreadRepositoryLive } from "./ProjectionThreads.ts";
+import { ProjectionWorkspaceRepositoryLive } from "./ProjectionWorkspaces.ts";
 import { ProjectionProjectRepository } from "../Services/ProjectionProjects.ts";
-import { ProjectionThreadRepository } from "../Services/ProjectionThreads.ts";
+import { ProjectionWorkspaceRepository } from "../Services/ProjectionWorkspaces.ts";
 
 const projectionRepositoriesLayer = it.layer(
   Layer.mergeAll(
     ProjectionProjectRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    ProjectionThreadRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
+    ProjectionWorkspaceRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     SqlitePersistenceMemory,
   ),
 );
@@ -67,15 +67,15 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
     }),
   );
 
-  it.effect("stores JSON for thread model options", () =>
+  it.effect("stores JSON for workspace model options", () =>
     Effect.gen(function* () {
-      const threads = yield* ProjectionThreadRepository;
+      const workspaces = yield* ProjectionWorkspaceRepository;
       const sql = yield* SqlClient.SqlClient;
 
-      yield* threads.upsert({
-        threadId: ThreadId.makeUnsafe("thread-null-options"),
+      yield* workspaces.upsert({
+        workspaceId: WorkspaceId.makeUnsafe("workspace-null-options"),
         projectId: ProjectId.makeUnsafe("project-null-options"),
-        title: "Null options thread",
+        title: "Null options workspace",
         modelSelection: {
           provider: "claudeAgent",
           model: "claude-opus-4-6",
@@ -95,12 +95,12 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         readonly modelSelection: string | null;
       }>`
         SELECT model_selection_json AS "modelSelection"
-        FROM projection_threads
-        WHERE thread_id = 'thread-null-options'
+        FROM projection_workspaces
+        WHERE workspace_id = 'workspace-null-options'
       `;
       const row = rows[0];
       if (!row) {
-        return yield* Effect.fail(new Error("Expected projection_threads row to exist."));
+        return yield* Effect.fail(new Error("Expected projection_workspaces row to exist."));
       }
 
       assert.strictEqual(
@@ -111,8 +111,8 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         }),
       );
 
-      const persisted = yield* threads.getById({
-        threadId: ThreadId.makeUnsafe("thread-null-options"),
+      const persisted = yield* workspaces.getById({
+        workspaceId: WorkspaceId.makeUnsafe("workspace-null-options"),
       });
       assert.deepStrictEqual(Option.getOrNull(persisted)?.modelSelection, {
         provider: "claudeAgent",

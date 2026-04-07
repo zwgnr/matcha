@@ -1,12 +1,12 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import ThreadSidebar from "./Sidebar";
+import WorkspaceSidebar from "./Sidebar";
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 
-const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
-const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
-const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
+const WORKSPACE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_workspace_sidebar_width";
+const WORKSPACE_SIDEBAR_MIN_WIDTH = 13 * 16;
+const WORKSPACE_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -34,13 +34,13 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         className="border-r border-sidebar-border"
         resizable={{
-          minWidth: THREAD_SIDEBAR_MIN_WIDTH,
+          minWidth: WORKSPACE_SIDEBAR_MIN_WIDTH,
           shouldAcceptWidth: ({ nextWidth, wrapper }) =>
-            wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
-          storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
+            wrapper.clientWidth - nextWidth >= WORKSPACE_MAIN_CONTENT_MIN_WIDTH,
+          storageKey: WORKSPACE_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        <ThreadSidebar />
+        <WorkspaceSidebar />
         <SidebarRail />
       </Sidebar>
       {children}

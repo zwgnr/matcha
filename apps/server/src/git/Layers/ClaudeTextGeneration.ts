@@ -20,13 +20,13 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-  buildThreadTitlePrompt,
+  buildWorkspaceTitlePrompt,
 } from "../Prompts.ts";
 import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
-  sanitizeThreadTitle,
+  sanitizeWorkspaceTitle,
   toJsonSchemaObject,
 } from "../Utils.ts";
 import { normalizeClaudeModelOptionsWithCapabilities } from "@matcha/shared/model";
@@ -77,7 +77,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateWorkspaceTitle";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -300,23 +300,23 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     };
   });
 
-  const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
-    "ClaudeTextGeneration.generateThreadTitle",
+  const generateWorkspaceTitle: TextGenerationShape["generateWorkspaceTitle"] = Effect.fn(
+    "ClaudeTextGeneration.generateWorkspaceTitle",
   )(function* (input) {
-    const { prompt, outputSchema } = buildThreadTitlePrompt({
+    const { prompt, outputSchema } = buildWorkspaceTitlePrompt({
       message: input.message,
       attachments: input.attachments,
     });
 
     if (input.modelSelection.provider !== "claudeAgent") {
       return yield* new TextGenerationError({
-        operation: "generateThreadTitle",
+        operation: "generateWorkspaceTitle",
         detail: "Invalid model selection.",
       });
     }
 
     const generated = yield* runClaudeJson({
-      operation: "generateThreadTitle",
+      operation: "generateWorkspaceTitle",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
@@ -324,7 +324,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     });
 
     return {
-      title: sanitizeThreadTitle(generated.title),
+      title: sanitizeWorkspaceTitle(generated.title),
     };
   });
 
@@ -332,7 +332,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
-    generateThreadTitle,
+    generateWorkspaceTitle,
   } satisfies TextGenerationShape;
 });
 

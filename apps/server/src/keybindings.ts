@@ -16,7 +16,7 @@ import {
   MAX_WHEN_EXPRESSION_DEPTH,
   ResolvedKeybindingRule,
   ResolvedKeybindingsConfig,
-  THREAD_JUMP_KEYBINDING_COMMANDS,
+  WORKSPACE_JUMP_KEYBINDING_COMMANDS,
   type ServerConfigIssue,
 } from "@matcha/contracts";
 import { Mutable } from "effect/Types";
@@ -66,9 +66,9 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+n", command: "chat.newLocal", when: "!terminalFocus" },
   { key: "mod+o", command: "editor.openFavorite" },
   { key: "mod+b", command: "sidebar.toggle" },
-  { key: "mod+shift+[", command: "thread.previous" },
-  { key: "mod+shift+]", command: "thread.next" },
-  ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
+  { key: "mod+shift+[", command: "workspace.previous" },
+  { key: "mod+shift+]", command: "workspace.next" },
+  ...WORKSPACE_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
     command,
   })),

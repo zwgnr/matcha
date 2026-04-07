@@ -23,10 +23,10 @@ layer("GitHubCliLive", (it) => {
       mockedRunProcess.mockResolvedValueOnce({
         stdout: JSON.stringify({
           number: 42,
-          title: "Add PR thread creation",
+          title: "Add PR workspace creation",
           url: "https://github.com/pingdotgg/codething-mvp/pull/42",
           baseRefName: "main",
-          headRefName: "feature/pr-threads",
+          headRefName: "feature/pr-workspaces",
           state: "OPEN",
           mergedAt: null,
           isCrossRepository: true,
@@ -53,10 +53,10 @@ layer("GitHubCliLive", (it) => {
 
       assert.deepStrictEqual(result, {
         number: 42,
-        title: "Add PR thread creation",
+        title: "Add PR workspace creation",
         url: "https://github.com/pingdotgg/codething-mvp/pull/42",
         baseRefName: "main",
-        headRefName: "feature/pr-threads",
+        headRefName: "feature/pr-workspaces",
         state: "open",
         isCrossRepository: true,
         headRepositoryNameWithOwner: "octocat/codething-mvp",

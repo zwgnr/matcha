@@ -73,7 +73,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
       toastManager.add({
         type: "error",
         title: "Workspace path is unavailable",
-        description: "This thread does not have a workspace path to save into.",
+        description: "This workspace does not have a workspace path to save into.",
       });
       return;
     }

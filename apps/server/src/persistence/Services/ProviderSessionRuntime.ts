@@ -9,7 +9,7 @@ import {
   IsoDateTime,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
@@ -17,7 +17,7 @@ import type { Effect } from "effect";
 import type { ProviderSessionRuntimeRepositoryError } from "../Errors.ts";
 
 export const ProviderSessionRuntime = Schema.Struct({
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
   providerName: Schema.String,
   adapterKey: Schema.String,
   runtimeMode: RuntimeMode,
@@ -28,10 +28,10 @@ export const ProviderSessionRuntime = Schema.Struct({
 });
 export type ProviderSessionRuntime = typeof ProviderSessionRuntime.Type;
 
-export const GetProviderSessionRuntimeInput = Schema.Struct({ threadId: ThreadId });
+export const GetProviderSessionRuntimeInput = Schema.Struct({ workspaceId: WorkspaceId });
 export type GetProviderSessionRuntimeInput = typeof GetProviderSessionRuntimeInput.Type;
 
-export const DeleteProviderSessionRuntimeInput = Schema.Struct({ threadId: ThreadId });
+export const DeleteProviderSessionRuntimeInput = Schema.Struct({ workspaceId: WorkspaceId });
 export type DeleteProviderSessionRuntimeInput = typeof DeleteProviderSessionRuntimeInput.Type;
 
 /**
@@ -41,16 +41,16 @@ export interface ProviderSessionRuntimeRepositoryShape {
   /**
    * Insert or replace a provider runtime row.
    *
-   * Upserts by canonical `threadId`, including JSON payload/cursor fields.
+   * Upserts by canonical `workspaceId`, including JSON payload/cursor fields.
    */
   readonly upsert: (
     runtime: ProviderSessionRuntime,
   ) => Effect.Effect<void, ProviderSessionRuntimeRepositoryError>;
 
   /**
-   * Read provider runtime state by canonical thread id.
+   * Read provider runtime state by canonical workspace id.
    */
-  readonly getByThreadId: (
+  readonly getByWorkspaceId: (
     input: GetProviderSessionRuntimeInput,
   ) => Effect.Effect<Option.Option<ProviderSessionRuntime>, ProviderSessionRuntimeRepositoryError>;
 
@@ -65,9 +65,9 @@ export interface ProviderSessionRuntimeRepositoryShape {
   >;
 
   /**
-   * Delete provider runtime state by canonical thread id.
+   * Delete provider runtime state by canonical workspace id.
    */
-  readonly deleteByThreadId: (
+  readonly deleteByWorkspaceId: (
     input: DeleteProviderSessionRuntimeInput,
   ) => Effect.Effect<void, ProviderSessionRuntimeRepositoryError>;
 }

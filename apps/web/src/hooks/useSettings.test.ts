@@ -5,12 +5,12 @@ describe("buildLegacyClientSettingsMigrationPatch", () => {
   it("migrates archive confirmation from legacy local settings", () => {
     expect(
       buildLegacyClientSettingsMigrationPatch({
-        confirmThreadArchive: true,
-        confirmThreadDelete: false,
+        confirmWorkspaceArchive: true,
+        confirmWorkspaceDelete: false,
       }),
     ).toEqual({
-      confirmThreadArchive: true,
-      confirmThreadDelete: false,
+      confirmWorkspaceArchive: true,
+      confirmWorkspaceDelete: false,
     });
   });
 });

@@ -7,25 +7,25 @@ export const MAX_WHEN_EXPRESSION_DEPTH = 64;
 export const MAX_SCRIPT_ID_LENGTH = 24;
 export const MAX_KEYBINDINGS_COUNT = 256;
 
-export const THREAD_JUMP_KEYBINDING_COMMANDS = [
-  "thread.jump.1",
-  "thread.jump.2",
-  "thread.jump.3",
-  "thread.jump.4",
-  "thread.jump.5",
-  "thread.jump.6",
-  "thread.jump.7",
-  "thread.jump.8",
-  "thread.jump.9",
+export const WORKSPACE_JUMP_KEYBINDING_COMMANDS = [
+  "workspace.jump.1",
+  "workspace.jump.2",
+  "workspace.jump.3",
+  "workspace.jump.4",
+  "workspace.jump.5",
+  "workspace.jump.6",
+  "workspace.jump.7",
+  "workspace.jump.8",
+  "workspace.jump.9",
 ] as const;
-export type ThreadJumpKeybindingCommand = (typeof THREAD_JUMP_KEYBINDING_COMMANDS)[number];
+export type WorkspaceJumpKeybindingCommand = (typeof WORKSPACE_JUMP_KEYBINDING_COMMANDS)[number];
 
-export const THREAD_KEYBINDING_COMMANDS = [
-  "thread.previous",
-  "thread.next",
-  ...THREAD_JUMP_KEYBINDING_COMMANDS,
+export const WORKSPACE_KEYBINDING_COMMANDS = [
+  "workspace.previous",
+  "workspace.next",
+  ...WORKSPACE_JUMP_KEYBINDING_COMMANDS,
 ] as const;
-export type ThreadKeybindingCommand = (typeof THREAD_KEYBINDING_COMMANDS)[number];
+export type WorkspaceKeybindingCommand = (typeof WORKSPACE_KEYBINDING_COMMANDS)[number];
 
 const STATIC_KEYBINDING_COMMANDS = [
   "terminal.toggle",
@@ -37,7 +37,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "chat.newLocal",
   "editor.openFavorite",
   "sidebar.toggle",
-  ...THREAD_KEYBINDING_COMMANDS,
+  ...WORKSPACE_KEYBINDING_COMMANDS,
 ] as const;
 
 export const SCRIPT_RUN_COMMAND_PATTERN = Schema.TemplateLiteral([

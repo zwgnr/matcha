@@ -1,58 +1,60 @@
-import { ThreadId } from "@matcha/contracts";
+import { WorkspaceId } from "@matcha/contracts";
 import { describe, expect, it } from "vitest";
 
-import { collectActiveTerminalThreadIds } from "./terminalStateCleanup";
+import { collectActiveTerminalWorkspaceIds } from "./terminalStateCleanup";
 
-const threadId = (id: string): ThreadId => ThreadId.makeUnsafe(id);
+const workspaceId = (id: string): WorkspaceId => WorkspaceId.makeUnsafe(id);
 
-describe("collectActiveTerminalThreadIds", () => {
-  it("retains non-deleted server threads", () => {
-    const activeThreadIds = collectActiveTerminalThreadIds({
-      snapshotThreads: [
-        { id: threadId("server-1"), deletedAt: null, archivedAt: null },
-        { id: threadId("server-2"), deletedAt: null, archivedAt: null },
+describe("collectActiveTerminalWorkspaceIds", () => {
+  it("retains non-deleted server workspaces", () => {
+    const activeWorkspaceIds = collectActiveTerminalWorkspaceIds({
+      snapshotWorkspaces: [
+        { id: workspaceId("server-1"), deletedAt: null, archivedAt: null },
+        { id: workspaceId("server-2"), deletedAt: null, archivedAt: null },
       ],
-      draftThreadIds: [],
+      draftWorkspaceIds: [],
     });
 
-    expect(activeThreadIds).toEqual(new Set([threadId("server-1"), threadId("server-2")]));
+    expect(activeWorkspaceIds).toEqual(new Set([workspaceId("server-1"), workspaceId("server-2")]));
   });
 
-  it("ignores deleted and archived server threads and keeps local draft threads", () => {
-    const activeThreadIds = collectActiveTerminalThreadIds({
-      snapshotThreads: [
-        { id: threadId("server-active"), deletedAt: null, archivedAt: null },
+  it("ignores deleted and archived server workspaces and keeps local draft workspaces", () => {
+    const activeWorkspaceIds = collectActiveTerminalWorkspaceIds({
+      snapshotWorkspaces: [
+        { id: workspaceId("server-active"), deletedAt: null, archivedAt: null },
         {
-          id: threadId("server-deleted"),
+          id: workspaceId("server-deleted"),
           deletedAt: "2026-03-05T08:00:00.000Z",
           archivedAt: null,
         },
         {
-          id: threadId("server-archived"),
+          id: workspaceId("server-archived"),
           deletedAt: null,
           archivedAt: "2026-03-05T09:00:00.000Z",
         },
       ],
-      draftThreadIds: [threadId("local-draft")],
+      draftWorkspaceIds: [workspaceId("local-draft")],
     });
 
-    expect(activeThreadIds).toEqual(new Set([threadId("server-active"), threadId("local-draft")]));
+    expect(activeWorkspaceIds).toEqual(
+      new Set([workspaceId("server-active"), workspaceId("local-draft")]),
+    );
   });
 
-  it("does not keep draft-linked terminal state for archived server threads", () => {
-    const archivedThreadId = threadId("server-archived");
+  it("does not keep draft-linked terminal state for archived server workspaces", () => {
+    const archivedWorkspaceId = workspaceId("server-archived");
 
-    const activeThreadIds = collectActiveTerminalThreadIds({
-      snapshotThreads: [
+    const activeWorkspaceIds = collectActiveTerminalWorkspaceIds({
+      snapshotWorkspaces: [
         {
-          id: archivedThreadId,
+          id: archivedWorkspaceId,
           deletedAt: null,
           archivedAt: "2026-03-05T09:00:00.000Z",
         },
       ],
-      draftThreadIds: [archivedThreadId, threadId("local-draft")],
+      draftWorkspaceIds: [archivedWorkspaceId, workspaceId("local-draft")],
     });
 
-    expect(activeThreadIds).toEqual(new Set([threadId("local-draft")]));
+    expect(activeWorkspaceIds).toEqual(new Set([workspaceId("local-draft")]));
   });
 });

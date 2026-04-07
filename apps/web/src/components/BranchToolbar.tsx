@@ -1,4 +1,4 @@
-import type { ThreadId } from "@matcha/contracts";
+import type { WorkspaceId } from "@matcha/contracts";
 import { FolderIcon, GitForkIcon } from "lucide-react";
 import { useCallback } from "react";
 
@@ -20,7 +20,7 @@ const envModeItems = [
 ] as const;
 
 interface BranchToolbarProps {
-  threadId: ThreadId;
+  workspaceId: WorkspaceId;
   onEnvModeChange: (mode: EnvMode) => void;
   envLocked: boolean;
   onCheckoutPullRequestRequest?: (reference: string) => void;
@@ -28,59 +28,59 @@ interface BranchToolbarProps {
 }
 
 export default function BranchToolbar({
-  threadId,
+  workspaceId,
   onEnvModeChange,
   envLocked,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
 }: BranchToolbarProps) {
-  const threads = useStore((store) => store.threads);
+  const workspaces = useStore((store) => store.workspaces);
   const projects = useStore((store) => store.projects);
-  const setThreadBranchAction = useStore((store) => store.setThreadBranch);
-  const draftThread = useComposerDraftStore((store) => store.getDraftThread(threadId));
-  const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
+  const setWorkspaceBranchAction = useStore((store) => store.setWorkspaceBranch);
+  const draftWorkspace = useComposerDraftStore((store) => store.getDraftWorkspace(workspaceId));
+  const setDraftWorkspaceContext = useComposerDraftStore((store) => store.setDraftWorkspaceContext);
 
-  const serverThread = threads.find((thread) => thread.id === threadId);
-  const activeProjectId = serverThread?.projectId ?? draftThread?.projectId ?? null;
+  const serverWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
+  const activeProjectId = serverWorkspace?.projectId ?? draftWorkspace?.projectId ?? null;
   const activeProject = projects.find((project) => project.id === activeProjectId);
-  const activeThreadId = serverThread?.id ?? (draftThread ? threadId : undefined);
-  const activeThreadBranch = serverThread?.branch ?? draftThread?.branch ?? null;
-  const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
+  const activeWorkspaceId = serverWorkspace?.id ?? (draftWorkspace ? workspaceId : undefined);
+  const activeWorkspaceBranch = serverWorkspace?.branch ?? draftWorkspace?.branch ?? null;
+  const activeWorktreePath = serverWorkspace?.worktreePath ?? draftWorkspace?.worktreePath ?? null;
   const branchCwd = activeWorktreePath ?? activeProject?.cwd ?? null;
-  const hasServerThread = serverThread !== undefined;
+  const hasServerWorkspace = serverWorkspace !== undefined;
   const effectiveEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath,
-    hasServerThread,
-    draftThreadEnvMode: draftThread?.envMode,
+    hasServerWorkspace,
+    draftWorkspaceEnvMode: draftWorkspace?.envMode,
   });
 
-  const setThreadBranch = useCallback(
+  const setWorkspaceBranch = useCallback(
     (branch: string | null, worktreePath: string | null) => {
-      if (!activeThreadId) return;
+      if (!activeWorkspaceId) return;
       const api = readNativeApi();
       // If the effective cwd is about to change, stop the running session so the
       // next message creates a new one with the correct cwd.
-      if (serverThread?.session && worktreePath !== activeWorktreePath && api) {
+      if (serverWorkspace?.session && worktreePath !== activeWorktreePath && api) {
         void api.orchestration
           .dispatchCommand({
-            type: "thread.session.stop",
+            type: "workspace.session.stop",
             commandId: newCommandId(),
-            threadId: activeThreadId,
+            workspaceId: activeWorkspaceId,
             createdAt: new Date().toISOString(),
           })
           .catch(() => undefined);
       }
-      if (api && hasServerThread) {
+      if (api && hasServerWorkspace) {
         void api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
+          type: "workspace.meta.update",
           commandId: newCommandId(),
-          threadId: activeThreadId,
+          workspaceId: activeWorkspaceId,
           branch,
           worktreePath,
         });
       }
-      if (hasServerThread) {
-        setThreadBranchAction(activeThreadId, branch, worktreePath);
+      if (hasServerWorkspace) {
+        setWorkspaceBranchAction(activeWorkspaceId, branch, worktreePath);
         return;
       }
       const nextDraftEnvMode = resolveDraftEnvModeAfterBranchChange({
@@ -88,25 +88,25 @@ export default function BranchToolbar({
         currentWorktreePath: activeWorktreePath,
         effectiveEnvMode,
       });
-      setDraftThreadContext(threadId, {
+      setDraftWorkspaceContext(workspaceId, {
         branch,
         worktreePath,
         envMode: nextDraftEnvMode,
       });
     },
     [
-      activeThreadId,
-      serverThread?.session,
+      activeWorkspaceId,
+      serverWorkspace?.session,
       activeWorktreePath,
-      hasServerThread,
-      setThreadBranchAction,
-      setDraftThreadContext,
-      threadId,
+      hasServerWorkspace,
+      setWorkspaceBranchAction,
+      setDraftWorkspaceContext,
+      workspaceId,
       effectiveEnvMode,
     ],
   );
 
-  if (!activeThreadId || !activeProject) return null;
+  if (!activeWorkspaceId || !activeProject) return null;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-5 pb-3 pt-1">
@@ -157,12 +157,12 @@ export default function BranchToolbar({
 
       <BranchToolbarBranchSelector
         activeProjectCwd={activeProject.cwd}
-        activeThreadBranch={activeThreadBranch}
+        activeWorkspaceBranch={activeWorkspaceBranch}
         activeWorktreePath={activeWorktreePath}
         branchCwd={branchCwd}
         effectiveEnvMode={effectiveEnvMode}
         envLocked={envLocked}
-        onSetThreadBranch={setThreadBranch}
+        onSetWorkspaceBranch={setWorkspaceBranch}
         {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
         {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
       />

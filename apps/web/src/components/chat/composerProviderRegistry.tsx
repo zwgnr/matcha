@@ -2,7 +2,7 @@ import {
   type ProviderKind,
   type ProviderModelOptions,
   type ServerProviderModel,
-  type ThreadId,
+  type WorkspaceId,
 } from "@matcha/contracts";
 import { isClaudeUltrathinkPrompt, resolveEffort } from "@matcha/shared/model";
 import type { ReactNode } from "react";
@@ -33,7 +33,7 @@ export type ComposerProviderState = {
 type ProviderRegistryEntry = {
   getState: (input: ComposerProviderStateInput) => ComposerProviderState;
   renderTraitsMenuContent: (input: {
-    threadId: ThreadId;
+    workspaceId: WorkspaceId;
     model: string;
     models: ReadonlyArray<ServerProviderModel>;
     modelOptions: ProviderModelOptions[ProviderKind] | undefined;
@@ -41,7 +41,7 @@ type ProviderRegistryEntry = {
     onPromptChange: (prompt: string) => void;
   }) => ReactNode;
   renderTraitsPicker: (input: {
-    threadId: ThreadId;
+    workspaceId: WorkspaceId;
     model: string;
     models: ReadonlyArray<ServerProviderModel>;
     modelOptions: ProviderModelOptions[ProviderKind] | undefined;
@@ -94,7 +94,7 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
   codex: {
     getState: (input) => getProviderStateFromCapabilities(input),
     renderTraitsMenuContent: ({
-      threadId,
+      workspaceId,
       model,
       models,
       modelOptions,
@@ -104,18 +104,18 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
       <TraitsMenuContent
         provider="codex"
         models={models}
-        threadId={threadId}
+        workspaceId={workspaceId}
         model={model}
         modelOptions={modelOptions}
         prompt={prompt}
         onPromptChange={onPromptChange}
       />
     ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
+    renderTraitsPicker: ({ workspaceId, model, models, modelOptions, prompt, onPromptChange }) => (
       <TraitsPicker
         provider="codex"
         models={models}
-        threadId={threadId}
+        workspaceId={workspaceId}
         model={model}
         modelOptions={modelOptions}
         prompt={prompt}
@@ -126,7 +126,7 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
   claudeAgent: {
     getState: (input) => getProviderStateFromCapabilities(input),
     renderTraitsMenuContent: ({
-      threadId,
+      workspaceId,
       model,
       models,
       modelOptions,
@@ -136,18 +136,18 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
       <TraitsMenuContent
         provider="claudeAgent"
         models={models}
-        threadId={threadId}
+        workspaceId={workspaceId}
         model={model}
         modelOptions={modelOptions}
         prompt={prompt}
         onPromptChange={onPromptChange}
       />
     ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
+    renderTraitsPicker: ({ workspaceId, model, models, modelOptions, prompt, onPromptChange }) => (
       <TraitsPicker
         provider="claudeAgent"
         models={models}
-        threadId={threadId}
+        workspaceId={workspaceId}
         model={model}
         modelOptions={modelOptions}
         prompt={prompt}
@@ -163,7 +163,7 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
 
 export function renderProviderTraitsMenuContent(input: {
   provider: ProviderKind;
-  threadId: ThreadId;
+  workspaceId: WorkspaceId;
   model: string;
   models: ReadonlyArray<ServerProviderModel>;
   modelOptions: ProviderModelOptions[ProviderKind] | undefined;
@@ -171,7 +171,7 @@ export function renderProviderTraitsMenuContent(input: {
   onPromptChange: (prompt: string) => void;
 }): ReactNode {
   return composerProviderRegistry[input.provider].renderTraitsMenuContent({
-    threadId: input.threadId,
+    workspaceId: input.workspaceId,
     model: input.model,
     models: input.models,
     modelOptions: input.modelOptions,
@@ -182,7 +182,7 @@ export function renderProviderTraitsMenuContent(input: {
 
 export function renderProviderTraitsPicker(input: {
   provider: ProviderKind;
-  threadId: ThreadId;
+  workspaceId: WorkspaceId;
   model: string;
   models: ReadonlyArray<ServerProviderModel>;
   modelOptions: ProviderModelOptions[ProviderKind] | undefined;
@@ -190,7 +190,7 @@ export function renderProviderTraitsPicker(input: {
   onPromptChange: (prompt: string) => void;
 }): ReactNode {
   return composerProviderRegistry[input.provider].renderTraitsPicker({
-    threadId: input.threadId,
+    workspaceId: input.workspaceId,
     model: input.model,
     models: input.models,
     modelOptions: input.modelOptions,

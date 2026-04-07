@@ -1,14 +1,14 @@
 import {
-  OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetFullWorkspaceDiffInput,
   OrchestrationGetTurnDiffInput,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { ensureNativeApi } from "../nativeApi";
 
 interface CheckpointDiffQueryInput {
-  threadId: ThreadId | null;
+  workspaceId: WorkspaceId | null;
   fromTurnCount: number | null;
   toTurnCount: number | null;
   cacheScope?: string | null;
@@ -21,7 +21,7 @@ export const providerQueryKeys = {
     [
       "providers",
       "checkpointDiff",
-      input.threadId,
+      input.workspaceId,
       input.fromTurnCount,
       input.toTurnCount,
       input.cacheScope ?? null,
@@ -30,14 +30,14 @@ export const providerQueryKeys = {
 
 function decodeCheckpointDiffRequest(input: CheckpointDiffQueryInput) {
   if (input.fromTurnCount === 0) {
-    return Schema.decodeUnknownOption(OrchestrationGetFullThreadDiffInput)({
-      threadId: input.threadId,
+    return Schema.decodeUnknownOption(OrchestrationGetFullWorkspaceDiffInput)({
+      workspaceId: input.workspaceId,
       toTurnCount: input.toTurnCount,
-    }).pipe(Option.map((fields) => ({ kind: "fullThreadDiff" as const, input: fields })));
+    }).pipe(Option.map((fields) => ({ kind: "fullWorkspaceDiff" as const, input: fields })));
   }
 
   return Schema.decodeUnknownOption(OrchestrationGetTurnDiffInput)({
-    threadId: input.threadId,
+    workspaceId: input.workspaceId,
     fromTurnCount: input.fromTurnCount,
     toTurnCount: input.toTurnCount,
   }).pipe(Option.map((fields) => ({ kind: "turnDiff" as const, input: fields })));
@@ -65,7 +65,7 @@ function normalizeCheckpointErrorMessage(error: unknown): string {
   }
 
   if (
-    lower.includes("checkpoint unavailable for thread") ||
+    lower.includes("checkpoint unavailable for workspace") ||
     lower.includes("checkpoint invariant violation")
   ) {
     const separatorIndex = message.indexOf(":");
@@ -96,19 +96,19 @@ export function checkpointDiffQueryOptions(input: CheckpointDiffQueryInput) {
     queryKey: providerQueryKeys.checkpointDiff(input),
     queryFn: async () => {
       const api = ensureNativeApi();
-      if (!input.threadId || decodedRequest._tag === "None") {
+      if (!input.workspaceId || decodedRequest._tag === "None") {
         throw new Error("Checkpoint diff is unavailable.");
       }
       try {
-        if (decodedRequest.value.kind === "fullThreadDiff") {
-          return await api.orchestration.getFullThreadDiff(decodedRequest.value.input);
+        if (decodedRequest.value.kind === "fullWorkspaceDiff") {
+          return await api.orchestration.getFullWorkspaceDiff(decodedRequest.value.input);
         }
         return await api.orchestration.getTurnDiff(decodedRequest.value.input);
       } catch (error) {
         throw new Error(normalizeCheckpointErrorMessage(error), { cause: error });
       }
     },
-    enabled: (input.enabled ?? true) && !!input.threadId && decodedRequest._tag === "Some",
+    enabled: (input.enabled ?? true) && !!input.workspaceId && decodedRequest._tag === "Some",
     staleTime: Infinity,
     retry: (failureCount, error) => {
       if (isCheckpointTemporarilyUnavailable(error)) {

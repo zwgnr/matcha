@@ -8,7 +8,7 @@ import {
   type ServerConfig,
   type ServerProvider,
   type TerminalEvent,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -63,7 +63,7 @@ const rpcClientMock = {
     checkout: vi.fn(),
     init: vi.fn(),
     resolvePullRequest: vi.fn(),
-    preparePullRequestThread: vi.fn(),
+    preparePullRequestWorkspace: vi.fn(),
   },
   server: {
     getConfig: vi.fn(),
@@ -78,7 +78,7 @@ const rpcClientMock = {
     getSnapshot: vi.fn(),
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
-    getFullThreadDiff: vi.fn(),
+    getFullWorkspaceDiff: vi.fn(),
     replayEvents: vi.fn(),
     onDomainEvent: vi.fn((listener: (event: OrchestrationEvent) => void) =>
       registerListener(orchestrationEventListeners, listener),
@@ -205,7 +205,7 @@ describe("wsNativeApi", () => {
     api.orchestration.onDomainEvent(onDomainEvent);
 
     const terminalEvent = {
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       terminalId: "terminal-1",
       createdAt: "2026-02-24T00:00:00.000Z",
       type: "output",
@@ -297,18 +297,18 @@ describe("wsNativeApi", () => {
     });
   });
 
-  it("forwards full-thread diff requests to the orchestration RPC", async () => {
-    rpcClientMock.orchestration.getFullThreadDiff.mockResolvedValue({ diff: "patch" });
+  it("forwards full-workspace diff requests to the orchestration RPC", async () => {
+    rpcClientMock.orchestration.getFullWorkspaceDiff.mockResolvedValue({ diff: "patch" });
     const { createWsNativeApi } = await import("./wsNativeApi");
 
     const api = createWsNativeApi();
-    await api.orchestration.getFullThreadDiff({
-      threadId: ThreadId.makeUnsafe("thread-1"),
+    await api.orchestration.getFullWorkspaceDiff({
+      workspaceId: WorkspaceId.makeUnsafe("workspace-1"),
       toTurnCount: 1,
     });
 
-    expect(rpcClientMock.orchestration.getFullThreadDiff).toHaveBeenCalledWith({
-      threadId: "thread-1",
+    expect(rpcClientMock.orchestration.getFullWorkspaceDiff).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
       toTurnCount: 1,
     });
   });

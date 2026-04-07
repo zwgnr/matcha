@@ -8,7 +8,7 @@ import {
   RuntimeSessionId,
   ProviderSession,
   ProviderTurnStartResult,
-  ThreadId,
+  WorkspaceId,
   TurnId,
   ProviderKind,
 } from "@matcha/contracts";
@@ -21,8 +21,8 @@ import {
 } from "../src/provider/Errors.ts";
 import type {
   ProviderAdapterShape,
-  ProviderThreadSnapshot,
-  ProviderThreadTurnSnapshot,
+  ProviderWorkspaceSnapshot,
+  ProviderWorkspaceTurnSnapshot,
 } from "../src/provider/Services/ProviderAdapter.ts";
 
 export interface TestTurnResponse {
@@ -38,7 +38,7 @@ export type FixtureProviderRuntimeEvent = {
   readonly eventId: EventId;
   readonly provider: ProviderKind;
   readonly createdAt: string;
-  readonly threadId: string;
+  readonly workspaceId: string;
   readonly turnId?: string | undefined;
   readonly itemId?: string | undefined;
   readonly requestId?: string | undefined;
@@ -51,7 +51,7 @@ export type LegacyProviderRuntimeEvent = FixtureProviderRuntimeEvent;
 
 interface SessionState {
   readonly session: ProviderSession;
-  snapshot: ProviderThreadSnapshot;
+  snapshot: ProviderWorkspaceSnapshot;
   turnCount: number;
   readonly queuedResponses: Array<TestTurnResponse>;
   readonly rollbackCalls: Array<number>;
@@ -180,18 +180,18 @@ export interface TestProviderAdapterHarness {
   readonly adapter: ProviderAdapterShape<ProviderAdapterError>;
   readonly provider: ProviderKind;
   readonly queueTurnResponse: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     response: TestTurnResponse,
   ) => Effect.Effect<void, ProviderAdapterSessionNotFoundError>;
   readonly queueTurnResponseForNextSession: (
     response: TestTurnResponse,
   ) => Effect.Effect<void, never>;
   readonly getStartCount: () => number;
-  readonly getRollbackCalls: (threadId: ThreadId) => ReadonlyArray<number>;
-  readonly getInterruptCalls: (threadId: ThreadId) => ReadonlyArray<TurnId | undefined>;
-  readonly listActiveSessionIds: () => ReadonlyArray<ThreadId>;
-  readonly getApprovalResponses: (threadId: ThreadId) => ReadonlyArray<{
-    readonly threadId: ThreadId;
+  readonly getRollbackCalls: (workspaceId: WorkspaceId) => ReadonlyArray<number>;
+  readonly getInterruptCalls: (workspaceId: WorkspaceId) => ReadonlyArray<TurnId | undefined>;
+  readonly listActiveSessionIds: () => ReadonlyArray<WorkspaceId>;
+  readonly getApprovalResponses: (workspaceId: WorkspaceId) => ReadonlyArray<{
+    readonly workspaceId: WorkspaceId;
     readonly requestId: ApprovalRequestId;
     readonly decision: ProviderApprovalDecision;
   }>;
@@ -207,19 +207,19 @@ function nowIso(): string {
 
 function sessionNotFound(
   provider: ProviderKind,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 ): ProviderAdapterSessionNotFoundError {
   return new ProviderAdapterSessionNotFoundError({
     provider,
-    threadId: String(threadId),
+    workspaceId: String(workspaceId),
   });
 }
 
 function missingSessionEffect(
   provider: ProviderKind,
-  threadId: ThreadId,
+  workspaceId: WorkspaceId,
 ): Effect.Effect<never, ProviderAdapterError> {
-  return Effect.fail(sessionNotFound(provider, threadId));
+  return Effect.fail(sessionNotFound(provider, workspaceId));
 }
 
 export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapterHarnessOptions) =>
@@ -227,13 +227,13 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
     const provider = options?.provider ?? "codex";
     const runtimeEvents = yield* Queue.unbounded<ProviderRuntimeEvent>();
     let sessionCount = 0;
-    const sessions = new Map<ThreadId, SessionState>();
+    const sessions = new Map<WorkspaceId, SessionState>();
     const queuedResponsesForNextSession: TestTurnResponse[] = [];
-    const interruptCallsBySession = new Map<ThreadId, Array<TurnId | undefined>>();
+    const interruptCallsBySession = new Map<WorkspaceId, Array<TurnId | undefined>>();
     const approvalResponsesBySession = new Map<
-      ThreadId,
+      WorkspaceId,
       Array<{
-        readonly threadId: ThreadId;
+        readonly workspaceId: WorkspaceId;
         readonly requestId: ApprovalRequestId;
         readonly decision: ProviderApprovalDecision;
       }>
@@ -252,24 +252,27 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         }
 
         sessionCount += 1;
-        const threadId = input.threadId;
+        const workspaceId = input.workspaceId;
         const createdAt = nowIso();
 
         const session: ProviderSession = {
           provider,
           status: "ready",
           runtimeMode: input.runtimeMode,
-          threadId,
+          workspaceId,
           cwd: input.cwd,
-          resumeCursor: input.resumeCursor ?? { threadId: String(threadId), seed: sessionCount },
+          resumeCursor: input.resumeCursor ?? {
+            workspaceId: String(workspaceId),
+            seed: sessionCount,
+          },
           createdAt,
           updatedAt: createdAt,
         };
 
-        sessions.set(threadId, {
+        sessions.set(workspaceId, {
           session,
           snapshot: {
-            threadId,
+            workspaceId,
             turns: [],
           },
           turnCount: 0,
@@ -282,9 +285,9 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
 
     const sendTurn: ProviderAdapterShape<ProviderAdapterError>["sendTurn"] = (input) =>
       Effect.gen(function* () {
-        const state = sessions.get(input.threadId);
+        const state = sessions.get(input.workspaceId);
         if (!state) {
-          return yield* missingSessionEffect(provider, input.threadId);
+          return yield* missingSessionEffect(provider, input.workspaceId);
         }
 
         state.turnCount += 1;
@@ -296,7 +299,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
           return yield* new ProviderAdapterValidationError({
             provider,
             operation: "sendTurn",
-            issue: `No queued turn response for thread ${input.threadId}.`,
+            issue: `No queued turn response for workspace ${input.workspaceId}.`,
           });
         }
 
@@ -307,10 +310,10 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
             ...(fixtureEvent as Record<string, unknown>),
             eventId: randomUUID(),
             provider,
-            sessionId: RuntimeSessionId.makeUnsafe(String(input.threadId)),
+            sessionId: RuntimeSessionId.makeUnsafe(String(input.workspaceId)),
             createdAt: nowIso(),
           };
-          rawEvent.threadId = state.snapshot.threadId;
+          rawEvent.workspaceId = state.snapshot.workspaceId;
           if (Object.hasOwn(rawEvent, "turnId")) {
             rawEvent.turnId = turnId;
           }
@@ -350,13 +353,13 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
             ? [userItem, { type: "agentMessage", text: assistantText }]
             : [userItem];
 
-        const nextTurn: ProviderThreadTurnSnapshot = {
+        const nextTurn: ProviderWorkspaceTurnSnapshot = {
           id: turnId,
           items: nextItems,
         };
 
         state.snapshot = {
-          threadId: state.snapshot.threadId,
+          workspaceId: state.snapshot.workspaceId,
           turns: [...state.snapshot.turns, nextTurn],
         };
 
@@ -366,7 +369,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
             eventId: EventId.makeUnsafe(randomUUID()),
             provider,
             createdAt: nowIso(),
-            threadId: state.snapshot.threadId,
+            workspaceId: state.snapshot.workspaceId,
             turnId,
             payload: {
               state: "completed",
@@ -379,78 +382,80 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         }
 
         return {
-          threadId: state.snapshot.threadId,
+          workspaceId: state.snapshot.workspaceId,
           turnId,
         } satisfies ProviderTurnStartResult;
       });
 
     const interruptTurn: ProviderAdapterShape<ProviderAdapterError>["interruptTurn"] = (
-      threadId,
+      workspaceId,
       turnId,
     ) =>
-      sessions.has(threadId)
+      sessions.has(workspaceId)
         ? Effect.sync(() => {
-            const existing = interruptCallsBySession.get(threadId) ?? [];
+            const existing = interruptCallsBySession.get(workspaceId) ?? [];
             existing.push(turnId);
-            interruptCallsBySession.set(threadId, existing);
+            interruptCallsBySession.set(workspaceId, existing);
           })
-        : missingSessionEffect(provider, threadId);
+        : missingSessionEffect(provider, workspaceId);
 
     const respondToRequest: ProviderAdapterShape<ProviderAdapterError>["respondToRequest"] = (
-      threadId,
+      workspaceId,
       requestId,
       decision,
     ) =>
-      sessions.has(threadId)
+      sessions.has(workspaceId)
         ? Effect.sync(() => {
-            const existing = approvalResponsesBySession.get(threadId) ?? [];
+            const existing = approvalResponsesBySession.get(workspaceId) ?? [];
             existing.push({
-              threadId,
+              workspaceId,
               requestId,
               decision,
             });
-            approvalResponsesBySession.set(threadId, existing);
+            approvalResponsesBySession.set(workspaceId, existing);
           })
-        : missingSessionEffect(provider, threadId);
+        : missingSessionEffect(provider, workspaceId);
 
     const respondToUserInput: ProviderAdapterShape<ProviderAdapterError>["respondToUserInput"] = (
-      threadId,
+      workspaceId,
       _requestId,
       _answers,
-    ) => (sessions.has(threadId) ? Effect.void : missingSessionEffect(provider, threadId));
+    ) => (sessions.has(workspaceId) ? Effect.void : missingSessionEffect(provider, workspaceId));
 
-    const stopSession: ProviderAdapterShape<ProviderAdapterError>["stopSession"] = (threadId) =>
+    const stopSession: ProviderAdapterShape<ProviderAdapterError>["stopSession"] = (workspaceId) =>
       Effect.sync(() => {
-        sessions.delete(threadId);
+        sessions.delete(workspaceId);
       });
 
     const listSessions: ProviderAdapterShape<ProviderAdapterError>["listSessions"] = () =>
       Effect.sync(() => Array.from(sessions.values(), (state) => state.session));
 
-    const hasSession: ProviderAdapterShape<ProviderAdapterError>["hasSession"] = (threadId) =>
-      Effect.succeed(sessions.has(threadId));
+    const hasSession: ProviderAdapterShape<ProviderAdapterError>["hasSession"] = (workspaceId) =>
+      Effect.succeed(sessions.has(workspaceId));
 
-    const readThread: ProviderAdapterShape<ProviderAdapterError>["readThread"] = (threadId) => {
-      const state = sessions.get(threadId);
+    const readWorkspace: ProviderAdapterShape<ProviderAdapterError>["readWorkspace"] = (
+      workspaceId,
+    ) => {
+      const state = sessions.get(workspaceId);
       if (!state) {
-        return missingSessionEffect(provider, threadId);
+        return missingSessionEffect(provider, workspaceId);
       }
       return Effect.succeed(state.snapshot);
     };
 
-    const rollbackThread: ProviderAdapterShape<ProviderAdapterError>["rollbackThread"] = (
-      threadId,
+    const rollbackWorkspace: ProviderAdapterShape<ProviderAdapterError>["rollbackWorkspace"] = (
+      workspaceId,
       numTurns,
     ) => {
-      const state = sessions.get(threadId);
+      const state = sessions.get(workspaceId);
       if (!state) {
-        return missingSessionEffect(provider, threadId);
+        return missingSessionEffect(provider, workspaceId);
       }
       if (!Number.isInteger(numTurns) || numTurns < 0 || numTurns > state.snapshot.turns.length) {
         return Effect.fail(
           new ProviderAdapterValidationError({
             provider,
-            operation: "rollbackThread",
+            operation: "rollbackWorkspace",
             issue: "numTurns must be an integer between 0 and current turn count.",
           }),
         );
@@ -459,7 +464,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
       return Effect.sync(() => {
         state.rollbackCalls.push(numTurns);
         state.snapshot = {
-          threadId: state.snapshot.threadId,
+          workspaceId: state.snapshot.workspaceId,
           turns: state.snapshot.turns.slice(0, state.snapshot.turns.length - numTurns),
         };
         state.turnCount = state.snapshot.turns.length;
@@ -485,23 +490,23 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
       stopSession,
       listSessions,
       hasSession,
-      readThread,
-      rollbackThread,
+      readWorkspace,
+      rollbackWorkspace,
       stopAll,
       streamEvents: Stream.fromQueue(runtimeEvents),
     };
 
     const queueTurnResponse = (
-      threadId: ThreadId,
+      workspaceId: WorkspaceId,
       response: TestTurnResponse,
     ): Effect.Effect<void, ProviderAdapterSessionNotFoundError> =>
-      Effect.sync(() => sessions.get(threadId)).pipe(
+      Effect.sync(() => sessions.get(workspaceId)).pipe(
         Effect.flatMap((state) =>
           state
             ? Effect.sync(() => {
                 state.queuedResponses.push(response);
               })
-            : Effect.fail(sessionNotFound(provider, threadId)),
+            : Effect.fail(sessionNotFound(provider, workspaceId)),
         ),
       );
 
@@ -512,8 +517,8 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         queuedResponsesForNextSession.push(response);
       });
 
-    const getRollbackCalls = (threadId: ThreadId): ReadonlyArray<number> => {
-      const state = sessions.get(threadId);
+    const getRollbackCalls = (workspaceId: WorkspaceId): ReadonlyArray<number> => {
+      const state = sessions.get(workspaceId);
       if (!state) {
         return [];
       }
@@ -522,25 +527,25 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
 
     const getStartCount = (): number => sessionCount;
 
-    const getInterruptCalls = (threadId: ThreadId): ReadonlyArray<TurnId | undefined> => {
-      const calls = interruptCallsBySession.get(threadId);
+    const getInterruptCalls = (workspaceId: WorkspaceId): ReadonlyArray<TurnId | undefined> => {
+      const calls = interruptCallsBySession.get(workspaceId);
       if (!calls) {
         return [];
       }
       return [...calls];
     };
 
-    const listActiveSessionIds = (): ReadonlyArray<ThreadId> =>
-      Array.from(sessions.values(), (state) => state.session.threadId);
+    const listActiveSessionIds = (): ReadonlyArray<WorkspaceId> =>
+      Array.from(sessions.values(), (state) => state.session.workspaceId);
 
     const getApprovalResponses = (
-      threadId: ThreadId,
+      workspaceId: WorkspaceId,
     ): ReadonlyArray<{
-      readonly threadId: ThreadId;
+      readonly workspaceId: WorkspaceId;
       readonly requestId: ApprovalRequestId;
       readonly decision: ProviderApprovalDecision;
     }> => {
-      const responses = approvalResponsesBySession.get(threadId);
+      const responses = approvalResponsesBySession.get(workspaceId);
       if (!responses) {
         return [];
       }

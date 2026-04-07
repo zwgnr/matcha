@@ -8,14 +8,14 @@ import { GitCommandError } from "@matcha/contracts";
 export class CheckpointUnavailableError extends Schema.TaggedErrorClass<CheckpointUnavailableError>()(
   "CheckpointUnavailableError",
   {
-    threadId: Schema.String,
+    workspaceId: Schema.String,
     turnCount: Schema.Number,
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Checkpoint unavailable for thread ${this.threadId} turn ${this.turnCount}: ${this.detail}`;
+    return `Checkpoint unavailable for workspace ${this.workspaceId} turn ${this.turnCount}: ${this.detail}`;
   }
 }
 

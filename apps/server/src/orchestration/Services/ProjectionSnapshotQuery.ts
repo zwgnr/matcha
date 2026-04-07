@@ -11,7 +11,7 @@ import type {
   OrchestrationProject,
   OrchestrationReadModel,
   ProjectId,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { ServiceMap } from "effect";
 import type { Option } from "effect";
@@ -21,11 +21,11 @@ import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
 
 export interface ProjectionSnapshotCounts {
   readonly projectCount: number;
-  readonly threadCount: number;
+  readonly workspaceCount: number;
 }
 
-export interface ProjectionThreadCheckpointContext {
-  readonly threadId: ThreadId;
+export interface ProjectionWorkspaceCheckpointContext {
+  readonly workspaceId: WorkspaceId;
   readonly projectId: ProjectId;
   readonly workspaceRoot: string;
   readonly worktreePath: string | null;
@@ -57,18 +57,21 @@ export interface ProjectionSnapshotQueryShape {
   ) => Effect.Effect<Option.Option<OrchestrationProject>, ProjectionRepositoryError>;
 
   /**
-   * Read the earliest active thread for a project.
+   * Read the earliest active workspace for a project.
    */
-  readonly getFirstActiveThreadIdByProjectId: (
+  readonly getFirstActiveWorkspaceIdByProjectId: (
     projectId: ProjectId,
-  ) => Effect.Effect<Option.Option<ThreadId>, ProjectionRepositoryError>;
+  ) => Effect.Effect<Option.Option<WorkspaceId>, ProjectionRepositoryError>;
 
   /**
-   * Read the checkpoint context needed to resolve a single thread diff.
+   * Read the checkpoint context needed to resolve a single workspace diff.
    */
-  readonly getThreadCheckpointContext: (
-    threadId: ThreadId,
-  ) => Effect.Effect<Option.Option<ProjectionThreadCheckpointContext>, ProjectionRepositoryError>;
+  readonly getWorkspaceCheckpointContext: (
+    workspaceId: WorkspaceId,
+  ) => Effect.Effect<
+    Option.Option<ProjectionWorkspaceCheckpointContext>,
+    ProjectionRepositoryError
+  >;
 }
 
 /**

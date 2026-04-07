@@ -12,7 +12,7 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const terminalManager = yield* TerminalManager;
 
-  const runForThread: ProjectSetupScriptRunnerShape["runForThread"] = (input) =>
+  const runForWorkspace: ProjectSetupScriptRunnerShape["runForWorkspace"] = (input) =>
     Effect.gen(function* () {
       const readModel = yield* orchestrationEngine.getReadModel();
       const project =
@@ -43,14 +43,14 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
       });
 
       yield* terminalManager.open({
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         terminalId,
         cwd,
         worktreePath: input.worktreePath,
         env,
       });
       yield* terminalManager.write({
-        threadId: input.threadId,
+        workspaceId: input.workspaceId,
         terminalId,
         data: `${script.command}\r`,
       });
@@ -65,7 +65,7 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
     });
 
   return {
-    runForThread,
+    runForWorkspace,
   } satisfies ProjectSetupScriptRunnerShape;
 });
 

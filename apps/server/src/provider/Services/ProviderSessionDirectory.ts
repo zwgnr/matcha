@@ -2,7 +2,7 @@ import type {
   ProviderKind,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
-  ThreadId,
+  WorkspaceId,
 } from "@matcha/contracts";
 import { Option, ServiceMap } from "effect";
 import type { Effect } from "effect";
@@ -13,7 +13,7 @@ import type {
 } from "../Errors.ts";
 
 export interface ProviderRuntimeBinding {
-  readonly threadId: ThreadId;
+  readonly workspaceId: WorkspaceId;
   readonly provider: ProviderKind;
   readonly adapterKey?: string;
   readonly status?: ProviderSessionRuntimeStatus;
@@ -34,19 +34,19 @@ export interface ProviderSessionDirectoryShape {
   ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
 
   readonly getProvider: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
   ) => Effect.Effect<ProviderKind, ProviderSessionDirectoryReadError>;
 
   readonly getBinding: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
   ) => Effect.Effect<Option.Option<ProviderRuntimeBinding>, ProviderSessionDirectoryReadError>;
 
   readonly remove: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
   ) => Effect.Effect<void, ProviderSessionDirectoryPersistenceError>;
 
-  readonly listThreadIds: () => Effect.Effect<
-    ReadonlyArray<ThreadId>,
+  readonly listWorkspaceIds: () => Effect.Effect<
+    ReadonlyArray<WorkspaceId>,
     ProviderSessionDirectoryPersistenceError
   >;
 }

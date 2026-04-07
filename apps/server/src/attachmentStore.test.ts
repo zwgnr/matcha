@@ -6,47 +6,47 @@ import { describe, expect, it } from "vitest";
 
 import {
   createAttachmentId,
-  parseThreadSegmentFromAttachmentId,
+  parseWorkspaceSegmentFromAttachmentId,
   resolveAttachmentPathById,
 } from "./attachmentStore.ts";
 
 describe("attachmentStore", () => {
-  it("sanitizes thread ids when creating attachment ids", () => {
-    const attachmentId = createAttachmentId("thread.folder/unsafe space");
+  it("sanitizes workspace ids when creating attachment ids", () => {
+    const attachmentId = createAttachmentId("workspace.folder/unsafe space");
     expect(attachmentId).toBeTruthy();
     if (!attachmentId) {
       return;
     }
 
-    const threadSegment = parseThreadSegmentFromAttachmentId(attachmentId);
-    expect(threadSegment).toBeTruthy();
-    expect(threadSegment).toMatch(/^[a-z0-9_-]+$/i);
-    expect(threadSegment).not.toContain(".");
-    expect(threadSegment).not.toContain("%");
-    expect(threadSegment).not.toContain("/");
+    const workspaceSegment = parseWorkspaceSegmentFromAttachmentId(attachmentId);
+    expect(workspaceSegment).toBeTruthy();
+    expect(workspaceSegment).toMatch(/^[a-z0-9_-]+$/i);
+    expect(workspaceSegment).not.toContain(".");
+    expect(workspaceSegment).not.toContain("%");
+    expect(workspaceSegment).not.toContain("/");
   });
 
-  it("parses exact thread segments from attachment ids without prefix collisions", () => {
+  it("parses exact workspace segments from attachment ids without prefix collisions", () => {
     const fooId = "foo-00000000-0000-4000-8000-000000000001";
     const fooBarId = "foo-bar-00000000-0000-4000-8000-000000000002";
 
-    expect(parseThreadSegmentFromAttachmentId(fooId)).toBe("foo");
-    expect(parseThreadSegmentFromAttachmentId(fooBarId)).toBe("foo-bar");
+    expect(parseWorkspaceSegmentFromAttachmentId(fooId)).toBe("foo");
+    expect(parseWorkspaceSegmentFromAttachmentId(fooBarId)).toBe("foo-bar");
   });
 
-  it("normalizes created thread segments to lowercase", () => {
-    const attachmentId = createAttachmentId("Thread.Foo");
+  it("normalizes created workspace segments to lowercase", () => {
+    const attachmentId = createAttachmentId("Workspace.Foo");
     expect(attachmentId).toBeTruthy();
     if (!attachmentId) {
       return;
     }
-    expect(parseThreadSegmentFromAttachmentId(attachmentId)).toBe("thread-foo");
+    expect(parseWorkspaceSegmentFromAttachmentId(attachmentId)).toBe("workspace-foo");
   });
 
   it("resolves attachment path by id using the extension that exists on disk", () => {
     const attachmentsDir = fs.mkdtempSync(path.join(os.tmpdir(), "matcha-attachment-store-"));
     try {
-      const attachmentId = "thread-1-attachment";
+      const attachmentId = "workspace-1-attachment";
       const pngPath = path.join(attachmentsDir, `${attachmentId}.png`);
       fs.writeFileSync(pngPath, Buffer.from("hello"));
 
@@ -65,7 +65,7 @@ describe("attachmentStore", () => {
     try {
       const resolved = resolveAttachmentPathById({
         attachmentsDir,
-        attachmentId: "thread-1-missing",
+        attachmentId: "workspace-1-missing",
       });
       expect(resolved).toBeNull();
     } finally {

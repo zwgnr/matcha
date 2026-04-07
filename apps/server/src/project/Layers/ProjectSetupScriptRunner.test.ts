@@ -25,11 +25,11 @@ const emptySnapshot = (
         deletedAt: null,
       },
     ],
-    threads: [],
+    workspaces: [],
     providerSessions: [],
     providerStatuses: [],
     pendingApprovals: [],
-    latestTurnByThreadId: {},
+    latestTurnByWorkspaceId: {},
   }) as unknown as OrchestrationReadModel;
 
 describe("ProjectSetupScriptRunner", () => {
@@ -65,8 +65,8 @@ describe("ProjectSetupScriptRunner", () => {
     );
 
     const result = await Effect.runPromise(
-      runner.runForThread({
-        threadId: "thread-1",
+      runner.runForWorkspace({
+        workspaceId: "workspace-1",
         projectId: "project-1",
         worktreePath: "/repo/worktrees/a",
       }),
@@ -80,7 +80,7 @@ describe("ProjectSetupScriptRunner", () => {
   it("opens the deterministic setup terminal with worktree env and writes the command", async () => {
     const open = vi.fn(() =>
       Effect.succeed({
-        threadId: "thread-1",
+        workspaceId: "workspace-1",
         terminalId: "setup-setup",
         cwd: "/repo/worktrees/a",
         worktreePath: "/repo/worktrees/a",
@@ -133,8 +133,8 @@ describe("ProjectSetupScriptRunner", () => {
     );
 
     const result = await Effect.runPromise(
-      runner.runForThread({
-        threadId: "thread-1",
+      runner.runForWorkspace({
+        workspaceId: "workspace-1",
         projectCwd: "/repo/project",
         worktreePath: "/repo/worktrees/a",
       }),
@@ -148,7 +148,7 @@ describe("ProjectSetupScriptRunner", () => {
       cwd: "/repo/worktrees/a",
     });
     expect(open).toHaveBeenCalledWith({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       terminalId: "setup-setup",
       cwd: "/repo/worktrees/a",
       worktreePath: "/repo/worktrees/a",
@@ -158,7 +158,7 @@ describe("ProjectSetupScriptRunner", () => {
       },
     });
     expect(write).toHaveBeenCalledWith({
-      threadId: "thread-1",
+      workspaceId: "workspace-1",
       terminalId: "setup-setup",
       data: "bun install\r",
     });

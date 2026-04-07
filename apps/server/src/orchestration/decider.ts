@@ -9,16 +9,16 @@ import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   requireProject,
   requireProjectAbsent,
-  requireThread,
-  requireThreadArchived,
-  requireThreadAbsent,
-  requireThreadNotArchived,
+  requireWorkspace,
+  requireWorkspaceArchived,
+  requireWorkspaceAbsent,
+  requireWorkspaceNotArchived,
 } from "./commandInvariants.ts";
 
 const nowIso = () => new Date().toISOString();
 const defaultMetadata: Omit<OrchestrationEvent, "sequence" | "type" | "payload"> = {
   eventId: crypto.randomUUID() as OrchestrationEvent["eventId"],
-  aggregateKind: "thread",
+  aggregateKind: "workspace",
   aggregateId: "" as OrchestrationEvent["aggregateId"],
   occurredAt: nowIso(),
   commandId: null,
@@ -135,27 +135,27 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.create": {
+    case "workspace.create": {
       yield* requireProject({
         readModel,
         command,
         projectId: command.projectId,
       });
-      yield* requireThreadAbsent({
+      yield* requireWorkspaceAbsent({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.created",
+        type: "workspace.created",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           projectId: command.projectId,
           title: command.title,
           modelSelection: command.modelSelection,
@@ -169,90 +169,90 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.delete": {
-      yield* requireThread({
+    case "workspace.delete": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const occurredAt = nowIso();
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.deleted",
+        type: "workspace.deleted",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           deletedAt: occurredAt,
         },
       };
     }
 
-    case "thread.archive": {
-      yield* requireThreadNotArchived({
+    case "workspace.archive": {
+      yield* requireWorkspaceNotArchived({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const occurredAt = nowIso();
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.archived",
+        type: "workspace.archived",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           archivedAt: occurredAt,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.unarchive": {
-      yield* requireThreadArchived({
+    case "workspace.unarchive": {
+      yield* requireWorkspaceArchived({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const occurredAt = nowIso();
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.unarchived",
+        type: "workspace.unarchived",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.meta.update": {
-      yield* requireThread({
+    case "workspace.meta.update": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const occurredAt = nowIso();
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.meta-updated",
+        type: "workspace.meta-updated",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           ...(command.title !== undefined ? { title: command.title } : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
@@ -264,92 +264,92 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.runtime-mode.set": {
-      yield* requireThread({
+    case "workspace.runtime-mode.set": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const occurredAt = nowIso();
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.runtime-mode-set",
+        type: "workspace.runtime-mode-set",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           runtimeMode: command.runtimeMode,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.interaction-mode.set": {
-      yield* requireThread({
+    case "workspace.interaction-mode.set": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const occurredAt = nowIso();
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.interaction-mode-set",
+        type: "workspace.interaction-mode-set",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           interactionMode: command.interactionMode,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.turn.start": {
-      const targetThread = yield* requireThread({
+    case "workspace.turn.start": {
+      const targetWorkspace = yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const sourceProposedPlan = command.sourceProposedPlan;
-      const sourceThread = sourceProposedPlan
-        ? yield* requireThread({
+      const sourceWorkspace = sourceProposedPlan
+        ? yield* requireWorkspace({
             readModel,
             command,
-            threadId: sourceProposedPlan.threadId,
+            workspaceId: sourceProposedPlan.workspaceId,
           })
         : null;
       const sourcePlan =
-        sourceProposedPlan && sourceThread
-          ? sourceThread.proposedPlans.find((entry) => entry.id === sourceProposedPlan.planId)
+        sourceProposedPlan && sourceWorkspace
+          ? sourceWorkspace.proposedPlans.find((entry) => entry.id === sourceProposedPlan.planId)
           : null;
       if (sourceProposedPlan && !sourcePlan) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Proposed plan '${sourceProposedPlan.planId}' does not exist on thread '${sourceProposedPlan.threadId}'.`,
+          detail: `Proposed plan '${sourceProposedPlan.planId}' does not exist on workspace '${sourceProposedPlan.workspaceId}'.`,
         });
       }
-      if (sourceThread && sourceThread.projectId !== targetThread.projectId) {
+      if (sourceWorkspace && sourceWorkspace.projectId !== targetWorkspace.projectId) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to thread '${sourceThread.id}' in a different project.`,
+          detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to workspace '${sourceWorkspace.id}' in a different project.`,
         });
       }
       const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.message-sent",
+        type: "workspace.message-sent",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           messageId: command.message.messageId,
           role: "user",
           text: command.message.text,
@@ -362,22 +362,22 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
       const turnStartRequestedEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
         causationEventId: userMessageEvent.eventId,
-        type: "thread.turn-start-requested",
+        type: "workspace.turn-start-requested",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           messageId: command.message.messageId,
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
             : {}),
           ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
-          runtimeMode: targetThread.runtimeMode,
-          interactionMode: targetThread.interactionMode,
+          runtimeMode: targetWorkspace.runtimeMode,
+          interactionMode: targetWorkspace.interactionMode,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
           createdAt: command.createdAt,
         },
@@ -385,47 +385,47 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       return [userMessageEvent, turnStartRequestedEvent];
     }
 
-    case "thread.turn.interrupt": {
-      yield* requireThread({
+    case "workspace.turn.interrupt": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.turn-interrupt-requested",
+        type: "workspace.turn-interrupt-requested",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           ...(command.turnId !== undefined ? { turnId: command.turnId } : {}),
           createdAt: command.createdAt,
         },
       };
     }
 
-    case "thread.approval.respond": {
-      yield* requireThread({
+    case "workspace.approval.respond": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {
             requestId: command.requestId,
           },
         }),
-        type: "thread.approval-response-requested",
+        type: "workspace.approval-response-requested",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           requestId: command.requestId,
           decision: command.decision,
           createdAt: command.createdAt,
@@ -433,25 +433,25 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.user-input.respond": {
-      yield* requireThread({
+    case "workspace.user-input.respond": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {
             requestId: command.requestId,
           },
         }),
-        type: "thread.user-input-response-requested",
+        type: "workspace.user-input-response-requested",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           requestId: command.requestId,
           answers: command.answers,
           createdAt: command.createdAt,
@@ -459,87 +459,87 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.checkpoint.revert": {
-      yield* requireThread({
+    case "workspace.checkpoint.revert": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.checkpoint-revert-requested",
+        type: "workspace.checkpoint-revert-requested",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           turnCount: command.turnCount,
           createdAt: command.createdAt,
         },
       };
     }
 
-    case "thread.session.stop": {
-      yield* requireThread({
+    case "workspace.session.stop": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.session-stop-requested",
+        type: "workspace.session-stop-requested",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           createdAt: command.createdAt,
         },
       };
     }
 
-    case "thread.session.set": {
-      yield* requireThread({
+    case "workspace.session.set": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {},
         }),
-        type: "thread.session-set",
+        type: "workspace.session-set",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           session: command.session,
         },
       };
     }
 
-    case "thread.message.assistant.delta": {
-      yield* requireThread({
+    case "workspace.message.assistant.delta": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.message-sent",
+        type: "workspace.message-sent",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           messageId: command.messageId,
           role: "assistant",
           text: command.delta,
@@ -551,22 +551,22 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.message.assistant.complete": {
-      yield* requireThread({
+    case "workspace.message.assistant.complete": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.message-sent",
+        type: "workspace.message-sent",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           messageId: command.messageId,
           role: "assistant",
           text: "",
@@ -578,43 +578,43 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.proposed-plan.upsert": {
-      yield* requireThread({
+    case "workspace.proposed-plan.upsert": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.proposed-plan-upserted",
+        type: "workspace.proposed-plan-upserted",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           proposedPlan: command.proposedPlan,
         },
       };
     }
 
-    case "thread.turn.diff.complete": {
-      yield* requireThread({
+    case "workspace.turn.diff.complete": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.turn-diff-completed",
+        type: "workspace.turn-diff-completed",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           turnId: command.turnId,
           checkpointTurnCount: command.checkpointTurnCount,
           checkpointRef: command.checkpointRef,
@@ -626,32 +626,32 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.revert.complete": {
-      yield* requireThread({
+    case "workspace.revert.complete": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.reverted",
+        type: "workspace.reverted",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           turnCount: command.turnCount,
         },
       };
     }
 
-    case "thread.activity.append": {
-      yield* requireThread({
+    case "workspace.activity.append": {
+      yield* requireWorkspace({
         readModel,
         command,
-        threadId: command.threadId,
+        workspaceId: command.workspaceId,
       });
       const requestId =
         typeof command.activity.payload === "object" &&
@@ -663,15 +663,15 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           : undefined;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "workspace",
+          aggregateId: command.workspaceId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           ...(requestId !== undefined ? { metadata: { requestId } } : {}),
         }),
-        type: "thread.activity-appended",
+        type: "workspace.activity-appended",
         payload: {
-          threadId: command.threadId,
+          workspaceId: command.workspaceId,
           activity: command.activity,
         },
       };

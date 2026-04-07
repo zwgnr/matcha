@@ -47,11 +47,11 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedLocal.command, "chat.newLocal");
 
-    const parsedThreadPrevious = yield* decode(KeybindingRule, {
+    const parsedWorkspacePrevious = yield* decode(KeybindingRule, {
       key: "mod+shift+[",
-      command: "thread.previous",
+      command: "workspace.previous",
     });
-    assert.strictEqual(parsedThreadPrevious.command, "thread.previous");
+    assert.strictEqual(parsedWorkspacePrevious.command, "workspace.previous");
   }),
 );
 
@@ -127,7 +127,7 @@ it.effect("parses resolved keybindings arrays", () =>
         },
       },
       {
-        command: "thread.jump.3",
+        command: "workspace.jump.3",
         shortcut: {
           key: "3",
           metaKey: false,

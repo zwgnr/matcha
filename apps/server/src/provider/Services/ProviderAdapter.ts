@@ -16,7 +16,7 @@ import type {
   ProviderSendTurnInput,
   ProviderSession,
   ProviderSessionStartInput,
-  ThreadId,
+  WorkspaceId,
   ProviderTurnStartResult,
   TurnId,
 } from "@matcha/contracts";
@@ -32,14 +32,14 @@ export interface ProviderAdapterCapabilities {
   readonly sessionModelSwitch: ProviderSessionModelSwitchMode;
 }
 
-export interface ProviderThreadTurnSnapshot {
+export interface ProviderWorkspaceTurnSnapshot {
   readonly id: TurnId;
   readonly items: ReadonlyArray<unknown>;
 }
 
-export interface ProviderThreadSnapshot {
-  readonly threadId: ThreadId;
-  readonly turns: ReadonlyArray<ProviderThreadTurnSnapshot>;
+export interface ProviderWorkspaceSnapshot {
+  readonly workspaceId: WorkspaceId;
+  readonly turns: ReadonlyArray<ProviderWorkspaceTurnSnapshot>;
 }
 
 export interface ProviderAdapterShape<TError> {
@@ -66,13 +66,16 @@ export interface ProviderAdapterShape<TError> {
   /**
    * Interrupt an active turn.
    */
-  readonly interruptTurn: (threadId: ThreadId, turnId?: TurnId) => Effect.Effect<void, TError>;
+  readonly interruptTurn: (
+    workspaceId: WorkspaceId,
+    turnId?: TurnId,
+  ) => Effect.Effect<void, TError>;
 
   /**
    * Respond to an interactive approval request.
    */
   readonly respondToRequest: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
   ) => Effect.Effect<void, TError>;
@@ -81,7 +84,7 @@ export interface ProviderAdapterShape<TError> {
    * Respond to a structured user-input request.
    */
   readonly respondToUserInput: (
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     requestId: ApprovalRequestId,
     answers: ProviderUserInputAnswers,
   ) => Effect.Effect<void, TError>;
@@ -89,7 +92,7 @@ export interface ProviderAdapterShape<TError> {
   /**
    * Stop one provider session.
    */
-  readonly stopSession: (threadId: ThreadId) => Effect.Effect<void, TError>;
+  readonly stopSession: (workspaceId: WorkspaceId) => Effect.Effect<void, TError>;
 
   /**
    * List currently active provider sessions for this adapter.
@@ -99,20 +102,22 @@ export interface ProviderAdapterShape<TError> {
   /**
    * Check whether this adapter owns an active session id.
    */
-  readonly hasSession: (threadId: ThreadId) => Effect.Effect<boolean>;
+  readonly hasSession: (workspaceId: WorkspaceId) => Effect.Effect<boolean>;
 
   /**
-   * Read a provider thread snapshot.
+   * Read a provider workspace snapshot.
    */
-  readonly readThread: (threadId: ThreadId) => Effect.Effect<ProviderThreadSnapshot, TError>;
+  readonly readWorkspace: (
+    workspaceId: WorkspaceId,
+  ) => Effect.Effect<ProviderWorkspaceSnapshot, TError>;
 
   /**
-   * Roll back a provider thread by N turns.
+   * Roll back a provider workspace by N turns.
    */
-  readonly rollbackThread: (
-    threadId: ThreadId,
+  readonly rollbackWorkspace: (
+    workspaceId: WorkspaceId,
     numTurns: number,
-  ) => Effect.Effect<ProviderThreadSnapshot, TError>;
+  ) => Effect.Effect<ProviderWorkspaceSnapshot, TError>;
 
   /**
    * Stop all sessions owned by this adapter.

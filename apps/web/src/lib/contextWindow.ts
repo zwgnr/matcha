@@ -1,4 +1,7 @@
-import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@matcha/contracts";
+import type {
+  OrchestrationWorkspaceActivity,
+  WorkspaceTokenUsageSnapshot,
+} from "@matcha/contracts";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -13,9 +16,9 @@ function asBoolean(value: unknown): boolean | null {
 }
 
 type NullableContextWindowUsage = {
-  readonly [Key in keyof ThreadTokenUsageSnapshot]: undefined extends ThreadTokenUsageSnapshot[Key]
-    ? Exclude<ThreadTokenUsageSnapshot[Key], undefined> | null
-    : ThreadTokenUsageSnapshot[Key];
+  readonly [Key in keyof WorkspaceTokenUsageSnapshot]: undefined extends WorkspaceTokenUsageSnapshot[Key]
+    ? Exclude<WorkspaceTokenUsageSnapshot[Key], undefined> | null
+    : WorkspaceTokenUsageSnapshot[Key];
 };
 
 export type ContextWindowSnapshot = NullableContextWindowUsage & {
@@ -26,7 +29,7 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
 };
 
 export function deriveLatestContextWindowSnapshot(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationWorkspaceActivity>,
 ): ContextWindowSnapshot | null {
   for (let index = activities.length - 1; index >= 0; index -= 1) {
     const activity = activities[index];

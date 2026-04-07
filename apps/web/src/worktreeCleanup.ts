@@ -1,4 +1,4 @@
-import type { Thread } from "./types";
+import type { Workspace } from "./types";
 
 function normalizeWorktreePath(path: string | null): string | null {
   const trimmed = path?.trim();
@@ -8,25 +8,25 @@ function normalizeWorktreePath(path: string | null): string | null {
   return trimmed;
 }
 
-export function getOrphanedWorktreePathForThread(
-  threads: readonly Thread[],
-  threadId: Thread["id"],
+export function getOrphanedWorktreePathForWorkspace(
+  workspaces: readonly Workspace[],
+  workspaceId: Workspace["id"],
 ): string | null {
-  const targetThread = threads.find((thread) => thread.id === threadId);
-  if (!targetThread) {
+  const targetWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
+  if (!targetWorkspace) {
     return null;
   }
 
-  const targetWorktreePath = normalizeWorktreePath(targetThread.worktreePath);
+  const targetWorktreePath = normalizeWorktreePath(targetWorkspace.worktreePath);
   if (!targetWorktreePath) {
     return null;
   }
 
-  const isShared = threads.some((thread) => {
-    if (thread.id === threadId) {
+  const isShared = workspaces.some((workspace) => {
+    if (workspace.id === workspaceId) {
       return false;
     }
-    return normalizeWorktreePath(thread.worktreePath) === targetWorktreePath;
+    return normalizeWorktreePath(workspace.worktreePath) === targetWorktreePath;
   });
 
   return isShared ? null : targetWorktreePath;

@@ -18,20 +18,21 @@ import Migration0002 from "./Migrations/002_OrchestrationCommandReceipts.ts";
 import Migration0003 from "./Migrations/003_CheckpointDiffBlobs.ts";
 import Migration0004 from "./Migrations/004_ProviderSessionRuntime.ts";
 import Migration0005 from "./Migrations/005_Projections.ts";
-import Migration0006 from "./Migrations/006_ProjectionThreadSessionRuntimeModeColumns.ts";
-import Migration0007 from "./Migrations/007_ProjectionThreadMessageAttachments.ts";
-import Migration0008 from "./Migrations/008_ProjectionThreadActivitySequence.ts";
+import Migration0006 from "./Migrations/006_ProjectionWorkspaceSessionRuntimeModeColumns.ts";
+import Migration0007 from "./Migrations/007_ProjectionWorkspaceMessageAttachments.ts";
+import Migration0008 from "./Migrations/008_ProjectionWorkspaceActivitySequence.ts";
 import Migration0009 from "./Migrations/009_ProviderSessionRuntimeMode.ts";
-import Migration0010 from "./Migrations/010_ProjectionThreadsRuntimeMode.ts";
-import Migration0011 from "./Migrations/011_OrchestrationThreadCreatedRuntimeMode.ts";
-import Migration0012 from "./Migrations/012_ProjectionThreadsInteractionMode.ts";
-import Migration0013 from "./Migrations/013_ProjectionThreadProposedPlans.ts";
-import Migration0014 from "./Migrations/014_ProjectionThreadProposedPlanImplementation.ts";
+import Migration0010 from "./Migrations/010_ProjectionWorkspacesRuntimeMode.ts";
+import Migration0011 from "./Migrations/011_OrchestrationWorkspaceCreatedRuntimeMode.ts";
+import Migration0012 from "./Migrations/012_ProjectionWorkspacesInteractionMode.ts";
+import Migration0013 from "./Migrations/013_ProjectionWorkspaceProposedPlans.ts";
+import Migration0014 from "./Migrations/014_ProjectionWorkspaceProposedPlanImplementation.ts";
 import Migration0015 from "./Migrations/015_ProjectionTurnsSourceProposedPlan.ts";
 import Migration0016 from "./Migrations/016_CanonicalizeModelSelections.ts";
-import Migration0017 from "./Migrations/017_ProjectionThreadsArchivedAt.ts";
-import Migration0018 from "./Migrations/018_ProjectionThreadsArchivedAtIndex.ts";
+import Migration0017 from "./Migrations/017_ProjectionWorkspacesArchivedAt.ts";
+import Migration0018 from "./Migrations/018_ProjectionWorkspacesArchivedAtIndex.ts";
 import Migration0019 from "./Migrations/019_ProjectionSnapshotLookupIndexes.ts";
+import Migration0020 from "./Migrations/020_ResetForWorkspaceRename.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -49,20 +50,21 @@ export const migrationEntries = [
   [3, "CheckpointDiffBlobs", Migration0003],
   [4, "ProviderSessionRuntime", Migration0004],
   [5, "Projections", Migration0005],
-  [6, "ProjectionThreadSessionRuntimeModeColumns", Migration0006],
-  [7, "ProjectionThreadMessageAttachments", Migration0007],
-  [8, "ProjectionThreadActivitySequence", Migration0008],
+  [6, "ProjectionWorkspaceSessionRuntimeModeColumns", Migration0006],
+  [7, "ProjectionWorkspaceMessageAttachments", Migration0007],
+  [8, "ProjectionWorkspaceActivitySequence", Migration0008],
   [9, "ProviderSessionRuntimeMode", Migration0009],
-  [10, "ProjectionThreadsRuntimeMode", Migration0010],
-  [11, "OrchestrationThreadCreatedRuntimeMode", Migration0011],
-  [12, "ProjectionThreadsInteractionMode", Migration0012],
-  [13, "ProjectionThreadProposedPlans", Migration0013],
-  [14, "ProjectionThreadProposedPlanImplementation", Migration0014],
+  [10, "ProjectionWorkspacesRuntimeMode", Migration0010],
+  [11, "OrchestrationWorkspaceCreatedRuntimeMode", Migration0011],
+  [12, "ProjectionWorkspacesInteractionMode", Migration0012],
+  [13, "ProjectionWorkspaceProposedPlans", Migration0013],
+  [14, "ProjectionWorkspaceProposedPlanImplementation", Migration0014],
   [15, "ProjectionTurnsSourceProposedPlan", Migration0015],
   [16, "CanonicalizeModelSelections", Migration0016],
-  [17, "ProjectionThreadsArchivedAt", Migration0017],
-  [18, "ProjectionThreadsArchivedAtIndex", Migration0018],
+  [17, "ProjectionWorkspacesArchivedAt", Migration0017],
+  [18, "ProjectionWorkspacesArchivedAtIndex", Migration0018],
   [19, "ProjectionSnapshotLookupIndexes", Migration0019],
+  [20, "ResetForWorkspaceRename", Migration0020],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

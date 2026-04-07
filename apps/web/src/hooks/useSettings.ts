@@ -14,7 +14,7 @@ import {
   ServerSettings,
   ServerSettingsPatch,
   ModelSelection,
-  ThreadEnvMode,
+  WorkspaceEnvMode,
 } from "@matcha/contracts";
 import {
   type ClientSettings,
@@ -22,7 +22,7 @@ import {
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_UNIFIED_SETTINGS,
   SidebarProjectSortOrder,
-  SidebarThreadSortOrder,
+  SidebarWorkspaceSortOrder,
   TimestampFormat,
   UnifiedSettings,
 } from "@matcha/contracts/settings";
@@ -140,8 +140,8 @@ export function buildLegacyServerSettingsMigrationPatch(legacySettings: Record<s
     patch.enableAssistantStreaming = legacySettings.enableAssistantStreaming;
   }
 
-  if (Schema.is(ThreadEnvMode)(legacySettings.defaultThreadEnvMode)) {
-    patch.defaultThreadEnvMode = legacySettings.defaultThreadEnvMode;
+  if (Schema.is(WorkspaceEnvMode)(legacySettings.defaultWorkspaceEnvMode)) {
+    patch.defaultWorkspaceEnvMode = legacySettings.defaultWorkspaceEnvMode;
   }
 
   if (Schema.is(ModelSelection)(legacySettings.textGenerationModelSelection)) {
@@ -194,12 +194,12 @@ export function buildLegacyClientSettingsMigrationPatch(
 ): Partial<DeepMutable<ClientSettings>> {
   const patch: Partial<DeepMutable<ClientSettings>> = {};
 
-  if (Predicate.isBoolean(legacySettings.confirmThreadArchive)) {
-    patch.confirmThreadArchive = legacySettings.confirmThreadArchive;
+  if (Predicate.isBoolean(legacySettings.confirmWorkspaceArchive)) {
+    patch.confirmWorkspaceArchive = legacySettings.confirmWorkspaceArchive;
   }
 
-  if (Predicate.isBoolean(legacySettings.confirmThreadDelete)) {
-    patch.confirmThreadDelete = legacySettings.confirmThreadDelete;
+  if (Predicate.isBoolean(legacySettings.confirmWorkspaceDelete)) {
+    patch.confirmWorkspaceDelete = legacySettings.confirmWorkspaceDelete;
   }
 
   if (Predicate.isBoolean(legacySettings.diffWordWrap)) {
@@ -210,8 +210,8 @@ export function buildLegacyClientSettingsMigrationPatch(
     patch.sidebarProjectSortOrder = legacySettings.sidebarProjectSortOrder;
   }
 
-  if (Schema.is(SidebarThreadSortOrder)(legacySettings.sidebarThreadSortOrder)) {
-    patch.sidebarThreadSortOrder = legacySettings.sidebarThreadSortOrder;
+  if (Schema.is(SidebarWorkspaceSortOrder)(legacySettings.sidebarWorkspaceSortOrder)) {
+    patch.sidebarWorkspaceSortOrder = legacySettings.sidebarWorkspaceSortOrder;
   }
 
   if (Schema.is(TimestampFormat)(legacySettings.timestampFormat)) {

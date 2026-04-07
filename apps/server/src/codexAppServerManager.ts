@@ -9,7 +9,7 @@ import {
   ProviderItemId,
   ProviderRequestKind,
   type ProviderUserInputAnswers,
-  ThreadId,
+  WorkspaceId,
   TurnId,
   type ProviderApprovalDecision,
   type ProviderEvent,
@@ -53,7 +53,7 @@ interface PendingApprovalRequest {
     | "item/fileChange/requestApproval"
     | "item/fileRead/requestApproval";
   requestKind: ProviderRequestKind;
-  threadId: ThreadId;
+  workspaceId: WorkspaceId;
   turnId?: TurnId;
   itemId?: ProviderItemId;
 }
@@ -61,7 +61,7 @@ interface PendingApprovalRequest {
 interface PendingUserInputRequest {
   requestId: ApprovalRequestId;
   jsonRpcId: string | number;
-  threadId: ThreadId;
+  workspaceId: WorkspaceId;
   turnId?: TurnId;
   itemId?: ProviderItemId;
 }
@@ -106,7 +106,7 @@ interface JsonRpcNotification {
 }
 
 export interface CodexAppServerSendTurnInput {
-  readonly threadId: ThreadId;
+  readonly workspaceId: WorkspaceId;
   readonly input?: string;
   readonly attachments?: ReadonlyArray<{ type: "image"; url: string }>;
   readonly model?: string;
@@ -116,7 +116,7 @@ export interface CodexAppServerSendTurnInput {
 }
 
 export interface CodexAppServerStartSessionInput {
-  readonly threadId: ThreadId;
+  readonly workspaceId: WorkspaceId;
   readonly provider?: "codex";
   readonly cwd?: string;
   readonly model?: string;
@@ -127,14 +127,14 @@ export interface CodexAppServerStartSessionInput {
   readonly runtimeMode: RuntimeMode;
 }
 
-export interface CodexThreadTurnSnapshot {
+export interface CodexWorkspaceTurnSnapshot {
   id: TurnId;
   items: unknown[];
 }
 
-export interface CodexThreadSnapshot {
-  threadId: string;
-  turns: CodexThreadTurnSnapshot[];
+export interface CodexWorkspaceSnapshot {
+  workspaceId: string;
+  turns: CodexWorkspaceTurnSnapshot[];
 }
 
 const CODEX_VERSION_CHECK_TIMEOUT_MS = 4_000;
@@ -144,14 +144,14 @@ const ANSI_ESCAPE_REGEX = new RegExp(`${ANSI_ESCAPE_CHAR}\\[[0-9;]*m`, "g");
 const CODEX_STDERR_LOG_REGEX =
   /^\d{4}-\d{2}-\d{2}T\S+\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+\S+:\s+(.*)$/;
 const BENIGN_ERROR_LOG_SNIPPETS = [
-  "state db missing rollout path for thread",
-  "state db record_discrepancy: find_thread_path_by_id_str_in_subdir, falling_back",
+  "state db missing rollout path for workspace",
+  "state db record_discrepancy: find_workspace_path_by_id_str_in_subdir, falling_back",
 ];
-const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
+const RECOVERABLE_WORKSPACE_RESUME_ERROR_SNIPPETS = [
   "not found",
-  "missing thread",
-  "no such thread",
-  "unknown thread",
+  "missing workspace",
+  "no such workspace",
+  "unknown workspace",
   "does not exist",
 ];
 export const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Plan Mode (Conversational)
@@ -331,6 +331,28 @@ export function normalizeCodexModelSlug(
   return normalized;
 }
 
+function readExternalThreadId(record: Record<string, unknown> | undefined): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  const threadRecord =
+    typeof record.thread === "object" && record.thread !== null
+      ? (record.thread as Record<string, unknown>)
+      : undefined;
+  const workspaceRecord =
+    typeof record.workspace === "object" && record.workspace !== null
+      ? (record.workspace as Record<string, unknown>)
+      : undefined;
+
+  return (
+    (typeof threadRecord?.id === "string" ? threadRecord.id : undefined) ??
+    (typeof workspaceRecord?.id === "string" ? workspaceRecord.id : undefined) ??
+    (typeof record.threadId === "string" ? record.threadId : undefined) ??
+    (typeof record.workspaceId === "string" ? record.workspaceId : undefined)
+  );
+}
+
 function buildCodexCollaborationMode(input: {
   readonly interactionMode?: "default" | "plan";
   readonly model?: string;
@@ -416,13 +438,13 @@ export function classifyCodexStderrLine(rawLine: string): { message: string } | 
   return { message: line };
 }
 
-export function isRecoverableThreadResumeError(error: unknown): boolean {
+export function isRecoverableWorkspaceResumeError(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
   if (!message.includes("thread/resume")) {
     return false;
   }
 
-  return RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS.some((snippet) => message.includes(snippet));
+  return RECOVERABLE_WORKSPACE_RESUME_ERROR_SNIPPETS.some((snippet) => message.includes(snippet));
 }
 
 export interface CodexAppServerManagerEvents {
@@ -430,7 +452,7 @@ export interface CodexAppServerManagerEvents {
 }
 
 export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEvents> {
-  private readonly sessions = new Map<ThreadId, CodexSessionContext>();
+  private readonly sessions = new Map<WorkspaceId, CodexSessionContext>();
 
   private runPromise: (effect: Effect.Effect<unknown, never>) => Promise<unknown>;
   constructor(services?: ServiceMap.ServiceMap<never>) {
@@ -439,7 +461,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   async startSession(input: CodexAppServerStartSessionInput): Promise<ProviderSession> {
-    const threadId = input.threadId;
+    const workspaceId = input.workspaceId;
     const now = new Date().toISOString();
     let context: CodexSessionContext | undefined;
 
@@ -452,7 +474,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         runtimeMode: input.runtimeMode,
         model: normalizeCodexModelSlug(input.model),
         cwd: resolvedCwd,
-        threadId,
+        workspaceId,
         createdAt: now,
         updatedAt: now,
       };
@@ -492,7 +514,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         stopping: false,
       };
 
-      this.sessions.set(threadId, context);
+      this.sessions.set(workspaceId, context);
       this.attachProcessListeners(context);
 
       this.emitLifecycleEvent(context, "session/connecting", "Starting codex app-server");
@@ -530,98 +552,108 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         ...mapCodexRuntimeMode(input.runtimeMode ?? "full-access"),
       };
 
-      const threadStartParams = {
+      const workspaceStartParams = {
         ...sessionOverrides,
         experimentalRawEvents: false,
       };
-      const resumeThreadId = readResumeThreadId(input);
+      const resumeWorkspaceId = readResumeWorkspaceId(input);
       this.emitLifecycleEvent(
         context,
-        "session/threadOpenRequested",
-        resumeThreadId
-          ? `Attempting to resume thread ${resumeThreadId}.`
-          : "Starting a new Codex thread.",
+        "session/workspaceOpenRequested",
+        resumeWorkspaceId
+          ? `Attempting to resume workspace ${resumeWorkspaceId}.`
+          : "Starting a new Codex workspace.",
       );
-      await Effect.logInfo("codex app-server opening thread", {
-        threadId,
+      await Effect.logInfo("codex app-server opening workspace", {
+        workspaceId,
         requestedRuntimeMode: input.runtimeMode,
         requestedModel: normalizedModel ?? null,
         requestedCwd: resolvedCwd,
-        resumeThreadId: resumeThreadId ?? null,
+        resumeWorkspaceId: resumeWorkspaceId ?? null,
       }).pipe(this.runPromise);
 
-      let threadOpenMethod: "thread/start" | "thread/resume" = "thread/start";
-      let threadOpenResponse: unknown;
-      if (resumeThreadId) {
+      let workspaceOpenMethod: "thread/start" | "thread/resume" = "thread/start";
+      let workspaceOpenResponse: unknown;
+      if (resumeWorkspaceId) {
         try {
-          threadOpenMethod = "thread/resume";
-          threadOpenResponse = await this.sendRequest(context, "thread/resume", {
+          workspaceOpenMethod = "thread/resume";
+          workspaceOpenResponse = await this.sendRequest(context, "thread/resume", {
             ...sessionOverrides,
-            threadId: resumeThreadId,
+            threadId: resumeWorkspaceId,
           });
         } catch (error) {
-          if (!isRecoverableThreadResumeError(error)) {
+          if (!isRecoverableWorkspaceResumeError(error)) {
             this.emitErrorEvent(
               context,
-              "session/threadResumeFailed",
-              error instanceof Error ? error.message : "Codex thread resume failed.",
+              "session/workspaceResumeFailed",
+              error instanceof Error ? error.message : "Codex workspace resume failed.",
             );
-            await Effect.logWarning("codex app-server thread resume failed", {
-              threadId,
+            await Effect.logWarning("codex app-server workspace resume failed", {
+              workspaceId,
               requestedRuntimeMode: input.runtimeMode,
-              resumeThreadId,
+              resumeWorkspaceId,
               recoverable: false,
               cause: error instanceof Error ? error.message : String(error),
             }).pipe(this.runPromise);
             throw error;
           }
 
-          threadOpenMethod = "thread/start";
+          workspaceOpenMethod = "thread/start";
           this.emitLifecycleEvent(
             context,
-            "session/threadResumeFallback",
-            `Could not resume thread ${resumeThreadId}; started a new thread instead.`,
+            "session/workspaceResumeFallback",
+            `Could not resume workspace ${resumeWorkspaceId}; started a new workspace instead.`,
           );
-          await Effect.logWarning("codex app-server thread resume fell back to fresh start", {
-            threadId,
+          await Effect.logWarning("codex app-server workspace resume fell back to fresh start", {
+            workspaceId,
             requestedRuntimeMode: input.runtimeMode,
-            resumeThreadId,
+            resumeWorkspaceId,
             recoverable: true,
             cause: error instanceof Error ? error.message : String(error),
           }).pipe(this.runPromise);
-          threadOpenResponse = await this.sendRequest(context, "thread/start", threadStartParams);
+          workspaceOpenResponse = await this.sendRequest(
+            context,
+            "thread/start",
+            workspaceStartParams,
+          );
         }
       } else {
-        threadOpenMethod = "thread/start";
-        threadOpenResponse = await this.sendRequest(context, "thread/start", threadStartParams);
+        workspaceOpenMethod = "thread/start";
+        workspaceOpenResponse = await this.sendRequest(
+          context,
+          "thread/start",
+          workspaceStartParams,
+        );
       }
 
-      const threadOpenRecord = this.readObject(threadOpenResponse);
-      const threadIdRaw =
-        this.readString(this.readObject(threadOpenRecord, "thread"), "id") ??
-        this.readString(threadOpenRecord, "threadId");
-      if (!threadIdRaw) {
-        throw new Error(`${threadOpenMethod} response did not include a thread id.`);
+      const workspaceOpenRecord = this.readObject(workspaceOpenResponse);
+      const workspaceIdRaw = readExternalThreadId(workspaceOpenRecord);
+      if (!workspaceIdRaw) {
+        throw new Error(`${workspaceOpenMethod} response did not include a workspace id.`);
       }
-      const providerThreadId = threadIdRaw;
+      const providerWorkspaceId = workspaceIdRaw;
 
       this.updateSession(context, {
         status: "ready",
-        resumeCursor: { threadId: providerThreadId },
+        resumeCursor: { workspaceId: providerWorkspaceId },
       });
       this.emitLifecycleEvent(
         context,
-        "session/threadOpenResolved",
-        `Codex ${threadOpenMethod} resolved.`,
+        "session/workspaceOpenResolved",
+        `Codex ${workspaceOpenMethod} resolved.`,
       );
-      await Effect.logInfo("codex app-server thread open resolved", {
-        threadId,
-        threadOpenMethod,
-        requestedResumeThreadId: resumeThreadId ?? null,
-        resolvedThreadId: providerThreadId,
+      await Effect.logInfo("codex app-server workspace open resolved", {
+        workspaceId,
+        workspaceOpenMethod,
+        requestedResumeWorkspaceId: resumeWorkspaceId ?? null,
+        resolvedWorkspaceId: providerWorkspaceId,
         requestedRuntimeMode: input.runtimeMode,
       }).pipe(this.runPromise);
-      this.emitLifecycleEvent(context, "session/ready", `Connected to thread ${providerThreadId}`);
+      this.emitLifecycleEvent(
+        context,
+        "session/ready",
+        `Connected to workspace ${providerWorkspaceId}`,
+      );
       return { ...context.session };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to start Codex session.";
@@ -631,13 +663,13 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
           lastError: message,
         });
         this.emitErrorEvent(context, "session/startFailed", message);
-        this.stopSession(threadId);
+        this.stopSession(workspaceId);
       } else {
         this.emitEvent({
           id: EventId.makeUnsafe(randomUUID()),
           kind: "error",
           provider: "codex",
-          threadId,
+          workspaceId,
           createdAt: new Date().toISOString(),
           method: "session/startFailed",
           message,
@@ -648,7 +680,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   async sendTurn(input: CodexAppServerSendTurnInput): Promise<ProviderTurnStartResult> {
-    const context = this.requireSession(input.threadId);
+    const context = this.requireSession(input.workspaceId);
     context.collabReceiverTurns.clear();
 
     const turnInput: Array<
@@ -673,13 +705,13 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       throw new Error("Turn input must include text or attachments.");
     }
 
-    const providerThreadId = readResumeThreadId({
-      threadId: context.session.threadId,
+    const providerWorkspaceId = readResumeWorkspaceId({
+      workspaceId: context.session.workspaceId,
       runtimeMode: context.session.runtimeMode,
       resumeCursor: context.session.resumeCursor,
     });
-    if (!providerThreadId) {
-      throw new Error("Session is missing provider resume thread id.");
+    if (!providerWorkspaceId) {
+      throw new Error("Session is missing provider resume workspace id.");
     }
     const turnStartParams: {
       threadId: string;
@@ -698,7 +730,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         };
       };
     } = {
-      threadId: providerThreadId,
+      threadId: providerWorkspaceId,
       input: turnInput,
     };
     const normalizedModel = resolveCodexModelForAccount(
@@ -744,7 +776,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
 
     return {
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       turnId,
       ...(context.session.resumeCursor !== undefined
         ? { resumeCursor: context.session.resumeCursor }
@@ -752,74 +784,77 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     };
   }
 
-  async interruptTurn(threadId: ThreadId, turnId?: TurnId): Promise<void> {
-    const context = this.requireSession(threadId);
+  async interruptTurn(workspaceId: WorkspaceId, turnId?: TurnId): Promise<void> {
+    const context = this.requireSession(workspaceId);
     const effectiveTurnId = turnId ?? context.session.activeTurnId;
 
-    const providerThreadId = readResumeThreadId({
-      threadId: context.session.threadId,
+    const providerWorkspaceId = readResumeWorkspaceId({
+      workspaceId: context.session.workspaceId,
       runtimeMode: context.session.runtimeMode,
       resumeCursor: context.session.resumeCursor,
     });
-    if (!effectiveTurnId || !providerThreadId) {
+    if (!effectiveTurnId || !providerWorkspaceId) {
       return;
     }
 
     await this.sendRequest(context, "turn/interrupt", {
-      threadId: providerThreadId,
+      threadId: providerWorkspaceId,
       turnId: effectiveTurnId,
     });
   }
 
-  async readThread(threadId: ThreadId): Promise<CodexThreadSnapshot> {
-    const context = this.requireSession(threadId);
-    const providerThreadId = readResumeThreadId({
-      threadId: context.session.threadId,
+  async readWorkspace(workspaceId: WorkspaceId): Promise<CodexWorkspaceSnapshot> {
+    const context = this.requireSession(workspaceId);
+    const providerWorkspaceId = readResumeWorkspaceId({
+      workspaceId: context.session.workspaceId,
       runtimeMode: context.session.runtimeMode,
       resumeCursor: context.session.resumeCursor,
     });
-    if (!providerThreadId) {
-      throw new Error("Session is missing a provider resume thread id.");
+    if (!providerWorkspaceId) {
+      throw new Error("Session is missing a provider resume workspace id.");
     }
 
     const response = await this.sendRequest(context, "thread/read", {
-      threadId: providerThreadId,
+      threadId: providerWorkspaceId,
       includeTurns: true,
     });
-    return this.parseThreadSnapshot("thread/read", response);
+    return this.parseWorkspaceSnapshot("thread/read", response);
   }
 
-  async rollbackThread(threadId: ThreadId, numTurns: number): Promise<CodexThreadSnapshot> {
-    const context = this.requireSession(threadId);
-    const providerThreadId = readResumeThreadId({
-      threadId: context.session.threadId,
+  async rollbackWorkspace(
+    workspaceId: WorkspaceId,
+    numTurns: number,
+  ): Promise<CodexWorkspaceSnapshot> {
+    const context = this.requireSession(workspaceId);
+    const providerWorkspaceId = readResumeWorkspaceId({
+      workspaceId: context.session.workspaceId,
       runtimeMode: context.session.runtimeMode,
       resumeCursor: context.session.resumeCursor,
     });
-    if (!providerThreadId) {
-      throw new Error("Session is missing a provider resume thread id.");
+    if (!providerWorkspaceId) {
+      throw new Error("Session is missing a provider resume workspace id.");
     }
     if (!Number.isInteger(numTurns) || numTurns < 1) {
       throw new Error("numTurns must be an integer >= 1.");
     }
 
     const response = await this.sendRequest(context, "thread/rollback", {
-      threadId: providerThreadId,
+      threadId: providerWorkspaceId,
       numTurns,
     });
     this.updateSession(context, {
       status: "ready",
       activeTurnId: undefined,
     });
-    return this.parseThreadSnapshot("thread/rollback", response);
+    return this.parseWorkspaceSnapshot("thread/rollback", response);
   }
 
   async respondToRequest(
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
   ): Promise<void> {
-    const context = this.requireSession(threadId);
+    const context = this.requireSession(workspaceId);
     const pendingRequest = context.pendingApprovals.get(requestId);
     if (!pendingRequest) {
       throw new Error(`Unknown pending approval request: ${requestId}`);
@@ -837,7 +872,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "notification",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method: "item/requestApproval/decision",
       turnId: pendingRequest.turnId,
@@ -853,11 +888,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   async respondToUserInput(
-    threadId: ThreadId,
+    workspaceId: WorkspaceId,
     requestId: ApprovalRequestId,
     answers: ProviderUserInputAnswers,
   ): Promise<void> {
-    const context = this.requireSession(threadId);
+    const context = this.requireSession(workspaceId);
     const pendingRequest = context.pendingUserInputs.get(requestId);
     if (!pendingRequest) {
       throw new Error(`Unknown pending user input request: ${requestId}`);
@@ -876,7 +911,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "notification",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method: "item/tool/requestUserInput/answered",
       turnId: pendingRequest.turnId,
@@ -889,8 +924,8 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
   }
 
-  stopSession(threadId: ThreadId): void {
-    const context = this.sessions.get(threadId);
+  stopSession(workspaceId: WorkspaceId): void {
+    const context = this.sessions.get(workspaceId);
     if (!context) {
       return;
     }
@@ -916,7 +951,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       activeTurnId: undefined,
     });
     this.emitLifecycleEvent(context, "session/closed", "Session stopped");
-    this.sessions.delete(threadId);
+    this.sessions.delete(workspaceId);
   }
 
   listSessions(): ProviderSession[] {
@@ -925,24 +960,24 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }));
   }
 
-  hasSession(threadId: ThreadId): boolean {
-    return this.sessions.has(threadId);
+  hasSession(workspaceId: WorkspaceId): boolean {
+    return this.sessions.has(workspaceId);
   }
 
   stopAll(): void {
-    for (const threadId of this.sessions.keys()) {
-      this.stopSession(threadId);
+    for (const workspaceId of this.sessions.keys()) {
+      this.stopSession(workspaceId);
     }
   }
 
-  private requireSession(threadId: ThreadId): CodexSessionContext {
-    const context = this.sessions.get(threadId);
+  private requireSession(workspaceId: WorkspaceId): CodexSessionContext {
+    const context = this.sessions.get(workspaceId);
     if (!context) {
-      throw new Error(`Unknown session for thread: ${threadId}`);
+      throw new Error(`Unknown session for workspace: ${workspaceId}`);
     }
 
     if (context.session.status === "closed") {
-      throw new Error(`Session is closed for thread: ${threadId}`);
+      throw new Error(`Session is closed for workspace: ${workspaceId}`);
     }
 
     return context;
@@ -987,7 +1022,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         lastError: code === 0 ? context.session.lastError : message,
       });
       this.emitLifecycleEvent(context, "session/exited", message);
-      this.sessions.delete(context.session.threadId);
+      this.sessions.delete(context.session.workspaceId);
     });
   }
 
@@ -1058,7 +1093,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "notification",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method: notification.method,
       ...((childParentTurnId ?? rawRoute.turnId)
@@ -1070,11 +1105,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
 
     if (notification.method === "thread/started") {
-      const providerThreadId = normalizeProviderThreadId(
-        this.readString(this.readObject(notification.params)?.thread, "id"),
+      const providerWorkspaceId = normalizeProviderWorkspaceId(
+        readExternalThreadId(this.readObject(notification.params)),
       );
-      if (providerThreadId) {
-        this.updateSession(context, { resumeCursor: { threadId: providerThreadId } });
+      if (providerWorkspaceId) {
+        this.updateSession(context, { resumeCursor: { workspaceId: providerWorkspaceId } });
       }
       return;
     }
@@ -1139,7 +1174,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
               ? "item/fileRead/requestApproval"
               : "item/fileChange/requestApproval",
         requestKind,
-        threadId: context.session.threadId,
+        workspaceId: context.session.workspaceId,
         ...(effectiveTurnId ? { turnId: effectiveTurnId } : {}),
         ...(rawRoute.itemId ? { itemId: rawRoute.itemId } : {}),
       };
@@ -1151,7 +1186,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       context.pendingUserInputs.set(requestId, {
         requestId,
         jsonRpcId: request.id,
-        threadId: context.session.threadId,
+        workspaceId: context.session.workspaceId,
         ...(effectiveTurnId ? { turnId: effectiveTurnId } : {}),
         ...(rawRoute.itemId ? { itemId: rawRoute.itemId } : {}),
       });
@@ -1161,7 +1196,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "request",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method: request.method,
       ...(effectiveTurnId ? { turnId: effectiveTurnId } : {}),
@@ -1251,7 +1286,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "session",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method,
       message,
@@ -1263,7 +1298,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "error",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method,
       message,
@@ -1279,7 +1314,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "notification",
       provider: "codex",
-      threadId: context.session.threadId,
+      workspaceId: context.session.workspaceId,
       createdAt: new Date().toISOString(),
       method,
       message,
@@ -1322,19 +1357,19 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     return undefined;
   }
 
-  private parseThreadSnapshot(method: string, response: unknown): CodexThreadSnapshot {
+  private parseWorkspaceSnapshot(method: string, response: unknown): CodexWorkspaceSnapshot {
     const responseRecord = this.readObject(response);
-    const thread = this.readObject(responseRecord, "thread");
-    const threadIdRaw =
-      this.readString(thread, "id") ?? this.readString(responseRecord, "threadId");
-    if (!threadIdRaw) {
-      throw new Error(`${method} response did not include a thread id.`);
+    const workspace =
+      this.readObject(responseRecord, "thread") ?? this.readObject(responseRecord, "workspace");
+    const workspaceIdRaw = readExternalThreadId(responseRecord);
+    if (!workspaceIdRaw) {
+      throw new Error(`${method} response did not include a workspace id.`);
     }
     const turnsRaw =
-      this.readArray(thread, "turns") ?? this.readArray(responseRecord, "turns") ?? [];
+      this.readArray(workspace, "turns") ?? this.readArray(responseRecord, "turns") ?? [];
     const turns = turnsRaw.map((turnValue, index) => {
       const turn = this.readObject(turnValue);
-      const turnIdRaw = this.readString(turn, "id") ?? `${threadIdRaw}:turn:${index + 1}`;
+      const turnIdRaw = this.readString(turn, "id") ?? `${workspaceIdRaw}:turn:${index + 1}`;
       const turnId = TurnId.makeUnsafe(turnIdRaw);
       const items = this.readArray(turn, "items") ?? [];
       return {
@@ -1344,7 +1379,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
 
     return {
-      threadId: threadIdRaw,
+      workspaceId: workspaceIdRaw,
       turns,
     };
   }
@@ -1412,6 +1447,8 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     return (
       this.readString(params, "threadId") ??
       this.readString(this.readObject(params, "thread"), "id") ??
+      this.readString(params, "workspaceId") ??
+      this.readString(this.readObject(params, "workspace"), "id") ??
       this.readString(params, "conversationId")
     );
   }
@@ -1439,12 +1476,12 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       return;
     }
 
-    const receiverThreadIds =
-      this.readArray(item, "receiverThreadIds")
+    const receiverWorkspaceIds =
+      this.readArray(item, "receiverWorkspaceIds")
         ?.map((value) => (typeof value === "string" ? value : null))
         .filter((value): value is string => value !== null) ?? [];
-    for (const receiverThreadId of receiverThreadIds) {
-      context.collabReceiverTurns.set(receiverThreadId, parentTurnId);
+    for (const receiverWorkspaceId of receiverWorkspaceIds) {
+      context.collabReceiverTurns.set(receiverWorkspaceId, parentTurnId);
     }
   }
 
@@ -1518,7 +1555,7 @@ function brandIfNonEmpty<T extends string>(
   return normalized?.length ? maker(normalized) : undefined;
 }
 
-function normalizeProviderThreadId(value: string | undefined): string | undefined {
+function normalizeProviderWorkspaceId(value: string | undefined): string | undefined {
   return brandIfNonEmpty(value, (normalized) => normalized);
 }
 
@@ -1567,20 +1604,22 @@ function assertSupportedCodexCliVersion(input: {
   }
 }
 
-function readResumeCursorThreadId(resumeCursor: unknown): string | undefined {
+function readResumeCursorWorkspaceId(resumeCursor: unknown): string | undefined {
   if (!resumeCursor || typeof resumeCursor !== "object" || Array.isArray(resumeCursor)) {
     return undefined;
   }
-  const rawThreadId = (resumeCursor as Record<string, unknown>).threadId;
-  return typeof rawThreadId === "string" ? normalizeProviderThreadId(rawThreadId) : undefined;
+  const rawWorkspaceId = (resumeCursor as Record<string, unknown>).workspaceId;
+  return typeof rawWorkspaceId === "string"
+    ? normalizeProviderWorkspaceId(rawWorkspaceId)
+    : undefined;
 }
 
-function readResumeThreadId(input: {
+function readResumeWorkspaceId(input: {
   readonly resumeCursor?: unknown;
-  readonly threadId?: ThreadId;
+  readonly workspaceId?: WorkspaceId;
   readonly runtimeMode?: RuntimeMode;
 }): string | undefined {
-  return readResumeCursorThreadId(input.resumeCursor);
+  return readResumeCursorWorkspaceId(input.resumeCursor);
 }
 
 function toTurnId(value: string | undefined): TurnId | undefined {

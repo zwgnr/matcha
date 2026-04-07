@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { NonNegativeInt, PositiveInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas";
+import { NonNegativeInt, PositiveInt, WorkspaceId, TrimmedNonEmptyString } from "./baseSchemas";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const GIT_LIST_BRANCHES_MAX_LIMIT = 200;
@@ -43,7 +43,7 @@ const GitPrStepStatus = Schema.Literals(["created", "opened_existing", "skipped_
 const GitStatusPrState = Schema.Literals(["open", "closed", "merged"]);
 const GitPullRequestReference = TrimmedNonEmptyStringSchema;
 const GitPullRequestState = Schema.Literals(["open", "closed", "merged"]);
-const GitPreparePullRequestThreadMode = Schema.Literals(["local", "worktree"]);
+const GitPreparePullRequestWorkspaceMode = Schema.Literals(["local", "worktree"]);
 export const GitRunStackedActionToastRunAction = Schema.Struct({
   kind: GitStackedAction,
 });
@@ -143,13 +143,13 @@ export const GitPullRequestRefInput = Schema.Struct({
 });
 export type GitPullRequestRefInput = typeof GitPullRequestRefInput.Type;
 
-export const GitPreparePullRequestThreadInput = Schema.Struct({
+export const GitPreparePullRequestWorkspaceInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   reference: GitPullRequestReference,
-  mode: GitPreparePullRequestThreadMode,
-  threadId: Schema.optional(ThreadId),
+  mode: GitPreparePullRequestWorkspaceMode,
+  workspaceId: Schema.optional(WorkspaceId),
 });
-export type GitPreparePullRequestThreadInput = typeof GitPreparePullRequestThreadInput.Type;
+export type GitPreparePullRequestWorkspaceInput = typeof GitPreparePullRequestWorkspaceInput.Type;
 
 export const GitRemoveWorktreeInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
@@ -229,12 +229,12 @@ export const GitResolvePullRequestResult = Schema.Struct({
 });
 export type GitResolvePullRequestResult = typeof GitResolvePullRequestResult.Type;
 
-export const GitPreparePullRequestThreadResult = Schema.Struct({
+export const GitPreparePullRequestWorkspaceResult = Schema.Struct({
   pullRequest: GitResolvedPullRequest,
   branch: TrimmedNonEmptyStringSchema,
   worktreePath: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
-export type GitPreparePullRequestThreadResult = typeof GitPreparePullRequestThreadResult.Type;
+export type GitPreparePullRequestWorkspaceResult = typeof GitPreparePullRequestWorkspaceResult.Type;
 
 export const GitRunStackedActionResult = Schema.Struct({
   action: GitStackedAction,

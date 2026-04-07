@@ -1469,9 +1469,9 @@ it.layer(TestLayer)("git integration", (it) => {
     );
   });
 
-  // ── Full flow: thread switching simulation ──
+  // ── Full flow: workspace switching simulation ──
 
-  describe("full flow: thread switching (checkout toggling)", () => {
+  describe("full flow: workspace switching (checkout toggling)", () => {
     it.effect("checkout a → checkout b → checkout a → current matches", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
@@ -1479,17 +1479,17 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* (yield* GitCore).createBranch({ cwd: tmp, branch: "branch-a" });
         yield* (yield* GitCore).createBranch({ cwd: tmp, branch: "branch-b" });
 
-        // Simulate switching to thread A's branch
+        // Simulate switching to workspace A's branch
         yield* (yield* GitCore).checkoutBranch({ cwd: tmp, branch: "branch-a" });
         let branches = yield* (yield* GitCore).listBranches({ cwd: tmp });
         expect(branches.branches.find((b) => b.current)!.name).toBe("branch-a");
 
-        // Simulate switching to thread B's branch
+        // Simulate switching to workspace B's branch
         yield* (yield* GitCore).checkoutBranch({ cwd: tmp, branch: "branch-b" });
         branches = yield* (yield* GitCore).listBranches({ cwd: tmp });
         expect(branches.branches.find((b) => b.current)!.name).toBe("branch-b");
 
-        // Switch back to thread A
+        // Switch back to workspace A
         yield* (yield* GitCore).checkoutBranch({ cwd: tmp, branch: "branch-a" });
         branches = yield* (yield* GitCore).listBranches({ cwd: tmp });
         expect(branches.branches.find((b) => b.current)!.name).toBe("branch-a");

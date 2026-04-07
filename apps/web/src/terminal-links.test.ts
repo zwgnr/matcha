@@ -9,7 +9,7 @@ import {
 describe("extractTerminalLinks", () => {
   it("finds http urls and path tokens", () => {
     const line =
-      "failed at https://example.com/docs and src/components/ThreadTerminalDrawer.tsx:42";
+      "failed at https://example.com/docs and src/components/WorkspaceTerminalDrawer.tsx:42";
     expect(extractTerminalLinks(line)).toEqual([
       {
         kind: "url",
@@ -19,7 +19,7 @@ describe("extractTerminalLinks", () => {
       },
       {
         kind: "path",
-        text: "src/components/ThreadTerminalDrawer.tsx:42",
+        text: "src/components/WorkspaceTerminalDrawer.tsx:42",
         start: 39,
         end: 81,
       },
@@ -75,10 +75,10 @@ describe("resolvePathLinkTarget", () => {
   it("resolves relative paths against cwd", () => {
     expect(
       resolvePathLinkTarget(
-        "src/components/ThreadTerminalDrawer.tsx:42:7",
+        "src/components/WorkspaceTerminalDrawer.tsx:42:7",
         "/Users/julius/project",
       ),
-    ).toBe("/Users/julius/project/src/components/ThreadTerminalDrawer.tsx:42:7");
+    ).toBe("/Users/julius/project/src/components/WorkspaceTerminalDrawer.tsx:42:7");
   });
 
   it("keeps absolute paths unchanged", () => {
