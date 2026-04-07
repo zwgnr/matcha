@@ -21,7 +21,7 @@ describe("extractTerminalLinks", () => {
         kind: "path",
         text: "src/components/WorkspaceTerminalDrawer.tsx:42",
         start: 39,
-        end: 81,
+        end: 84,
       },
     ]);
   });
