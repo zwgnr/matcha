@@ -85,6 +85,7 @@ import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewWorkspace } from "../hooks/useHandleNewWorkspace";
 import { NewWorkspaceDialog, type NewWorkspaceResult } from "./NewWorkspaceDialog";
+import { buildNewWorkspaceWorktreeBranchName } from "../worktree";
 
 import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
 import { toastManager } from "./ui/toast";
@@ -115,7 +116,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar";
@@ -1095,12 +1095,29 @@ export default function Sidebar() {
     async (result: NewWorkspaceResult) => {
       const api = readNativeApi();
       if (!api) return;
+      const project = projects.find((entry) => entry.id === result.projectId);
+      if (!project) {
+        throw new Error("Project not found.");
+      }
 
       const store = useComposerDraftStore.getState();
       const workspaceId = newWorkspaceId();
       const createdAt = new Date().toISOString();
       const title = result.name || "New workspace";
       const modelSelection = { provider: result.provider, model: result.model };
+      let worktreePath: string | null = null;
+      let branch = result.branch;
+
+      if (result.createWorktree) {
+        const worktree = await api.git.createWorktree({
+          cwd: project.cwd,
+          branch: result.branch ?? "HEAD",
+          newBranch: buildNewWorkspaceWorktreeBranchName(result.name),
+          path: null,
+        });
+        branch = worktree.worktree.branch;
+        worktreePath = worktree.worktree.path;
+      }
 
       // Create the workspace server-side so it appears in the sidebar immediately.
       await api.orchestration.dispatchCommand({
@@ -1112,8 +1129,8 @@ export default function Sidebar() {
         modelSelection,
         runtimeMode: DEFAULT_RUNTIME_MODE,
         interactionMode: "default",
-        branch: result.branch,
-        worktreePath: null,
+        branch,
+        worktreePath,
         createdAt,
       });
 
@@ -1121,9 +1138,9 @@ export default function Sidebar() {
       store.upsertDraftWorkspace(workspaceId, {
         projectId: result.projectId,
         createdAt,
-        branch: result.branch,
-        worktreePath: null,
-        envMode: appSettings.defaultWorkspaceEnvMode,
+        branch,
+        worktreePath,
+        envMode: worktreePath ? "worktree" : "local",
         runtimeMode: DEFAULT_RUNTIME_MODE,
       });
       store.setModelSelection(workspaceId, modelSelection);
@@ -1139,7 +1156,7 @@ export default function Sidebar() {
         params: { workspaceId },
       });
     },
-    [appSettings.defaultWorkspaceEnvMode, navigate],
+    [navigate, projects],
   );
 
   const newWorkspaceDialogProject = newWorkspaceDialogProjectId
@@ -2398,7 +2415,6 @@ export default function Sidebar() {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarSeparator />
           <SidebarFooter className="p-2">
             <SidebarUpdatePill />
             <SidebarMenu>
@@ -2420,6 +2436,7 @@ export default function Sidebar() {
         open={newWorkspaceDialogProjectId !== null}
         projectId={newWorkspaceDialogProjectId}
         projectName={newWorkspaceDialogProject?.name ?? null}
+        defaultCreateWorktree={appSettings.defaultWorkspaceEnvMode === "worktree"}
         onOpenChange={(open) => {
           if (!open) setNewWorkspaceDialogProjectId(null);
         }}

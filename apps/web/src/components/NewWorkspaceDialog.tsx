@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { Switch } from "./ui/switch";
 
 const PROVIDER_ICON: Record<string, Icon> = {
   codex: OpenAI,
@@ -32,12 +33,14 @@ export interface NewWorkspaceResult {
   model: string;
   branch: string | null;
   name: string;
+  createWorktree: boolean;
 }
 
 interface NewWorkspaceDialogProps {
   open: boolean;
   projectId: ProjectId | null;
   projectName: string | null;
+  defaultCreateWorktree?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (result: NewWorkspaceResult) => Promise<void> | void;
 }
@@ -46,6 +49,7 @@ export function NewWorkspaceDialog({
   open,
   projectId,
   projectName,
+  defaultCreateWorktree = false,
   onOpenChange,
   onConfirm,
 }: NewWorkspaceDialogProps) {
@@ -53,6 +57,7 @@ export function NewWorkspaceDialog({
   const [provider, setProvider] = useState<ProviderKind>("codex");
   const [branch, setBranch] = useState("");
   const [name, setName] = useState("");
+  const [createWorktree, setCreateWorktree] = useState(defaultCreateWorktree);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,9 +66,10 @@ export function NewWorkspaceDialog({
     setProvider("codex");
     setBranch("");
     setName("");
+    setCreateWorktree(defaultCreateWorktree);
     setError(null);
     setIsCreating(false);
-  }, [open]);
+  }, [defaultCreateWorktree, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,6 +90,7 @@ export function NewWorkspaceDialog({
         model: DEFAULT_MODEL_BY_PROVIDER[provider],
         branch: branch.trim() || null,
         name: name.trim(),
+        createWorktree,
       });
       onOpenChange(false);
     } catch (err) {
@@ -91,7 +98,7 @@ export function NewWorkspaceDialog({
     } finally {
       setIsCreating(false);
     }
-  }, [projectId, provider, branch, name, onConfirm, onOpenChange]);
+  }, [projectId, provider, branch, name, createWorktree, onConfirm, onOpenChange]);
 
   return (
     <Dialog
@@ -176,14 +183,33 @@ export function NewWorkspaceDialog({
             />
           </label>
 
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/24 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Create worktree</p>
+              <p className="text-xs text-muted-foreground">
+                Open this workspace in a dedicated git worktree.
+              </p>
+            </div>
+            <Switch
+              checked={createWorktree}
+              onCheckedChange={(checked) => {
+                setCreateWorktree(Boolean(checked));
+                setError(null);
+              }}
+              disabled={isCreating}
+              aria-label="Create a dedicated worktree for this workspace"
+            />
+          </div>
+
           {/* Branch name (optional) */}
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-foreground">
-              Branch <span className="font-normal text-muted-foreground">(optional)</span>
+              {createWorktree ? "Base branch" : "Branch"}{" "}
+              <span className="font-normal text-muted-foreground">(optional)</span>
             </span>
             <Input
               value={branch}
-              placeholder="main"
+              placeholder={createWorktree ? "Current HEAD" : "main"}
               onChange={(event) => setBranch(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !isCreating) {

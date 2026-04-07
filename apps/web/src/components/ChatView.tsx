@@ -182,7 +182,6 @@ import { WorkspaceErrorBanner } from "./chat/WorkspaceErrorBanner";
 import {
   buildExpiredTerminalContextToastCopy,
   buildLocalDraftWorkspace,
-  buildTemporaryWorktreeBranchName,
   cloneComposerImageForRetry,
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
@@ -197,6 +196,7 @@ import {
   revokeUserMessagePreviewUrls,
   waitForStartedServerWorkspace,
 } from "./ChatView.logic";
+import { buildTemporaryWorktreeBranchName } from "../worktree";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import {
   useServerAvailableEditors,

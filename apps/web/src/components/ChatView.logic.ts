@@ -5,7 +5,6 @@ import {
   type Workspace,
   type WorkspaceSession,
 } from "../types";
-import { randomUUID } from "~/lib/utils";
 import { type ComposerImageAttachment, type DraftWorkspaceState } from "../composerDraftStore";
 import { Schema } from "effect";
 import { useStore } from "../store";
@@ -17,7 +16,6 @@ import {
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "matcha:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_WORKSPACES = 10;
-const WORKTREE_BRANCH_PREFIX = "matcha";
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
@@ -132,12 +130,6 @@ export function readFileAsDataUrl(file: File): Promise<string> {
     });
     reader.readAsDataURL(file);
   });
-}
-
-export function buildTemporaryWorktreeBranchName(): string {
-  // Keep the 8-hex suffix shape for backend temporary-branch detection.
-  const token = randomUUID().slice(0, 8).toLowerCase();
-  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
 }
 
 export function cloneComposerImageForRetry(
