@@ -660,7 +660,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     matchaCommitHash: commitHash,
     private: true,
     description: "Matcha desktop build",
-    author: "T3 Tools",
+    author: "zwgnr",
     main: "apps/desktop/dist-electron/main.js",
     build: yield* createBuildConfig(
       options.platform,

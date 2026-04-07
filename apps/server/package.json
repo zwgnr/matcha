@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pingdotgg/matcha",
+    "url": "https://github.com/zwgnr/matcha",
     "directory": "apps/server"
   },
   "bin": {

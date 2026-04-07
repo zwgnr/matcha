@@ -19,25 +19,13 @@ npx matcha
 
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/matcha/releases), or from your favorite package registry:
+Download the latest `.dmg` from [GitHub Releases](https://github.com/zwgnr/matcha/releases).
 
-#### Windows (`winget`)
-
-```bash
-winget install Matcha.Matcha
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask matcha
-```
-
-#### Arch Linux (AUR)
-
-```bash
-yay -S matcha-bin
-```
+> [!NOTE]
+> The app is not code-signed. On first launch, macOS will block it. To fix this:
+>
+> 1. Right-click the app and select **Open**, then confirm
+> 2. Or run: `xattr -cr /Applications/Matcha.app`
 
 ## Some notes
 
