@@ -79,7 +79,7 @@ export function getWsConnectionUiState(status: WsConnectionStatus): WsConnection
   }
 
   if (!status.hasConnected) {
-    return status.phase === "disconnected" && status.attemptCount > 0 ? "error" : "connecting";
+    return status.phase === "disconnected" && status.attemptCount > 5 ? "error" : "connecting";
   }
 
   return "reconnecting";
