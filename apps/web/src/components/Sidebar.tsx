@@ -141,8 +141,31 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import { useSidebarWorkspaceSummaryById } from "../storeSelectors";
-import type { Project } from "../types";
+import type { Project, SidebarWorkspaceSummary } from "../types";
+import type { WorkspaceStatusPill } from "./Sidebar.logic";
 const WORKSPACE_PREVIEW_LIMIT = 6;
+
+/**
+ * Collect status pills for a root workspace and its child provider workspaces.
+ * Used by both per-workspace row status and project-level status aggregation.
+ */
+function collectWorkspaceStatusPills(
+  rootStatus: WorkspaceStatusPill | null,
+  childWorkspaceIds: readonly WorkspaceId[] | undefined,
+  sidebarWorkspacesById: Record<string, SidebarWorkspaceSummary>,
+): (WorkspaceStatusPill | null)[] {
+  if (!childWorkspaceIds || childWorkspaceIds.length === 0) return [rootStatus];
+  const statuses: (WorkspaceStatusPill | null)[] = [rootStatus];
+  for (const childId of childWorkspaceIds) {
+    const childWs = sidebarWorkspacesById[childId];
+    statuses.push(
+      childWs
+        ? resolveWorkspaceStatusPill({ workspace: { ...childWs, lastVisitedAt: undefined } })
+        : null,
+    );
+  }
+  return statuses;
+}
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -293,7 +316,10 @@ interface SidebarWorkspaceRowProps {
   attemptArchiveWorkspace: (workspaceId: WorkspaceId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   pr: WorkspacePr | null;
+  childWorkspaceIds: readonly WorkspaceId[];
 }
+
+const EMPTY_CHILD_WORKSPACE_IDS: readonly WorkspaceId[] = [];
 
 function SidebarWorkspaceRow(props: SidebarWorkspaceRowProps) {
   const workspace = useSidebarWorkspaceSummaryById(props.workspaceId);
@@ -305,6 +331,15 @@ function SidebarWorkspaceRow(props: SidebarWorkspaceRowProps) {
       selectWorkspaceTerminalState(state.terminalStateByWorkspaceId, props.workspaceId)
         .runningTerminalIds,
   );
+  const childWorkspaceSummaries = useStore(
+    useShallow((state) =>
+      props.childWorkspaceIds.length === 0
+        ? []
+        : props.childWorkspaceIds
+            .map((id) => state.sidebarWorkspacesById[id])
+            .filter((ws): ws is NonNullable<typeof ws> => ws !== undefined),
+    ),
+  );
 
   if (!workspace) {
     return null;
@@ -313,14 +348,28 @@ function SidebarWorkspaceRow(props: SidebarWorkspaceRowProps) {
   const isActive = props.routeWorkspaceId === workspace.id;
   const isSelected = props.selectedWorkspaceIds.has(workspace.id);
   const isHighlighted = isActive || isSelected;
-  const isWorkspaceRunning =
+  const rootRunning =
     workspace.session?.status === "running" && workspace.session.activeTurnId != null;
-  const workspaceStatus = resolveWorkspaceStatusPill({
+  const isWorkspaceRunning =
+    rootRunning ||
+    childWorkspaceSummaries.some(
+      (child) => child.session?.status === "running" && child.session.activeTurnId != null,
+    );
+  const rootStatus = resolveWorkspaceStatusPill({
     workspace: {
       ...workspace,
       lastVisitedAt,
     },
   });
+  const workspaceStatus =
+    childWorkspaceSummaries.length === 0
+      ? rootStatus
+      : resolveProjectStatusIndicator([
+          rootStatus,
+          ...childWorkspaceSummaries.map((child) =>
+            resolveWorkspaceStatusPill({ workspace: { ...child, lastVisitedAt: undefined } }),
+          ),
+        ]);
   const prStatus = prStatusIndicator(props.pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive =
@@ -780,20 +829,26 @@ export default function Sidebar() {
       })),
     [orderedProjects, projectExpandedById],
   );
-  const hiddenChildProviderWorkspaceIds = useMemo(() => {
-    const ids = new Set<WorkspaceId>();
+  const { hiddenChildProviderWorkspaceIds, childWorkspaceIdsByRootId } = useMemo(() => {
+    const hiddenIds = new Set<WorkspaceId>();
+    const childMap = new Map<WorkspaceId, WorkspaceId[]>();
     for (const [workspaceWorkspaceId, tabState] of Object.entries(tabStateByWorkspaceWorkspaceId)) {
+      const childIds: WorkspaceId[] = [];
       for (const tab of tabState.tabs) {
         if (
           tab.kind === "provider" &&
           tab.workspaceId &&
           tab.workspaceId !== workspaceWorkspaceId
         ) {
-          ids.add(tab.workspaceId);
+          hiddenIds.add(tab.workspaceId);
+          childIds.push(tab.workspaceId);
         }
       }
+      if (childIds.length > 0) {
+        childMap.set(workspaceWorkspaceId as WorkspaceId, childIds);
+      }
     }
-    return ids;
+    return { hiddenChildProviderWorkspaceIds: hiddenIds, childWorkspaceIdsByRootId: childMap };
   }, [tabStateByWorkspaceWorkspaceId]);
   const visibleWorkspaceIdsByProjectId = useMemo(
     () =>
@@ -1561,7 +1616,13 @@ export default function Sidebar() {
           appSettings.sidebarWorkspaceSortOrder,
         );
         const projectStatus = resolveProjectStatusIndicator(
-          projectWorkspaces.map((workspace) => resolveProjectWorkspaceStatus(workspace)),
+          projectWorkspaces.flatMap((workspace) =>
+            collectWorkspaceStatusPills(
+              resolveProjectWorkspaceStatus(workspace),
+              childWorkspaceIdsByRootId.get(workspace.id),
+              sidebarWorkspacesById,
+            ),
+          ),
         );
         const activeWorkspaceId = effectiveRouteWorkspaceId ?? undefined;
         const isWorkspaceListExpanded = expandedWorkspaceListsByProject.has(project.id);
@@ -1581,7 +1642,13 @@ export default function Sidebar() {
           previewLimit: WORKSPACE_PREVIEW_LIMIT,
         });
         const hiddenWorkspaceStatus = resolveProjectStatusIndicator(
-          hiddenWorkspaces.map((workspace) => resolveProjectWorkspaceStatus(workspace)),
+          hiddenWorkspaces.flatMap((workspace) =>
+            collectWorkspaceStatusPills(
+              resolveProjectWorkspaceStatus(workspace),
+              childWorkspaceIdsByRootId.get(workspace.id),
+              sidebarWorkspacesById,
+            ),
+          ),
         );
         const orderedProjectWorkspaceIds = projectWorkspaces.map((workspace) => workspace.id);
         const renderedWorkspaceIds = pinnedCollapsedWorkspace
@@ -1603,6 +1670,7 @@ export default function Sidebar() {
       }),
     [
       appSettings.sidebarWorkspaceSortOrder,
+      childWorkspaceIdsByRootId,
       effectiveRouteWorkspaceId,
       expandedWorkspaceListsByProject,
       sortedProjects,
@@ -1880,6 +1948,9 @@ export default function Sidebar() {
                 attemptArchiveWorkspace={attemptArchiveWorkspace}
                 openPrLink={openPrLink}
                 pr={prByWorkspaceId.get(workspaceId) ?? null}
+                childWorkspaceIds={
+                  childWorkspaceIdsByRootId.get(workspaceId) ?? EMPTY_CHILD_WORKSPACE_IDS
+                }
               />
             ))}
 
