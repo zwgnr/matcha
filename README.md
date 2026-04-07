@@ -25,7 +25,7 @@ Download the latest `.dmg` from [GitHub Releases](https://github.com/zwgnr/match
 > The app is not code-signed. On first launch, macOS will block it. To fix this:
 >
 > 1. Right-click the app and select **Open**, then confirm
-> 2. Or run: `xattr -cr /Applications/Matcha.app`
+> 2. Or run: `xattr -cr "/Applications/Matcha (Alpha).app"`
 
 ## Some notes
 

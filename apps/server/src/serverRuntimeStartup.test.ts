@@ -1,13 +1,7 @@
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Option, Ref } from "effect";
+import { Deferred, Effect, Fiber, Ref } from "effect";
 
-import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
-import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
-import {
-  launchStartupHeartbeat,
-  makeCommandGate,
-  ServerRuntimeStartupError,
-} from "./serverRuntimeStartup.ts";
+import { makeCommandGate, ServerRuntimeStartupError } from "./serverRuntimeStartup.ts";
 
 it.effect("enqueueCommand waits for readiness and then drains queued work", () =>
   Effect.scoped(
@@ -53,30 +47,3 @@ it.effect("enqueueCommand fails queued work when readiness fails", () =>
   ),
 );
 
-it.effect("launchStartupHeartbeat does not block the caller while counts are loading", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const releaseCounts = yield* Deferred.make<void, never>();
-
-      yield* launchStartupHeartbeat.pipe(
-        Effect.provideService(ProjectionSnapshotQuery, {
-          getSnapshot: () => Effect.die("unused"),
-          getCounts: () =>
-            Deferred.await(releaseCounts).pipe(
-              Effect.as({
-                projectCount: 2,
-                workspaceCount: 3,
-              }),
-            ),
-          getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
-          getFirstActiveWorkspaceIdByProjectId: () => Effect.succeed(Option.none()),
-          getWorkspaceCheckpointContext: () => Effect.succeed(Option.none()),
-        }),
-        Effect.provideService(AnalyticsService, {
-          record: () => Effect.void,
-          flush: Effect.void,
-        }),
-      );
-    }),
-  ),
-);

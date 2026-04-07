@@ -13,7 +13,7 @@ import { websocketRpcRouteLayer } from "./ws";
 import { OpenLive } from "./open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./serverLifecycleEvents";
-import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
+import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
@@ -199,7 +199,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProjectFaviconResolverLive),
 
   // Misc.
-  Layer.provideMerge(AnalyticsServiceLayerLive),
+  Layer.provideMerge(AnalyticsService.layerTest),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
 );
