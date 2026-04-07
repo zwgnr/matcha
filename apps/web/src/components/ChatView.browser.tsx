@@ -2583,7 +2583,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     useWorkspaceTabStore.setState({
       tabStateByWorkspaceWorkspaceId: {
         [WORKSPACE_ID]: {
-          tabs: [{ id: "terminal-tab-1", kind: "terminal", label: "Terminal" }],
+          tabs: [
+            { id: "terminal-tab-1", kind: "terminal", terminalId: "default", label: "Terminal" },
+          ],
           activeTabId: "terminal-tab-1",
         },
       },

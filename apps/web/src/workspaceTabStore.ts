@@ -23,6 +23,8 @@ export interface WorkspaceTab {
   workspaceId?: WorkspaceId;
   /** Provider type — only set when `kind === "provider"`. */
   provider?: ProviderKind;
+  /** Terminal session ID — only set when `kind === "terminal"`. */
+  terminalId?: string;
   label: string;
 }
 
@@ -35,7 +37,7 @@ export interface WorkspaceTabState {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "matcha:workspace-tabs:v2";
+const STORAGE_KEY = "matcha:workspace-tabs:v3";
 
 let nextId = 1;
 function generateTabId(): string {
@@ -57,12 +59,18 @@ export function makeProviderTab(provider: ProviderKind, workspaceId: WorkspaceId
   };
 }
 
-export function makeTerminalTab(): WorkspaceTab {
+export function makeTerminalTab(terminalId: string, label?: string): WorkspaceTab {
   return {
     id: generateTabId(),
     kind: "terminal",
-    label: "Terminal",
+    terminalId,
+    label: label ?? "Terminal",
   };
+}
+
+export function nextTerminalTabLabel(tabs: WorkspaceTab[]): string {
+  const terminalTabs = tabs.filter((t) => t.kind === "terminal");
+  return `Terminal ${terminalTabs.length + 1}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +89,10 @@ interface WorkspaceTabStoreState {
     workspaceWorkspaceId: WorkspaceId,
     workspaceId: WorkspaceId,
   ) => WorkspaceTab | undefined;
-  findTerminalTab: (workspaceWorkspaceId: WorkspaceId) => WorkspaceTab | undefined;
+  findTerminalTabByTerminalId: (
+    workspaceWorkspaceId: WorkspaceId,
+    terminalId: string,
+  ) => WorkspaceTab | undefined;
   findWorkspaceWorkspaceIdByProviderWorkspaceId: (workspaceId: WorkspaceId) => WorkspaceId | null;
 }
 
@@ -162,9 +173,9 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
         return current?.tabs.find((t) => t.kind === "provider" && t.workspaceId === workspaceId);
       },
 
-      findTerminalTab: (workspaceWorkspaceId) => {
+      findTerminalTabByTerminalId: (workspaceWorkspaceId, terminalId) => {
         const current = get().tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
-        return current?.tabs.find((t) => t.kind === "terminal");
+        return current?.tabs.find((t) => t.kind === "terminal" && t.terminalId === terminalId);
       },
 
       findWorkspaceWorkspaceIdByProviderWorkspaceId: (workspaceId) => {

@@ -705,9 +705,6 @@ export default function Sidebar() {
   const getDraftWorkspaceByProjectId = useComposerDraftStore(
     (store) => store.getDraftWorkspaceByProjectId,
   );
-  const terminalStateByWorkspaceId = useTerminalStateStore(
-    (state) => state.terminalStateByWorkspaceId,
-  );
   const tabStateByWorkspaceWorkspaceId = useWorkspaceTabStore(
     (store) => store.tabStateByWorkspaceWorkspaceId,
   );
@@ -819,9 +816,13 @@ export default function Sidebar() {
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
   );
-  const routeTerminalOpen = routeWorkspaceId
-    ? selectWorkspaceTerminalState(terminalStateByWorkspaceId, routeWorkspaceId).terminalOpen
-    : false;
+  const routeTerminalOpen = useMemo(() => {
+    if (!routeWorkspaceId) return false;
+    const tabState = tabStateByWorkspaceWorkspaceId[routeWorkspaceId];
+    if (!tabState) return false;
+    const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
+    return activeTab?.kind === "terminal";
+  }, [routeWorkspaceId, tabStateByWorkspaceWorkspaceId]);
   const sidebarShortcutLabelOptions = useMemo(
     () => ({
       platform,

@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { useHandleNewWorkspace } from "../hooks/useHandleNewWorkspace";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { resolveShortcutCommand } from "../keybindings";
-import { selectWorkspaceTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useWorkspaceSelectionStore } from "../workspaceSelectionStore";
+import { useWorkspaceTabStore } from "../workspaceTabStore";
 import { resolveSidebarNewWorkspaceEnvMode } from "~/components/Sidebar.logic";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
@@ -23,12 +23,13 @@ function ChatRouteGlobalShortcuts() {
     routeWorkspaceId,
   } = useHandleNewWorkspace();
   const keybindings = useServerKeybindings();
-  const terminalOpen = useTerminalStateStore((state) =>
-    routeWorkspaceId
-      ? selectWorkspaceTerminalState(state.terminalStateByWorkspaceId, routeWorkspaceId)
-          .terminalOpen
-      : false,
-  );
+  const terminalOpen = useWorkspaceTabStore((state) => {
+    if (!routeWorkspaceId) return false;
+    const tabState = state.tabStateByWorkspaceWorkspaceId[routeWorkspaceId];
+    if (!tabState) return false;
+    const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
+    return activeTab?.kind === "terminal";
+  });
   const appSettings = useSettings();
 
   useEffect(() => {

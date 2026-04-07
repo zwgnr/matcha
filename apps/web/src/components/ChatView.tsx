@@ -77,7 +77,6 @@ import {
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
-  DEFAULT_WORKSPACE_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
   type SessionPhase,
@@ -125,7 +124,7 @@ import {
   resolveSelectableProvider,
 } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
-import { resolveAppModelSelection } from "../modelSelection";
+import { getCustomModelOptionsByProvider, resolveAppModelSelection } from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   type ComposerImageAttachment,
@@ -157,11 +156,12 @@ import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ContextWindowMeter } from "./chat/ContextWindowMeter";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./chat/ExpandedImagePreview";
-import { AVAILABLE_PROVIDER_OPTIONS } from "./chat/ProviderModelPicker";
+import { AVAILABLE_PROVIDER_OPTIONS, ProviderModelPicker } from "./chat/ProviderModelPicker";
 import { WorkspaceTabBar } from "./chat/WorkspaceTabBar";
 import {
   makeProviderTab,
   makeTerminalTab,
+  nextTerminalTabLabel,
   useWorkspaceTabStore,
   type TabKind,
 } from "../workspaceTabStore";
@@ -448,6 +448,8 @@ function useLocalDispatchState(input: {
 
 interface PersistentWorkspaceTerminalDrawerProps {
   workspaceId: WorkspaceId;
+  /** When provided, the drawer renders only this terminal (tab-per-terminal mode). */
+  terminalId?: string;
   visible: boolean;
   mode?: "drawer" | "inline";
   launchContext: PersistentTerminalLaunchContext | null;
@@ -456,10 +458,15 @@ interface PersistentWorkspaceTerminalDrawerProps {
   newShortcutLabel: string | undefined;
   closeShortcutLabel: string | undefined;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
+  /** Called when the user requests a new terminal (creates a new tab in inline/tab mode). */
+  onNewTerminalTab?: (() => void) | undefined;
+  /** Called when the user closes the terminal (closes the tab in inline/tab mode). */
+  onCloseTerminalTab?: (() => void) | undefined;
 }
 
 function PersistentWorkspaceTerminalDrawer({
   workspaceId,
+  terminalId: terminalIdProp,
   visible,
   mode = "drawer",
   launchContext,
@@ -468,6 +475,8 @@ function PersistentWorkspaceTerminalDrawer({
   newShortcutLabel,
   closeShortcutLabel,
   onAddTerminalContext,
+  onNewTerminalTab,
+  onCloseTerminalTab,
 }: PersistentWorkspaceTerminalDrawerProps) {
   const serverWorkspace = useWorkspaceById(workspaceId);
   const draftWorkspace = useComposerDraftStore(
@@ -512,6 +521,26 @@ function PersistentWorkspaceTerminalDrawer({
     [effectiveWorktreePath, project],
   );
 
+  // When a terminalId prop is provided (tab-per-terminal mode), scope to just that terminal.
+  const isScopedToSingleTerminal = terminalIdProp !== undefined;
+  const scopedTerminalIds = useMemo(
+    () => (isScopedToSingleTerminal ? [terminalIdProp] : terminalState.terminalIds),
+    [isScopedToSingleTerminal, terminalIdProp, terminalState.terminalIds],
+  );
+  const scopedActiveTerminalId = isScopedToSingleTerminal
+    ? terminalIdProp
+    : terminalState.activeTerminalId;
+  const scopedTerminalGroups = useMemo(
+    () =>
+      isScopedToSingleTerminal
+        ? [{ id: `group-${terminalIdProp}`, terminalIds: [terminalIdProp] }]
+        : terminalState.terminalGroups,
+    [isScopedToSingleTerminal, terminalIdProp, terminalState.terminalGroups],
+  );
+  const scopedActiveTerminalGroupId = isScopedToSingleTerminal
+    ? `group-${terminalIdProp}`
+    : terminalState.activeTerminalGroupId;
+
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
       return;
@@ -531,10 +560,16 @@ function PersistentWorkspaceTerminalDrawer({
     bumpFocusRequestId();
   }, [bumpFocusRequestId, storeSplitTerminal, workspaceId]);
 
-  const createNewTerminal = useCallback(() => {
-    storeNewTerminal(workspaceId, `terminal-${randomUUID()}`);
-    bumpFocusRequestId();
-  }, [bumpFocusRequestId, storeNewTerminal, workspaceId]);
+  const handleNewTerminal = useCallback(() => {
+    if (onNewTerminalTab) {
+      // Tab-per-terminal mode: create a new tab via the parent.
+      onNewTerminalTab();
+    } else {
+      // Legacy drawer mode: create a new terminal in the store.
+      storeNewTerminal(workspaceId, `terminal-${randomUUID()}`);
+      bumpFocusRequestId();
+    }
+  }, [bumpFocusRequestId, onNewTerminalTab, storeNewTerminal, workspaceId]);
 
   const activateTerminal = useCallback(
     (terminalId: string) => {
@@ -548,29 +583,33 @@ function PersistentWorkspaceTerminalDrawer({
     (terminalId: string) => {
       const api = readNativeApi();
       if (!api) return;
-      const isFinalTerminal = terminalState.terminalIds.length <= 1;
-      const fallbackExitWrite = () =>
-        api.terminal.write({ workspaceId, terminalId, data: "exit\n" }).catch(() => undefined);
 
       if ("close" in api.terminal && typeof api.terminal.close === "function") {
-        void (async () => {
-          if (isFinalTerminal) {
-            await api.terminal.clear({ workspaceId, terminalId }).catch(() => undefined);
-          }
-          await api.terminal.close({
-            workspaceId,
-            terminalId,
-            deleteHistory: true,
-          });
-        })().catch(() => fallbackExitWrite());
+        void api.terminal
+          .close({ workspaceId, terminalId, deleteHistory: true })
+          .catch(() =>
+            api.terminal.write({ workspaceId, terminalId, data: "exit\n" }).catch(() => undefined),
+          );
       } else {
-        void fallbackExitWrite();
+        void api.terminal.write({ workspaceId, terminalId, data: "exit\n" }).catch(() => undefined);
       }
 
       storeCloseTerminal(workspaceId, terminalId);
-      bumpFocusRequestId();
+
+      if (isScopedToSingleTerminal && onCloseTerminalTab) {
+        // Tab-per-terminal mode: close the tab.
+        onCloseTerminalTab();
+      } else {
+        bumpFocusRequestId();
+      }
     },
-    [bumpFocusRequestId, storeCloseTerminal, terminalState.terminalIds.length, workspaceId],
+    [
+      bumpFocusRequestId,
+      isScopedToSingleTerminal,
+      onCloseTerminalTab,
+      storeCloseTerminal,
+      workspaceId,
+    ],
   );
 
   const handleAddTerminalContext = useCallback(
@@ -602,13 +641,13 @@ function PersistentWorkspaceTerminalDrawer({
         visible={visible}
         mode={mode}
         height={terminalState.terminalHeight}
-        terminalIds={terminalState.terminalIds}
-        activeTerminalId={terminalState.activeTerminalId}
-        terminalGroups={terminalState.terminalGroups}
-        activeTerminalGroupId={terminalState.activeTerminalGroupId}
+        terminalIds={scopedTerminalIds}
+        activeTerminalId={scopedActiveTerminalId}
+        terminalGroups={scopedTerminalGroups}
+        activeTerminalGroupId={scopedActiveTerminalGroupId}
         focusRequestId={focusRequestId + localFocusRequestId + (visible ? 1 : 0)}
         onSplitTerminal={splitTerminal}
-        onNewTerminal={createNewTerminal}
+        onNewTerminal={handleNewTerminal}
         splitShortcutLabel={visible ? splitShortcutLabel : undefined}
         newShortcutLabel={visible ? newShortcutLabel : undefined}
         closeShortcutLabel={visible ? closeShortcutLabel : undefined}
@@ -802,8 +841,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     [terminalStateByWorkspaceId, workspaceId],
   );
   const storeSplitTerminal = useTerminalStateStore((s) => s.splitTerminal);
-  const storeNewTerminal = useTerminalStateStore((s) => s.newTerminal);
-  const storeSetActiveTerminal = useTerminalStateStore((s) => s.setActiveTerminal);
+  const storeEnsureTerminal = useTerminalStateStore((s) => s.ensureTerminal);
   const storeCloseTerminal = useTerminalStateStore((s) => s.closeTerminal);
   const storeServerTerminalLaunchContext = useTerminalStateStore(
     (s) => s.terminalLaunchContextByWorkspaceId[workspaceId] ?? null,
@@ -922,7 +960,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const addTab = useWorkspaceTabStore((s) => s.addTab);
   const removeTab = useWorkspaceTabStore((s) => s.removeTab);
   const findTabByWorkspaceId = useWorkspaceTabStore((s) => s.findTabByWorkspaceId);
-  const findTerminalTab = useWorkspaceTabStore((s) => s.findTerminalTab);
+  const findTerminalTabByTerminalId = useWorkspaceTabStore((s) => s.findTerminalTabByTerminalId);
   const lastSyncedProviderTabWorkspaceIdRef = useRef<WorkspaceId | null>(null);
   const dismissedProviderWorkspaceIdsByWorkspaceRef = useRef<Record<string, Set<WorkspaceId>>>({});
   const currentWorkspaceProviderTab = activeWorkspaceId
@@ -986,18 +1024,53 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     workspaceWorkspaceId,
   ]);
 
-  const openOrSelectTerminalTab = useCallback(() => {
-    const existingTerminalTab = findTerminalTab(workspaceWorkspaceId);
+  /** Create a brand-new terminal tab and switch to it. */
+  const createNewTerminalTab = useCallback(
+    (terminalId?: string) => {
+      const tid = terminalId ?? `terminal-${randomUUID()}`;
+      const label = nextTerminalTabLabel(tabState?.tabs ?? []);
+      const tab = makeTerminalTab(tid, label);
+      if (activeWorkspaceId) {
+        storeEnsureTerminal(activeWorkspaceId, tid, { open: true, active: false });
+      }
+      addTab(workspaceWorkspaceId, tab);
+      if (routeWorkspaceId !== workspaceWorkspaceId) {
+        void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
+      }
+      setTerminalFocusRequestId((value) => value + 1);
+      return tab;
+    },
+    [
+      activeWorkspaceId,
+      addTab,
+      navigate,
+      routeWorkspaceId,
+      storeEnsureTerminal,
+      tabState?.tabs,
+      workspaceWorkspaceId,
+    ],
+  );
+
+  /** Select the first existing terminal tab, or create one if none exist. */
+  const openOrCreateTerminalTab = useCallback(() => {
+    const existingTerminalTab = tabState?.tabs?.find((t) => t.kind === "terminal");
     if (existingTerminalTab) {
       setActiveTab(workspaceWorkspaceId, existingTerminalTab.id);
+      if (routeWorkspaceId !== workspaceWorkspaceId) {
+        void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
+      }
+      setTerminalFocusRequestId((value) => value + 1);
     } else {
-      addTab(workspaceWorkspaceId, makeTerminalTab());
+      createNewTerminalTab();
     }
-    if (routeWorkspaceId !== workspaceWorkspaceId) {
-      void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
-    }
-    setTerminalFocusRequestId((value) => value + 1);
-  }, [addTab, findTerminalTab, navigate, routeWorkspaceId, setActiveTab, workspaceWorkspaceId]);
+  }, [
+    createNewTerminalTab,
+    navigate,
+    routeWorkspaceId,
+    setActiveTab,
+    tabState?.tabs,
+    workspaceWorkspaceId,
+  ]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -1020,6 +1093,20 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         dismissedProviderWorkspaceIdsByWorkspaceRef.current[workspaceWorkspaceId] =
           dismissedProviderWorkspaceIds;
       }
+      // Clean up terminal session when closing a terminal tab.
+      if (closedTab?.kind === "terminal" && closedTab.terminalId && activeWorkspaceId) {
+        const api = readNativeApi();
+        if (api && "close" in api.terminal && typeof api.terminal.close === "function") {
+          void api.terminal
+            .close({
+              workspaceId: activeWorkspaceId,
+              terminalId: closedTab.terminalId,
+              deleteHistory: true,
+            })
+            .catch(() => undefined);
+        }
+        storeCloseTerminal(activeWorkspaceId, closedTab.terminalId);
+      }
       removeTab(workspaceWorkspaceId, tabId);
       // If we closed the active tab, navigate to the next active tab's workspace.
       if (closedTab && tabState.activeTabId === tabId) {
@@ -1028,7 +1115,15 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         }
       }
     },
-    [navigate, removeTab, routeWorkspaceId, tabState, workspaceWorkspaceId],
+    [
+      activeWorkspaceId,
+      navigate,
+      removeTab,
+      routeWorkspaceId,
+      storeCloseTerminal,
+      tabState,
+      workspaceWorkspaceId,
+    ],
   );
 
   const handleAddTab = useCallback(
@@ -1075,7 +1170,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         const tab = makeProviderTab(provider, nextWorkspaceId);
         addTab(workspaceWorkspaceId, tab);
       } else if (kind === "terminal") {
-        openOrSelectTerminalTab();
+        createNewTerminalTab();
       }
     },
     [
@@ -1084,9 +1179,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       activeWorkspace?.branch,
       activeWorkspace?.worktreePath,
       addTab,
+      createNewTerminalTab,
       currentWorkspaceProviderTab,
       isWorkspaceDraftWorkspace,
-      openOrSelectTerminalTab,
       setActiveTab,
       workspaceWorkspaceId,
     ],
@@ -1222,6 +1317,11 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     projectModelSelection: activeProject?.defaultModelSelection,
     settings,
   });
+  const composerModelOptionsByProvider = useMemo(
+    () =>
+      getCustomModelOptionsByProvider(settings, providerStatuses, selectedProvider, selectedModel),
+    [providerStatuses, selectedModel, selectedProvider, settings],
+  );
   const selectedProviderModels = getProviderModels(providerStatuses, selectedProvider);
   const composerProviderState = useMemo(
     () =>
@@ -1938,41 +2038,37 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     storeSplitTerminal(activeWorkspaceId, terminalId);
     setTerminalFocusRequestId((value) => value + 1);
   }, [activeWorkspaceId, hasReachedSplitLimit, storeSplitTerminal]);
-  const createNewTerminal = useCallback(() => {
-    if (!activeWorkspaceId) return;
-    const terminalId = `terminal-${randomUUID()}`;
-    storeNewTerminal(activeWorkspaceId, terminalId);
-    setTerminalFocusRequestId((value) => value + 1);
-  }, [activeWorkspaceId, storeNewTerminal]);
   const closeTerminal = useCallback(
     (terminalId: string) => {
       const api = readNativeApi();
       if (!activeWorkspaceId || !api) return;
-      const isFinalTerminal = terminalState.terminalIds.length <= 1;
-      const fallbackExitWrite = () =>
-        api.terminal
+      if ("close" in api.terminal && typeof api.terminal.close === "function") {
+        void api.terminal
+          .close({ workspaceId: activeWorkspaceId, terminalId, deleteHistory: true })
+          .catch(() =>
+            api.terminal
+              .write({ workspaceId: activeWorkspaceId, terminalId, data: "exit\n" })
+              .catch(() => undefined),
+          );
+      } else {
+        void api.terminal
           .write({ workspaceId: activeWorkspaceId, terminalId, data: "exit\n" })
           .catch(() => undefined);
-      if ("close" in api.terminal && typeof api.terminal.close === "function") {
-        void (async () => {
-          if (isFinalTerminal) {
-            await api.terminal
-              .clear({ workspaceId: activeWorkspaceId, terminalId })
-              .catch(() => undefined);
-          }
-          await api.terminal.close({
-            workspaceId: activeWorkspaceId,
-            terminalId,
-            deleteHistory: true,
-          });
-        })().catch(() => fallbackExitWrite());
-      } else {
-        void fallbackExitWrite();
       }
       storeCloseTerminal(activeWorkspaceId, terminalId);
-      setTerminalFocusRequestId((value) => value + 1);
+      // Also close the tab that owns this terminal.
+      const terminalTab = findTerminalTabByTerminalId(workspaceWorkspaceId, terminalId);
+      if (terminalTab) {
+        removeTab(workspaceWorkspaceId, terminalTab.id);
+      }
     },
-    [activeWorkspaceId, storeCloseTerminal, terminalState.terminalIds.length],
+    [
+      activeWorkspaceId,
+      findTerminalTabByTerminalId,
+      removeTab,
+      storeCloseTerminal,
+      workspaceWorkspaceId,
+    ],
   );
   const runProjectScript = useCallback(
     async (
@@ -1994,29 +2090,31 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         });
       }
       const targetCwd = options?.cwd ?? gitCwd ?? activeProject.cwd;
-      const baseTerminalId =
-        terminalState.activeTerminalId ||
-        terminalState.terminalIds[0] ||
-        DEFAULT_WORKSPACE_TERMINAL_ID;
-      const isBaseTerminalBusy = terminalState.runningTerminalIds.includes(baseTerminalId);
-      const wantsNewTerminal = Boolean(options?.preferNewTerminal) || isBaseTerminalBusy;
-      const shouldCreateNewTerminal = wantsNewTerminal;
-      const targetTerminalId = shouldCreateNewTerminal
-        ? `terminal-${randomUUID()}`
-        : baseTerminalId;
       const targetWorktreePath = options?.worktreePath ?? activeWorkspace.worktreePath ?? null;
+
+      // Determine whether to reuse the active terminal tab or create a new one.
+      const activeTerminalTab =
+        activeTab?.kind === "terminal" && activeTab.terminalId ? activeTab : null;
+      const isActiveTerminalBusy = activeTerminalTab
+        ? terminalState.runningTerminalIds.includes(activeTerminalTab.terminalId!)
+        : true;
+      const wantsNewTerminal =
+        Boolean(options?.preferNewTerminal) || isActiveTerminalBusy || !activeTerminalTab;
+
+      let targetTerminalId: string;
+      if (wantsNewTerminal) {
+        const newTab = createNewTerminalTab();
+        targetTerminalId = newTab.terminalId!;
+      } else {
+        targetTerminalId = activeTerminalTab!.terminalId!;
+        setActiveTab(workspaceWorkspaceId, activeTerminalTab!.id);
+      }
 
       setTerminalLaunchContext({
         workspaceId: activeWorkspaceId,
         cwd: targetCwd,
         worktreePath: targetWorktreePath,
       });
-      if (shouldCreateNewTerminal) {
-        storeNewTerminal(activeWorkspaceId, targetTerminalId);
-      } else {
-        storeSetActiveTerminal(activeWorkspaceId, targetTerminalId);
-      }
-      openOrSelectTerminalTab();
       setTerminalFocusRequestId((value) => value + 1);
 
       const runtimeEnv = projectScriptRuntimeEnv({
@@ -2026,7 +2124,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         worktreePath: targetWorktreePath,
         ...(options?.env ? { extraEnv: options.env } : {}),
       });
-      const openTerminalInput: TerminalOpenInput = shouldCreateNewTerminal
+      const openTerminalInput: TerminalOpenInput = wantsNewTerminal
         ? {
             workspaceId: activeWorkspaceId,
             terminalId: targetTerminalId,
@@ -2060,17 +2158,16 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     },
     [
       activeProject,
+      activeTab,
       activeWorkspace,
       activeWorkspaceId,
+      createNewTerminalTab,
       gitCwd,
-      openOrSelectTerminalTab,
+      setActiveTab,
       setWorkspaceError,
-      storeNewTerminal,
-      storeSetActiveTerminal,
       setLastInvokedScriptByProjectId,
-      terminalState.activeTerminalId,
       terminalState.runningTerminalIds,
-      terminalState.terminalIds,
+      workspaceWorkspaceId,
     ],
   );
 
@@ -2861,14 +2958,14 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       if (command === "terminal.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        openOrSelectTerminalTab();
+        openOrCreateTerminalTab();
         return;
       }
 
       if (command === "terminal.split") {
         event.preventDefault();
         event.stopPropagation();
-        openOrSelectTerminalTab();
+        openOrCreateTerminalTab();
         splitTerminal();
         return;
       }
@@ -2876,16 +2973,15 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       if (command === "terminal.close") {
         event.preventDefault();
         event.stopPropagation();
-        if (!isTerminalTabActive) return;
-        closeTerminal(terminalState.activeTerminalId);
+        if (!isTerminalTabActive || !activeTab?.terminalId) return;
+        closeTerminal(activeTab.terminalId);
         return;
       }
 
       if (command === "terminal.new") {
         event.preventDefault();
         event.stopPropagation();
-        openOrSelectTerminalTab();
-        createNewTerminal();
+        createNewTerminalTab();
         return;
       }
 
@@ -2908,12 +3004,12 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     return () => window.removeEventListener("keydown", handler);
   }, [
     activeProject,
-    terminalState.activeTerminalId,
+    activeTab,
     activeWorkspaceId,
     closeTerminal,
-    createNewTerminal,
+    createNewTerminalTab,
     isTerminalTabActive,
-    openOrSelectTerminalTab,
+    openOrCreateTerminalTab,
     runProjectScript,
     splitTerminal,
     keybindings,
@@ -4224,10 +4320,11 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       )}
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">
-        {isTerminalTabActive ? (
+        {isTerminalTabActive && activeTab?.terminalId ? (
           /* Terminal tab content — inline terminal fills the area */
           <PersistentWorkspaceTerminalDrawer
             workspaceId={activeWorkspace.id}
+            terminalId={activeTab.terminalId}
             visible
             mode="inline"
             launchContext={activeTerminalLaunchContext ?? null}
@@ -4236,6 +4333,8 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
             newShortcutLabel={newTerminalShortcutLabel ?? undefined}
             closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
             onAddTerminalContext={addTerminalContextToDraft}
+            onNewTerminalTab={createNewTerminalTab}
+            onCloseTerminalTab={activeTab ? () => handleCloseTab(activeTab.id) : undefined}
           />
         ) : showWorkspaceSelectionState ? (
           <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-10">
@@ -4537,34 +4636,66 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
                             )}
                           >
                             {isComposerFooterCompact ? (
-                              <CompactComposerControlsMenu
-                                activePlan={Boolean(
-                                  activePlan || sidebarProposedPlan || planSidebarOpen,
-                                )}
-                                interactionMode={interactionMode}
-                                planSidebarOpen={planSidebarOpen}
-                                runtimeMode={runtimeMode}
-                                traitsMenuContent={providerTraitsMenuContent}
-                                onToggleInteractionMode={toggleInteractionMode}
-                                onTogglePlanSidebar={togglePlanSidebar}
-                                onToggleRuntimeMode={toggleRuntimeMode}
-                              />
+                              <>
+                                <ProviderModelPicker
+                                  provider={selectedProvider}
+                                  model={selectedModel}
+                                  lockedProvider={selectedProvider}
+                                  providers={providerStatuses}
+                                  modelOptionsByProvider={composerModelOptionsByProvider}
+                                  compact
+                                  onProviderModelChange={onProviderModelSelect}
+                                  {...(composerProviderState.modelPickerIconClassName
+                                    ? {
+                                        activeProviderIconClassName:
+                                          composerProviderState.modelPickerIconClassName,
+                                      }
+                                    : {})}
+                                />
+                                <CompactComposerControlsMenu
+                                  activePlan={Boolean(
+                                    activePlan || sidebarProposedPlan || planSidebarOpen,
+                                  )}
+                                  interactionMode={interactionMode}
+                                  planSidebarOpen={planSidebarOpen}
+                                  runtimeMode={runtimeMode}
+                                  traitsMenuContent={providerTraitsMenuContent}
+                                  onToggleInteractionMode={toggleInteractionMode}
+                                  onTogglePlanSidebar={togglePlanSidebar}
+                                  onToggleRuntimeMode={toggleRuntimeMode}
+                                />
+                              </>
                             ) : (
                               <>
-                                {providerTraitsPicker ? (
-                                  <>
-                                    <Separator
-                                      orientation="vertical"
-                                      className="mx-0.5 hidden h-4 sm:block"
-                                    />
-                                    {providerTraitsPicker}
-                                  </>
-                                ) : null}
+                                <ProviderModelPicker
+                                  provider={selectedProvider}
+                                  model={selectedModel}
+                                  lockedProvider={selectedProvider}
+                                  providers={providerStatuses}
+                                  modelOptionsByProvider={composerModelOptionsByProvider}
+                                  onProviderModelChange={onProviderModelSelect}
+                                  {...(composerProviderState.modelPickerIconClassName
+                                    ? {
+                                        activeProviderIconClassName:
+                                          composerProviderState.modelPickerIconClassName,
+                                      }
+                                    : {})}
+                                />
 
                                 <Separator
                                   orientation="vertical"
                                   className="mx-0.5 hidden h-4 sm:block"
                                 />
+
+                                {providerTraitsPicker ? (
+                                  <>
+                                    {providerTraitsPicker}
+                                    <Separator
+                                      orientation="vertical"
+                                      className="mx-0.5 hidden h-4 sm:block"
+                                    />
+                                  </>
+                                ) : null}
 
                                 <Button
                                   variant="ghost"
