@@ -65,7 +65,9 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "matcha";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "Matcha (Dev)" : "Matcha (Alpha)";
+const APP_DISPLAY_NAME = isDevelopment
+  ? "Matcha (Dev)"
+  : `Matcha v${Electron.app.getVersion()}`;
 const APP_USER_MODEL_ID = "com.matcha.matcha";
 const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "matcha-dev.desktop" : "matcha.desktop";
 const LINUX_WM_CLASS = isDevelopment ? "matcha-dev" : "matcha";
