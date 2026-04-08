@@ -2,6 +2,7 @@ import { DEFAULT_MODEL_BY_PROVIDER, type ProjectId, type ProviderKind } from "@m
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
+import { BranchSelect } from "./BranchSelect";
 import { AVAILABLE_PROVIDER_OPTIONS } from "./chat/ProviderModelPicker";
 import { ClaudeAI, OpenAI, type Icon } from "./Icons";
 import { Button } from "./ui/button";
@@ -39,6 +40,7 @@ export interface NewWorkspaceResult {
 interface NewWorkspaceDialogProps {
   open: boolean;
   projectId: ProjectId | null;
+  projectCwd: string | null;
   projectName: string | null;
   defaultCreateWorktree?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +50,7 @@ interface NewWorkspaceDialogProps {
 export function NewWorkspaceDialog({
   open,
   projectId,
+  projectCwd,
   projectName,
   defaultCreateWorktree = false,
   onOpenChange,
@@ -201,25 +204,20 @@ export function NewWorkspaceDialog({
             />
           </div>
 
-          {/* Branch name (optional) */}
-          <label className="grid gap-1.5">
+          {/* Branch (optional) */}
+          <div className="grid gap-1.5">
             <span className="text-xs font-medium text-foreground">
               {createWorktree ? "Base branch" : "Branch"}{" "}
               <span className="font-normal text-muted-foreground">(optional)</span>
             </span>
-            <Input
+            <BranchSelect
+              cwd={projectCwd}
               value={branch}
-              placeholder={createWorktree ? "Current HEAD" : "main"}
-              onChange={(event) => setBranch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !isCreating) {
-                  event.preventDefault();
-                  void handleConfirm();
-                }
-              }}
+              onChange={setBranch}
               disabled={isCreating}
+              placeholder={createWorktree ? "Current HEAD" : "main"}
             />
-          </label>
+          </div>
 
           {error && <p className="text-destructive text-xs">{error}</p>}
         </DialogPanel>

@@ -100,7 +100,6 @@ import { LRUCache } from "../lib/lruCache";
 import { basenameOfPath } from "../vscode-icons";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
-import BranchToolbar from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 import WorkspaceTerminalDrawer from "./WorkspaceTerminalDrawer";
@@ -164,7 +163,6 @@ import {
 import { selectWorkspaceTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { selectRunCommand, selectRunCommandRuntime, useRunCommandStore } from "../runCommandStore";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./ComposerPromptEditor";
-import { PullRequestWorkspaceDialog } from "./PullRequestWorkspaceDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ContextWindowMeter } from "./chat/ContextWindowMeter";
@@ -223,7 +221,6 @@ import {
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
   type LocalDispatchSnapshot,
-  PullRequestDialogState,
   readFileAsDataUrl,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
@@ -765,16 +762,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   );
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const setDraftWorkspaceContext = useComposerDraftStore((store) => store.setDraftWorkspaceContext);
-  const getDraftWorkspaceByProjectId = useComposerDraftStore(
-    (store) => store.getDraftWorkspaceByProjectId,
-  );
-  const getDraftWorkspace = useComposerDraftStore((store) => store.getDraftWorkspace);
-  const setProjectDraftWorkspaceId = useComposerDraftStore(
-    (store) => store.setProjectDraftWorkspaceId,
-  );
-  const clearProjectDraftWorkspaceId = useComposerDraftStore(
-    (store) => store.clearProjectDraftWorkspaceId,
-  );
   const draftWorkspace = useComposerDraftStore(
     (store) => store.draftWorkspacesByWorkspaceId[workspaceId] ?? null,
   );
@@ -812,8 +799,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
-  const [pullRequestDialogState, setPullRequestDialogState] =
-    useState<PullRequestDialogState | null>(null);
   const [terminalLaunchContext, setTerminalLaunchContext] = useState<TerminalLaunchContext | null>(
     null,
   );
@@ -961,7 +946,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     composerDraft.interactionMode ?? activeWorkspace?.interactionMode ?? DEFAULT_INTERACTION_MODE;
   const isServerWorkspace = serverWorkspace !== undefined;
   const isLocalDraftWorkspace = !isServerWorkspace && localDraftWorkspace !== undefined;
-  const canCheckoutPullRequestIntoWorkspace = isLocalDraftWorkspace;
   const sourceControlOpen = rawSearch.diff === "1";
   const activeWorkspaceId = activeWorkspace?.id ?? null;
   const activeLatestTurn = activeWorkspace?.latestTurn ?? null;
@@ -1226,91 +1210,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   );
 
   const canCloseTab = useCallback(() => true, []);
-
-  const openPullRequestDialog = useCallback(
-    (reference?: string) => {
-      if (!canCheckoutPullRequestIntoWorkspace) {
-        return;
-      }
-      setPullRequestDialogState({
-        initialReference: reference ?? null,
-        key: Date.now(),
-      });
-      setComposerHighlightedItemId(null);
-    },
-    [canCheckoutPullRequestIntoWorkspace],
-  );
-
-  const closePullRequestDialog = useCallback(() => {
-    setPullRequestDialogState(null);
-  }, []);
-
-  const openOrReuseProjectDraftWorkspace = useCallback(
-    async (input: {
-      branch: string;
-      worktreePath: string | null;
-      envMode: DraftWorkspaceEnvMode;
-    }) => {
-      if (!activeProject) {
-        throw new Error("No active project is available for this pull request.");
-      }
-      const storedDraftWorkspace = getDraftWorkspaceByProjectId(activeProject.id);
-      if (storedDraftWorkspace) {
-        setDraftWorkspaceContext(storedDraftWorkspace.workspaceId, input);
-        setProjectDraftWorkspaceId(activeProject.id, storedDraftWorkspace.workspaceId, input);
-        if (storedDraftWorkspace.workspaceId !== workspaceId) {
-          await navigate({
-            to: "/$workspaceId",
-            params: { workspaceId: storedDraftWorkspace.workspaceId },
-          });
-        }
-        return storedDraftWorkspace.workspaceId;
-      }
-
-      const activeDraftWorkspace = getDraftWorkspace(workspaceId);
-      if (!isServerWorkspace && activeDraftWorkspace?.projectId === activeProject.id) {
-        setDraftWorkspaceContext(workspaceId, input);
-        setProjectDraftWorkspaceId(activeProject.id, workspaceId, input);
-        return workspaceId;
-      }
-
-      clearProjectDraftWorkspaceId(activeProject.id);
-      const nextWorkspaceId = newWorkspaceId();
-      setProjectDraftWorkspaceId(activeProject.id, nextWorkspaceId, {
-        createdAt: new Date().toISOString(),
-        runtimeMode: DEFAULT_RUNTIME_MODE,
-        interactionMode: DEFAULT_INTERACTION_MODE,
-        ...input,
-      });
-      await navigate({
-        to: "/$workspaceId",
-        params: { workspaceId: nextWorkspaceId },
-      });
-      return nextWorkspaceId;
-    },
-    [
-      activeProject,
-      clearProjectDraftWorkspaceId,
-      getDraftWorkspace,
-      getDraftWorkspaceByProjectId,
-      isServerWorkspace,
-      navigate,
-      setDraftWorkspaceContext,
-      setProjectDraftWorkspaceId,
-      workspaceId,
-    ],
-  );
-
-  const handlePreparedPullRequestWorkspace = useCallback(
-    async (input: { branch: string; worktreePath: string | null }) => {
-      await openOrReuseProjectDraftWorkspace({
-        branch: input.branch,
-        worktreePath: input.worktreePath,
-        envMode: input.worktreePath ? "worktree" : "local",
-      });
-    },
-    [openOrReuseProjectDraftWorkspace],
-  );
 
   useEffect(() => {
     if (!serverWorkspace?.id) return;
@@ -1985,11 +1884,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     });
   }, [sourceControlOpen, navigate, routeWorkspaceId]);
 
-  const envLocked = Boolean(
-    activeWorkspace &&
-    (activeWorkspace.messages.length > 0 ||
-      (activeWorkspace.session !== null && activeWorkspace.session.status !== "closed")),
-  );
   const activeTerminalGroup =
     terminalState.terminalGroups.find(
       (group) => group.id === terminalState.activeTerminalGroupId,
@@ -2857,7 +2751,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
 
   useEffect(() => {
     setExpandedWorkGroups({});
-    setPullRequestDialogState(null);
     if (planSidebarOpenOnNextWorkspaceRef.current) {
       planSidebarOpenOnNextWorkspaceRef.current = false;
       setPlanSidebarOpen(true);
@@ -4130,16 +4023,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     prompt,
     onPromptChange: setPromptFromTraits,
   });
-  const onEnvModeChange = useCallback(
-    (mode: DraftWorkspaceEnvMode) => {
-      if (isLocalDraftWorkspace) {
-        setDraftWorkspaceContext(workspaceId, { envMode: mode });
-      }
-      scheduleComposerFocus();
-    },
-    [isLocalDraftWorkspace, scheduleComposerFocus, setDraftWorkspaceContext, workspaceId],
-  );
-
   const applyPromptReplacement = useCallback(
     (
       rangeStart: number,
@@ -4677,9 +4560,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
               </div>
 
               {/* Input bar */}
-              <div
-                className={cn("px-3 pt-1.5 sm:px-5 sm:pt-2", isGitRepo ? "pb-1" : "pb-3 sm:pb-4")}
-              >
+              <div className="px-3 pb-3 pt-1.5 sm:px-5 sm:pb-4 sm:pt-2">
                 <form
                   ref={composerFormRef}
                   onSubmit={onSend}
@@ -5076,33 +4957,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
                   </div>
                 </form>
               </div>
-
-              {isGitRepo && (
-                <BranchToolbar
-                  workspaceId={activeWorkspace.id}
-                  onEnvModeChange={onEnvModeChange}
-                  envLocked={envLocked}
-                  onComposerFocusRequest={scheduleComposerFocus}
-                  {...(canCheckoutPullRequestIntoWorkspace
-                    ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                    : {})}
-                />
-              )}
-              {pullRequestDialogState ? (
-                <PullRequestWorkspaceDialog
-                  key={pullRequestDialogState.key}
-                  open
-                  workspaceId={activeWorkspace.id}
-                  cwd={activeProject?.cwd ?? null}
-                  initialReference={pullRequestDialogState.initialReference}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      closePullRequestDialog();
-                    }
-                  }}
-                  onPrepared={handlePreparedPullRequestWorkspace}
-                />
-              ) : null}
             </div>
             {/* end chat column */}
 

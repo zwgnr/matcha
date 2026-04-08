@@ -2290,6 +2290,7 @@ export default function Sidebar() {
       <NewWorkspaceDialog
         open={newWorkspaceDialogProjectId !== null}
         projectId={newWorkspaceDialogProjectId}
+        projectCwd={newWorkspaceDialogProject?.cwd ?? null}
         projectName={newWorkspaceDialogProject?.name ?? null}
         defaultCreateWorktree={appSettings.defaultWorkspaceEnvMode === "worktree"}
         onOpenChange={(open) => {
