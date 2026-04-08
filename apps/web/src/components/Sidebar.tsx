@@ -18,7 +18,6 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type KeyboardEvent,
   type MouseEvent,
   type MutableRefObject,
   type PointerEvent,
@@ -26,21 +25,9 @@ import {
   type SetStateAction,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import {
-  DndContext,
-  type DragCancelEvent,
-  type CollisionDetection,
-  PointerSensor,
-  type DragStartEvent,
-  closestCorners,
-  pointerWithin,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import { CSS } from "@dnd-kit/utilities";
+import { DragDropProvider } from "@dnd-kit/react";
+import { PointerSensor, PointerActivationConstraints } from "@dnd-kit/dom";
+import { useSortable } from "@dnd-kit/react/sortable";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_RUNTIME_MODE,
@@ -125,8 +112,7 @@ import {
   resolveWorkspaceStatusPill,
   orderItemsByPreferredIds,
   shouldClearWorkspaceSelectionOnMouseDown,
-  sortProjectsForSidebar,
-  sortWorkspacesForSidebar,
+  sortWorkspacesByCreatedAt,
   useWorkspaceJumpHintVisibility,
 } from "./Sidebar.logic";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
@@ -137,6 +123,10 @@ import { useSidebarWorkspaceSummaryById } from "../storeSelectors";
 import type { Project, ProjectScript, SidebarWorkspaceSummary } from "../types";
 import type { WorkspaceStatusPill } from "./Sidebar.logic";
 const WORKSPACE_PREVIEW_LIMIT = 6;
+
+function workspaceSortableType(projectId: ProjectId): string {
+  return `workspace:${projectId}`;
+}
 
 /**
  * Collect status pills for a root workspace and its child provider workspaces.
@@ -607,45 +597,60 @@ function MatchaWordmark() {
   );
 }
 
-type SortableProjectHandleProps = Pick<
-  ReturnType<typeof useSortable>,
-  "attributes" | "listeners" | "setActivatorNodeRef"
->;
-
 function SortableProjectItem({
   projectId,
-  disabled = false,
+  index,
   children,
 }: {
   projectId: ProjectId;
-  disabled?: boolean;
-  children: (handleProps: SortableProjectHandleProps) => ReactNode;
+  index: number;
+  children: (input: {
+    handleRef: (element: Element | null) => void;
+    targetRef: (element: Element | null) => void;
+  }) => ReactNode;
 }) {
-  const {
-    attributes,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-    isOver,
-  } = useSortable({ id: projectId, disabled });
+  const { ref, handleRef, targetRef, isDragging } = useSortable({
+    id: projectId,
+    index,
+    type: "project",
+    accept: "project",
+    group: "sidebar-projects",
+  });
   return (
     <li
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Translate.toString(transform),
-        transition,
-      }}
-      className={`group/menu-item relative rounded-md ${
-        isDragging ? "z-20 opacity-80" : ""
-      } ${isOver && !isDragging ? "ring-1 ring-primary/40" : ""}`}
+      ref={ref}
+      className={`group/menu-item relative rounded-md ${isDragging ? "z-20 opacity-80" : ""}`}
       data-sidebar="menu-item"
       data-slot="sidebar-menu-item"
     >
-      {children({ attributes, listeners, setActivatorNodeRef })}
+      {children({ handleRef, targetRef })}
     </li>
+  );
+}
+
+function SortableWorkspaceItem({
+  workspaceId,
+  index,
+  projectId,
+  children,
+}: {
+  workspaceId: WorkspaceId;
+  index: number;
+  projectId: ProjectId;
+  children: ReactNode;
+}) {
+  const sortableType = workspaceSortableType(projectId);
+  const { ref, isDragging } = useSortable({
+    id: workspaceId,
+    index,
+    type: sortableType,
+    accept: sortableType,
+    group: projectId,
+  });
+  return (
+    <div ref={ref} className={isDragging ? "z-20 opacity-70" : ""}>
+      {children}
+    </div>
   );
 }
 
@@ -653,16 +658,24 @@ export default function Sidebar() {
   const projects = useStore((store) => store.projects);
   const sidebarWorkspacesById = useStore((store) => store.sidebarWorkspacesById);
   const workspaceIdsByProjectId = useStore((store) => store.workspaceIdsByProjectId);
-  const { projectExpandedById, projectOrder, workspaceLastVisitedAtById } = useUiStateStore(
+  const {
+    projectExpandedById,
+    projectOrder,
+    workspaceLastVisitedAtById,
+    workspaceOrderByProjectId,
+  } = useUiStateStore(
     useShallow((store) => ({
       projectExpandedById: store.projectExpandedById,
       projectOrder: store.projectOrder,
       workspaceLastVisitedAtById: store.workspaceLastVisitedAtById,
+      workspaceOrderByProjectId: store.workspaceOrderByProjectId,
     })),
   );
   const markWorkspaceUnread = useUiStateStore((store) => store.markWorkspaceUnread);
   const toggleProject = useUiStateStore((store) => store.toggleProject);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const reorderWorkspaces = useUiStateStore((store) => store.reorderWorkspaces);
+  const setWorkspaceOrder = useUiStateStore((store) => store.setWorkspaceOrder);
   const clearComposerDraftForWorkspace = useComposerDraftStore(
     (store) => store.clearDraftWorkspace,
   );
@@ -715,8 +728,6 @@ export default function Sidebar() {
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<WorkspaceId, HTMLButtonElement>());
-  const dragInProgressRef = useRef(false);
-  const suppressProjectClickAfterDragRef = useRef(false);
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const selectedWorkspaceIds = useWorkspaceSelectionStore((s) => s.selectedWorkspaceIds);
@@ -890,14 +901,13 @@ export default function Sidebar() {
 
   const focusMostRecentWorkspaceForProject = useCallback(
     (projectId: ProjectId) => {
-      const latestWorkspace = sortWorkspacesForSidebar(
+      const latestWorkspace = sortWorkspacesByCreatedAt(
         (visibleWorkspaceIdsByProjectId[projectId] ?? [])
           .map((workspaceId) => sidebarWorkspacesById[workspaceId])
           .filter(
             (workspace): workspace is NonNullable<typeof workspace> => workspace !== undefined,
           )
           .filter((workspace) => workspace.archivedAt === null),
-        appSettings.sidebarWorkspaceSortOrder,
       )[0];
       if (!latestWorkspace) return;
 
@@ -906,12 +916,7 @@ export default function Sidebar() {
         params: { workspaceId: latestWorkspace.id },
       });
     },
-    [
-      appSettings.sidebarWorkspaceSortOrder,
-      navigate,
-      sidebarWorkspacesById,
-      visibleWorkspaceIdsByProjectId,
-    ],
+    [navigate, sidebarWorkspacesById, visibleWorkspaceIdsByProjectId],
   );
 
   const addProjectFromPath = useCallback(
@@ -1455,61 +1460,6 @@ export default function Sidebar() {
     ],
   );
 
-  const projectDnDSensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
-  );
-  const projectCollisionDetection = useCallback<CollisionDetection>((args) => {
-    const pointerCollisions = pointerWithin(args);
-    if (pointerCollisions.length > 0) {
-      return pointerCollisions;
-    }
-
-    return closestCorners(args);
-  }, []);
-
-  const handleProjectDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      if (appSettings.sidebarProjectSortOrder !== "manual") {
-        dragInProgressRef.current = false;
-        return;
-      }
-      dragInProgressRef.current = false;
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const activeProject = sidebarProjects.find((project) => project.id === active.id);
-      const overProject = sidebarProjects.find((project) => project.id === over.id);
-      if (!activeProject || !overProject) return;
-      reorderProjects(activeProject.id, overProject.id);
-    },
-    [appSettings.sidebarProjectSortOrder, reorderProjects, sidebarProjects],
-  );
-
-  const handleProjectDragStart = useCallback(
-    (_event: DragStartEvent) => {
-      if (appSettings.sidebarProjectSortOrder !== "manual") {
-        return;
-      }
-      dragInProgressRef.current = true;
-      suppressProjectClickAfterDragRef.current = true;
-    },
-    [appSettings.sidebarProjectSortOrder],
-  );
-
-  const handleProjectDragCancel = useCallback((_event: DragCancelEvent) => {
-    dragInProgressRef.current = false;
-  }, []);
-
-  const animatedProjectListsRef = useRef(new WeakSet<HTMLElement>());
-  const attachProjectListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
-    if (!node || animatedProjectListsRef.current.has(node)) {
-      return;
-    }
-    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-    animatedProjectListsRef.current.add(node);
-  }, []);
-
   const animatedWorkspaceListsRef = useRef(new WeakSet<HTMLElement>());
   const attachWorkspaceListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
     if (!node || animatedWorkspaceListsRef.current.has(node)) {
@@ -1532,8 +1482,6 @@ export default function Sidebar() {
         // Keep context-menu gestures from arming the sortable drag sensor.
         event.stopPropagation();
       }
-
-      suppressProjectClickAfterDragRef.current = false;
     },
     [],
   );
@@ -1542,19 +1490,9 @@ export default function Sidebar() {
     () => sidebarWorkspaces.filter((workspace) => workspace.archivedAt === null),
     [sidebarWorkspaces],
   );
-  const sortedProjects = useMemo(
-    () =>
-      sortProjectsForSidebar(
-        sidebarProjects,
-        visibleWorkspaces,
-        appSettings.sidebarProjectSortOrder,
-      ),
-    [appSettings.sidebarProjectSortOrder, sidebarProjects, visibleWorkspaces],
-  );
-  const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
   const renderedProjects = useMemo(
     () =>
-      sortedProjects.map((project) => {
+      sidebarProjects.map((project) => {
         const resolveProjectWorkspaceStatus = (workspace: (typeof visibleWorkspaces)[number]) =>
           resolveWorkspaceStatusPill({
             workspace: {
@@ -1562,15 +1500,19 @@ export default function Sidebar() {
               lastVisitedAt: workspaceLastVisitedAtById[workspace.id],
             },
           });
-        const projectWorkspaces = sortWorkspacesForSidebar(
+        const creationSortedWorkspaces = sortWorkspacesByCreatedAt(
           (visibleWorkspaceIdsByProjectId[project.id] ?? [])
             .map((workspaceId) => sidebarWorkspacesById[workspaceId])
             .filter(
               (workspace): workspace is NonNullable<typeof workspace> => workspace !== undefined,
             )
             .filter((workspace) => workspace.archivedAt === null),
-          appSettings.sidebarWorkspaceSortOrder,
         );
+        const projectWorkspaces = orderItemsByPreferredIds({
+          items: creationSortedWorkspaces,
+          preferredIds: workspaceOrderByProjectId[project.id] ?? [],
+          getId: (workspace) => workspace.id,
+        });
         const projectStatus = resolveProjectStatusIndicator(
           projectWorkspaces.flatMap((workspace) =>
             collectWorkspaceStatusPills(
@@ -1582,11 +1524,7 @@ export default function Sidebar() {
         );
         const activeWorkspaceId = effectiveRouteWorkspaceId ?? undefined;
         const isWorkspaceListExpanded = expandedWorkspaceListsByProject.has(project.id);
-        const pinnedCollapsedWorkspace =
-          !project.expanded && activeWorkspaceId
-            ? (projectWorkspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null)
-            : null;
-        const shouldShowWorkspacePanel = project.expanded || pinnedCollapsedWorkspace !== null;
+        const shouldShowWorkspacePanel = project.expanded;
         const {
           hasHiddenWorkspaces,
           hiddenWorkspaces,
@@ -1607,9 +1545,7 @@ export default function Sidebar() {
           ),
         );
         const orderedProjectWorkspaceIds = projectWorkspaces.map((workspace) => workspace.id);
-        const renderedWorkspaceIds = pinnedCollapsedWorkspace
-          ? [pinnedCollapsedWorkspace.id]
-          : visibleProjectWorkspaces.map((workspace) => workspace.id);
+        const renderedWorkspaceIds = visibleProjectWorkspaces.map((workspace) => workspace.id);
         const showEmptyWorkspaceState = project.expanded && projectWorkspaces.length === 0;
 
         return {
@@ -1625,16 +1561,58 @@ export default function Sidebar() {
         };
       }),
     [
-      appSettings.sidebarWorkspaceSortOrder,
       childWorkspaceIdsByRootId,
       effectiveRouteWorkspaceId,
       expandedWorkspaceListsByProject,
-      sortedProjects,
+      sidebarProjects,
       sidebarWorkspacesById,
       visibleWorkspaceIdsByProjectId,
       workspaceLastVisitedAtById,
+      workspaceOrderByProjectId,
     ],
   );
+  const renderedProjectsRef = useRef(renderedProjects);
+  renderedProjectsRef.current = renderedProjects;
+
+  const handleDragEnd = useCallback(
+    (
+      event: Parameters<NonNullable<React.ComponentProps<typeof DragDropProvider>["onDragEnd"]>>[0],
+    ) => {
+      const { source, target } = event.operation;
+      if (!source || !target || source.id === target.id) return;
+      const sourceId = String(source.id);
+      if (source.type === "project") {
+        if (target.type !== "project") {
+          return;
+        }
+        reorderProjects(sourceId as ProjectId, String(target.id) as ProjectId);
+      } else if (typeof source.type === "string" && source.type.startsWith("workspace:")) {
+        if (target.type !== source.type) {
+          return;
+        }
+        const targetId = String(target.id);
+        // Find which project this workspace belongs to and ensure order is initialized
+        for (const renderedProject of renderedProjectsRef.current) {
+          const workspaceIds = renderedProject.orderedProjectWorkspaceIds;
+          if (workspaceIds.includes(sourceId as WorkspaceId)) {
+            if (!workspaceIds.includes(targetId as WorkspaceId)) {
+              return;
+            }
+            const pid = renderedProject.project.id as ProjectId;
+            // Initialize workspace order from current render order if not yet stored
+            const { workspaceOrderByProjectId: currentOrder } = useUiStateStore.getState();
+            if (!currentOrder[pid] || currentOrder[pid].length === 0) {
+              setWorkspaceOrder(pid, workspaceIds);
+            }
+            reorderWorkspaces(pid, sourceId as WorkspaceId, targetId as WorkspaceId);
+            break;
+          }
+        }
+      }
+    },
+    [reorderProjects, reorderWorkspaces, setWorkspaceOrder],
+  );
+
   const visibleSidebarWorkspaceIds = useMemo(
     () => getVisibleSidebarWorkspaceIds(renderedProjects),
     [renderedProjects],
@@ -1767,7 +1745,10 @@ export default function Sidebar() {
 
   function renderProjectItem(
     renderedProject: (typeof renderedProjects)[number],
-    dragHandleProps: SortableProjectHandleProps | null,
+    projectDragBindings: {
+      handleRef: (element: Element | null) => void;
+      targetRef: (element: Element | null) => void;
+    },
   ) {
     const {
       hasHiddenWorkspaces,
@@ -1782,18 +1763,12 @@ export default function Sidebar() {
     } = renderedProject;
     return (
       <>
-        <div className="group/project-header relative">
+        <div ref={projectDragBindings.targetRef} className="group/project-header relative">
           <SidebarMenuButton
-            ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
+            ref={projectDragBindings.handleRef}
             size="sm"
-            className={`gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground ${
-              isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-            }`}
-            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
-            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.listeners : {})}
+            className="cursor-grab gap-2 px-2 py-1.5 text-left hover:bg-accent active:cursor-grabbing group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
             onPointerDownCapture={handleProjectTitlePointerDownCapture}
-            onClick={(event) => handleProjectTitleClick(event, project.id)}
-            onKeyDown={(event) => handleProjectTitleKeyDown(event, project.id)}
             onContextMenu={(event) => {
               event.preventDefault();
               suppressProjectClickForContextMenuRef.current = true;
@@ -1805,9 +1780,14 @@ export default function Sidebar() {
           >
             {!project.expanded && projectStatus ? (
               <span
-                aria-hidden="true"
+                role="button"
+                tabIndex={-1}
                 title={projectStatus.label}
-                className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
+                className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 cursor-pointer items-center justify-center ${projectStatus.colorClass}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleProject(project.id);
+                }}
               >
                 <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
                   <span
@@ -1819,11 +1799,21 @@ export default function Sidebar() {
                 <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
               </span>
             ) : (
-              <ChevronRightIcon
-                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                  project.expanded ? "rotate-90" : ""
-                }`}
-              />
+              <span
+                role="button"
+                tabIndex={-1}
+                className="-ml-0.5 inline-flex shrink-0 cursor-pointer"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleProject(project.id);
+                }}
+              >
+                <ChevronRightIcon
+                  className={`size-3.5 text-muted-foreground/70 transition-transform duration-150 ${
+                    project.expanded ? "rotate-90" : ""
+                  }`}
+                />
+              </span>
             )}
             <ProjectFavicon cwd={project.cwd} />
             <span className="flex-1 truncate text-xs font-medium text-foreground/90">
@@ -1897,38 +1887,44 @@ export default function Sidebar() {
             </SidebarMenuSubItem>
           ) : null}
           {shouldShowWorkspacePanel &&
-            renderedWorkspaceIds.map((workspaceId) => (
-              <SidebarWorkspaceRow
+            renderedWorkspaceIds.map((workspaceId, wsIndex) => (
+              <SortableWorkspaceItem
                 key={workspaceId}
                 workspaceId={workspaceId}
-                orderedProjectWorkspaceIds={orderedProjectWorkspaceIds}
-                routeWorkspaceId={effectiveRouteWorkspaceId}
-                selectedWorkspaceIds={selectedWorkspaceIds}
-                showWorkspaceJumpHints={showWorkspaceJumpHints}
-                jumpLabel={workspaceJumpLabelById.get(workspaceId) ?? null}
-                appSettingsConfirmWorkspaceArchive={appSettings.confirmWorkspaceArchive}
-                renamingWorkspaceId={renamingWorkspaceId}
-                renamingTitle={renamingTitle}
-                setRenamingTitle={setRenamingTitle}
-                renamingInputRef={renamingInputRef}
-                renamingCommittedRef={renamingCommittedRef}
-                confirmingArchiveWorkspaceId={confirmingArchiveWorkspaceId}
-                setConfirmingArchiveWorkspaceId={setConfirmingArchiveWorkspaceId}
-                confirmArchiveButtonRefs={confirmArchiveButtonRefs}
-                handleWorkspaceClick={handleWorkspaceClick}
-                navigateToWorkspace={navigateToWorkspace}
-                handleMultiSelectContextMenu={handleMultiSelectContextMenu}
-                handleWorkspaceContextMenu={handleWorkspaceContextMenu}
-                clearSelection={clearSelection}
-                commitRename={commitRename}
-                cancelRename={cancelRename}
-                attemptArchiveWorkspace={attemptArchiveWorkspace}
-                openPrLink={openPrLink}
-                pr={prByWorkspaceId.get(workspaceId) ?? null}
-                childWorkspaceIds={
-                  childWorkspaceIdsByRootId.get(workspaceId) ?? EMPTY_CHILD_WORKSPACE_IDS
-                }
-              />
+                index={wsIndex}
+                projectId={project.id}
+              >
+                <SidebarWorkspaceRow
+                  workspaceId={workspaceId}
+                  orderedProjectWorkspaceIds={orderedProjectWorkspaceIds}
+                  routeWorkspaceId={effectiveRouteWorkspaceId}
+                  selectedWorkspaceIds={selectedWorkspaceIds}
+                  showWorkspaceJumpHints={showWorkspaceJumpHints}
+                  jumpLabel={workspaceJumpLabelById.get(workspaceId) ?? null}
+                  appSettingsConfirmWorkspaceArchive={appSettings.confirmWorkspaceArchive}
+                  renamingWorkspaceId={renamingWorkspaceId}
+                  renamingTitle={renamingTitle}
+                  setRenamingTitle={setRenamingTitle}
+                  renamingInputRef={renamingInputRef}
+                  renamingCommittedRef={renamingCommittedRef}
+                  confirmingArchiveWorkspaceId={confirmingArchiveWorkspaceId}
+                  setConfirmingArchiveWorkspaceId={setConfirmingArchiveWorkspaceId}
+                  confirmArchiveButtonRefs={confirmArchiveButtonRefs}
+                  handleWorkspaceClick={handleWorkspaceClick}
+                  navigateToWorkspace={navigateToWorkspace}
+                  handleMultiSelectContextMenu={handleMultiSelectContextMenu}
+                  handleWorkspaceContextMenu={handleWorkspaceContextMenu}
+                  clearSelection={clearSelection}
+                  commitRename={commitRename}
+                  cancelRename={cancelRename}
+                  attemptArchiveWorkspace={attemptArchiveWorkspace}
+                  openPrLink={openPrLink}
+                  pr={prByWorkspaceId.get(workspaceId) ?? null}
+                  childWorkspaceIds={
+                    childWorkspaceIdsByRootId.get(workspaceId) ?? EMPTY_CHILD_WORKSPACE_IDS
+                  }
+                />
+              </SortableWorkspaceItem>
             ))}
 
           {project.expanded && hasHiddenWorkspaces && !isWorkspaceListExpanded && (
@@ -1970,46 +1966,6 @@ export default function Sidebar() {
       </>
     );
   }
-
-  const handleProjectTitleClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => {
-      if (suppressProjectClickForContextMenuRef.current) {
-        suppressProjectClickForContextMenuRef.current = false;
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (dragInProgressRef.current) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (suppressProjectClickAfterDragRef.current) {
-        // Consume the synthetic click emitted after a drag release.
-        suppressProjectClickAfterDragRef.current = false;
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (selectedWorkspaceIds.size > 0) {
-        clearSelection();
-      }
-      toggleProject(projectId);
-    },
-    [clearSelection, selectedWorkspaceIds.size, toggleProject],
-  );
-
-  const handleProjectTitleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLButtonElement>, projectId: ProjectId) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      if (dragInProgressRef.current) {
-        return;
-      }
-      toggleProject(projectId);
-    },
-    [toggleProject],
-  );
 
   useEffect(() => {
     const onMouseDown = (event: globalThis.MouseEvent) => {
@@ -2301,40 +2257,30 @@ export default function Sidebar() {
                 </div>
               )}
 
-              {isManualProjectSorting ? (
-                <DndContext
-                  sensors={projectDnDSensors}
-                  collisionDetection={projectCollisionDetection}
-                  modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
-                  onDragStart={handleProjectDragStart}
-                  onDragEnd={handleProjectDragEnd}
-                  onDragCancel={handleProjectDragCancel}
-                >
-                  <SidebarMenu>
-                    <SortableContext
-                      items={renderedProjects.map((renderedProject) => renderedProject.project.id)}
-                      strategy={verticalListSortingStrategy}
+              <DragDropProvider
+                onDragEnd={handleDragEnd}
+                sensors={[
+                  PointerSensor.configure({
+                    activationConstraints: [
+                      new PointerActivationConstraints.Distance({ value: 8 }),
+                    ],
+                  }),
+                ]}
+              >
+                <SidebarMenu>
+                  {renderedProjects.map((renderedProject, index) => (
+                    <SortableProjectItem
+                      key={renderedProject.project.id}
+                      projectId={renderedProject.project.id}
+                      index={index}
                     >
-                      {renderedProjects.map((renderedProject) => (
-                        <SortableProjectItem
-                          key={renderedProject.project.id}
-                          projectId={renderedProject.project.id}
-                        >
-                          {(dragHandleProps) => renderProjectItem(renderedProject, dragHandleProps)}
-                        </SortableProjectItem>
-                      ))}
-                    </SortableContext>
-                  </SidebarMenu>
-                </DndContext>
-              ) : (
-                <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-                  {renderedProjects.map((renderedProject) => (
-                    <SidebarMenuItem key={renderedProject.project.id} className="rounded-md">
-                      {renderProjectItem(renderedProject, null)}
-                    </SidebarMenuItem>
+                      {(projectDragBindings) =>
+                        renderProjectItem(renderedProject, projectDragBindings)
+                      }
+                    </SortableProjectItem>
                   ))}
                 </SidebarMenu>
-              )}
+              </DragDropProvider>
             </SidebarGroup>
           </SidebarContent>
 

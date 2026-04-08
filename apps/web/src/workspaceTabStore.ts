@@ -118,6 +118,7 @@ interface WorkspaceTabStoreState {
   addTab: (workspaceWorkspaceId: WorkspaceId, tab: WorkspaceTab) => void;
   removeTab: (workspaceWorkspaceId: WorkspaceId, tabId: string) => void;
   setActiveTab: (workspaceWorkspaceId: WorkspaceId, tabId: string) => void;
+  reorderTabs: (workspaceWorkspaceId: WorkspaceId, activeTabId: string, overTabId: string) => void;
   /** Find the tab that owns a given workspaceId. */
   findTabByWorkspaceId: (
     workspaceWorkspaceId: WorkspaceId,
@@ -205,6 +206,26 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
             tabStateByWorkspaceWorkspaceId: {
               ...state.tabStateByWorkspaceWorkspaceId,
               [workspaceWorkspaceId]: { ...current, activeTabId: tabId },
+            },
+          };
+        }),
+
+      reorderTabs: (workspaceWorkspaceId, activeTabId, overTabId) =>
+        set((state) => {
+          if (activeTabId === overTabId) return state;
+          const current = state.tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+          if (!current) return state;
+          const fromIndex = current.tabs.findIndex((t) => t.id === activeTabId);
+          const toIndex = current.tabs.findIndex((t) => t.id === overTabId);
+          if (fromIndex < 0 || toIndex < 0) return state;
+          const nextTabs = [...current.tabs];
+          const [moved] = nextTabs.splice(fromIndex, 1);
+          if (!moved) return state;
+          nextTabs.splice(toIndex, 0, moved);
+          return {
+            tabStateByWorkspaceWorkspaceId: {
+              ...state.tabStateByWorkspaceWorkspaceId,
+              [workspaceWorkspaceId]: { ...current, tabs: nextTabs },
             },
           };
         }),

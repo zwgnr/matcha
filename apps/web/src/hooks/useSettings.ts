@@ -21,8 +21,6 @@ import {
   ClientSettingsSchema,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_UNIFIED_SETTINGS,
-  SidebarProjectSortOrder,
-  SidebarWorkspaceSortOrder,
   TimestampFormat,
   UnifiedSettings,
 } from "@matcha/contracts/settings";
@@ -204,14 +202,6 @@ export function buildLegacyClientSettingsMigrationPatch(
 
   if (Predicate.isBoolean(legacySettings.diffWordWrap)) {
     patch.diffWordWrap = legacySettings.diffWordWrap;
-  }
-
-  if (Schema.is(SidebarProjectSortOrder)(legacySettings.sidebarProjectSortOrder)) {
-    patch.sidebarProjectSortOrder = legacySettings.sidebarProjectSortOrder;
-  }
-
-  if (Schema.is(SidebarWorkspaceSortOrder)(legacySettings.sidebarWorkspaceSortOrder)) {
-    patch.sidebarWorkspaceSortOrder = legacySettings.sidebarWorkspaceSortOrder;
   }
 
   if (Schema.is(TimestampFormat)(legacySettings.timestampFormat)) {

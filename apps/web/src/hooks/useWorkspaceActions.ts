@@ -127,7 +127,6 @@ export function useWorkspaceActions() {
         workspaces,
         deletedWorkspaceId: workspaceId,
         deletedWorkspaceIds,
-        sortOrder: appSettings.sidebarWorkspaceSortOrder,
       });
       await api.orchestration.dispatchCommand({
         type: "workspace.delete",
@@ -179,7 +178,6 @@ export function useWorkspaceActions() {
       clearComposerDraftForWorkspace,
       clearProjectDraftWorkspaceById,
       clearTerminalState,
-      appSettings.sidebarWorkspaceSortOrder,
       navigate,
       removeWorktreeMutation,
       routeWorkspaceId,

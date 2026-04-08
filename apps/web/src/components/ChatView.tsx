@@ -990,6 +990,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   // -- Workspace tab state (keyed by the workspace root workspace id) --
   const activeProjectId = activeWorkspace?.projectId ?? null;
   const setActiveTab = useWorkspaceTabStore((s) => s.setActiveTab);
+  const reorderTabs = useWorkspaceTabStore((s) => s.reorderTabs);
   const addTab = useWorkspaceTabStore((s) => s.addTab);
   const removeTab = useWorkspaceTabStore((s) => s.removeTab);
   const findTabByWorkspaceId = useWorkspaceTabStore((s) => s.findTabByWorkspaceId);
@@ -1114,6 +1115,13 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       }
     },
     [navigate, routeWorkspaceId, setActiveTab, workspaceWorkspaceId],
+  );
+
+  const handleReorderTab = useCallback(
+    (activeTabId: string, overTabId: string) => {
+      reorderTabs(workspaceWorkspaceId, activeTabId, overTabId);
+    },
+    [reorderTabs, workspaceWorkspaceId],
   );
 
   const handleCloseTab = useCallback(
@@ -4541,6 +4549,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onAddTab={handleAddTab}
+          onReorderTab={handleReorderTab}
         />
       )}
 

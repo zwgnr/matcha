@@ -15,24 +15,10 @@ export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"])
 export type TimestampFormat = typeof TimestampFormat.Type;
 export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
 
-export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_at", "manual"]);
-export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
-export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
-
-export const SidebarWorkspaceSortOrder = Schema.Literals(["updated_at", "created_at"]);
-export type SidebarWorkspaceSortOrder = typeof SidebarWorkspaceSortOrder.Type;
-export const DEFAULT_SIDEBAR_WORKSPACE_SORT_ORDER: SidebarWorkspaceSortOrder = "updated_at";
-
 export const ClientSettingsSchema = Schema.Struct({
   confirmWorkspaceArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   confirmWorkspaceDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_PROJECT_SORT_ORDER),
-  ),
-  sidebarWorkspaceSortOrder: SidebarWorkspaceSortOrder.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_WORKSPACE_SORT_ORDER),
-  ),
   timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;

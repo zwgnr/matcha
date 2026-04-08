@@ -1,8 +1,4 @@
 import * as React from "react";
-import type {
-  SidebarProjectSortOrder,
-  SidebarWorkspaceSortOrder,
-} from "@matcha/contracts/settings";
 import type { SidebarWorkspaceSummary, Workspace } from "../types";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
@@ -11,16 +7,6 @@ export const WORKSPACE_SELECTION_SAFE_SELECTOR =
   "[data-workspace-item], [data-workspace-selection-safe]";
 export const WORKSPACE_JUMP_HINT_SHOW_DELAY_MS = 100;
 export type SidebarNewWorkspaceEnvMode = "local" | "worktree";
-type SidebarProject = {
-  id: string;
-  name: string;
-  createdAt?: string | undefined;
-  updatedAt?: string | undefined;
-};
-type SidebarWorkspaceSortInput = Pick<Workspace, "createdAt" | "updatedAt"> & {
-  latestUserMessageAt?: string | null;
-  messages?: Pick<Workspace["messages"][number], "createdAt" | "role">[];
-};
 
 export type WorkspaceTraversalDirection = "previous" | "next";
 
@@ -457,135 +443,41 @@ function toSortableTimestamp(iso: string | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function getLatestUserMessageTimestamp(workspace: SidebarWorkspaceSortInput): number {
-  if (workspace.latestUserMessageAt) {
-    return toSortableTimestamp(workspace.latestUserMessageAt) ?? Number.NEGATIVE_INFINITY;
-  }
-
-  let latestUserMessageTimestamp: number | null = null;
-
-  for (const message of workspace.messages ?? []) {
-    if (message.role !== "user") continue;
-    const messageTimestamp = toSortableTimestamp(message.createdAt);
-    if (messageTimestamp === null) continue;
-    latestUserMessageTimestamp =
-      latestUserMessageTimestamp === null
-        ? messageTimestamp
-        : Math.max(latestUserMessageTimestamp, messageTimestamp);
-  }
-
-  if (latestUserMessageTimestamp !== null) {
-    return latestUserMessageTimestamp;
-  }
-
-  return (
-    toSortableTimestamp(workspace.updatedAt ?? workspace.createdAt) ?? Number.NEGATIVE_INFINITY
-  );
-}
-
-function getWorkspaceSortTimestamp(
-  workspace: SidebarWorkspaceSortInput,
-  sortOrder: SidebarWorkspaceSortOrder | Exclude<SidebarProjectSortOrder, "manual">,
-): number {
-  if (sortOrder === "created_at") {
-    return toSortableTimestamp(workspace.createdAt) ?? Number.NEGATIVE_INFINITY;
-  }
-  return getLatestUserMessageTimestamp(workspace);
-}
-
-export function sortWorkspacesForSidebar<
-  T extends Pick<Workspace, "id" | "createdAt" | "updatedAt"> & SidebarWorkspaceSortInput,
->(workspaces: readonly T[], sortOrder: SidebarWorkspaceSortOrder): T[] {
+/** Sort workspaces by creation date ascending (oldest first), stable fallback by id. */
+export function sortWorkspacesByCreatedAt<T extends Pick<Workspace, "id" | "createdAt">>(
+  workspaces: readonly T[],
+): T[] {
   return workspaces.toSorted((left, right) => {
-    const rightTimestamp = getWorkspaceSortTimestamp(right, sortOrder);
-    const leftTimestamp = getWorkspaceSortTimestamp(left, sortOrder);
+    const leftTimestamp = toSortableTimestamp(left.createdAt) ?? Number.NEGATIVE_INFINITY;
+    const rightTimestamp = toSortableTimestamp(right.createdAt) ?? Number.NEGATIVE_INFINITY;
     const byTimestamp =
-      rightTimestamp === leftTimestamp ? 0 : rightTimestamp > leftTimestamp ? 1 : -1;
+      leftTimestamp === rightTimestamp ? 0 : leftTimestamp < rightTimestamp ? -1 : 1;
     if (byTimestamp !== 0) return byTimestamp;
-    return right.id.localeCompare(left.id);
+    return left.id.localeCompare(right.id);
   });
 }
 
 export function getFallbackWorkspaceIdAfterDelete<
-  T extends Pick<Workspace, "id" | "projectId" | "createdAt" | "updatedAt"> &
-    SidebarWorkspaceSortInput,
+  T extends Pick<Workspace, "id" | "projectId" | "createdAt">,
 >(input: {
   workspaces: readonly T[];
   deletedWorkspaceId: T["id"];
-  sortOrder: SidebarWorkspaceSortOrder;
   deletedWorkspaceIds?: ReadonlySet<T["id"]>;
 }): T["id"] | null {
-  const { deletedWorkspaceId, deletedWorkspaceIds, sortOrder, workspaces } = input;
+  const { deletedWorkspaceId, deletedWorkspaceIds, workspaces } = input;
   const deletedWorkspace = workspaces.find((workspace) => workspace.id === deletedWorkspaceId);
   if (!deletedWorkspace) {
     return null;
   }
 
   return (
-    sortWorkspacesForSidebar(
+    sortWorkspacesByCreatedAt(
       workspaces.filter(
         (workspace) =>
           workspace.projectId === deletedWorkspace.projectId &&
           workspace.id !== deletedWorkspaceId &&
           !deletedWorkspaceIds?.has(workspace.id),
       ),
-      sortOrder,
     )[0]?.id ?? null
   );
-}
-
-export function getProjectSortTimestamp(
-  project: SidebarProject,
-  projectWorkspaces: readonly SidebarWorkspaceSortInput[],
-  sortOrder: Exclude<SidebarProjectSortOrder, "manual">,
-): number {
-  if (projectWorkspaces.length > 0) {
-    return projectWorkspaces.reduce(
-      (latest, workspace) => Math.max(latest, getWorkspaceSortTimestamp(workspace, sortOrder)),
-      Number.NEGATIVE_INFINITY,
-    );
-  }
-
-  if (sortOrder === "created_at") {
-    return toSortableTimestamp(project.createdAt) ?? Number.NEGATIVE_INFINITY;
-  }
-  return toSortableTimestamp(project.updatedAt ?? project.createdAt) ?? Number.NEGATIVE_INFINITY;
-}
-
-export function sortProjectsForSidebar<
-  TProject extends SidebarProject,
-  TWorkspace extends Pick<Workspace, "projectId" | "createdAt" | "updatedAt"> &
-    SidebarWorkspaceSortInput,
->(
-  projects: readonly TProject[],
-  workspaces: readonly TWorkspace[],
-  sortOrder: SidebarProjectSortOrder,
-): TProject[] {
-  if (sortOrder === "manual") {
-    return [...projects];
-  }
-
-  const workspacesByProjectId = new Map<string, TWorkspace[]>();
-  for (const workspace of workspaces) {
-    const existing = workspacesByProjectId.get(workspace.projectId) ?? [];
-    existing.push(workspace);
-    workspacesByProjectId.set(workspace.projectId, existing);
-  }
-
-  return [...projects].toSorted((left, right) => {
-    const rightTimestamp = getProjectSortTimestamp(
-      right,
-      workspacesByProjectId.get(right.id) ?? [],
-      sortOrder,
-    );
-    const leftTimestamp = getProjectSortTimestamp(
-      left,
-      workspacesByProjectId.get(left.id) ?? [],
-      sortOrder,
-    );
-    const byTimestamp =
-      rightTimestamp === leftTimestamp ? 0 : rightTimestamp > leftTimestamp ? 1 : -1;
-    if (byTimestamp !== 0) return byTimestamp;
-    return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
-  });
 }

@@ -19,6 +19,7 @@ const LEGACY_PERSISTED_STATE_KEYS = [
 interface PersistedUiState {
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
+  workspaceOrderByProjectCwd?: Record<string, string[]>;
 }
 
 export interface UiProjectState {
@@ -28,6 +29,7 @@ export interface UiProjectState {
 
 export interface UiWorkspaceState {
   workspaceLastVisitedAtById: Record<string, string>;
+  workspaceOrderByProjectId: Record<string, WorkspaceId[]>;
 }
 
 export interface UiState extends UiProjectState, UiWorkspaceState {}
@@ -46,10 +48,12 @@ const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
   workspaceLastVisitedAtById: {},
+  workspaceOrderByProjectId: {},
 };
 
 const persistedExpandedProjectCwds = new Set<string>();
 const persistedProjectOrderCwds: string[] = [];
+const persistedWorkspaceOrderByProjectCwd = new Map<string, string[]>();
 const currentProjectCwdById = new Map<ProjectId, string>();
 let legacyKeysCleanedUp = false;
 
@@ -80,6 +84,7 @@ function readPersistedState(): UiState {
 function hydratePersistedProjectState(parsed: PersistedUiState): void {
   persistedExpandedProjectCwds.clear();
   persistedProjectOrderCwds.length = 0;
+  persistedWorkspaceOrderByProjectCwd.clear();
   for (const cwd of parsed.expandedProjectCwds ?? []) {
     if (typeof cwd === "string" && cwd.length > 0) {
       persistedExpandedProjectCwds.add(cwd);
@@ -88,6 +93,14 @@ function hydratePersistedProjectState(parsed: PersistedUiState): void {
   for (const cwd of parsed.projectOrderCwds ?? []) {
     if (typeof cwd === "string" && cwd.length > 0 && !persistedProjectOrderCwds.includes(cwd)) {
       persistedProjectOrderCwds.push(cwd);
+    }
+  }
+  for (const [cwd, ids] of Object.entries(parsed.workspaceOrderByProjectCwd ?? {})) {
+    if (typeof cwd === "string" && cwd.length > 0 && Array.isArray(ids)) {
+      persistedWorkspaceOrderByProjectCwd.set(
+        cwd,
+        ids.filter((id): id is string => typeof id === "string" && id.length > 0),
+      );
     }
   }
 }
@@ -107,11 +120,19 @@ function persistState(state: UiState): void {
       const cwd = currentProjectCwdById.get(projectId);
       return cwd ? [cwd] : [];
     });
+    const workspaceOrderByProjectCwd: Record<string, string[]> = {};
+    for (const [projectId, workspaceIds] of Object.entries(state.workspaceOrderByProjectId)) {
+      const cwd = currentProjectCwdById.get(projectId as ProjectId);
+      if (cwd && workspaceIds.length > 0) {
+        workspaceOrderByProjectCwd[cwd] = workspaceIds;
+      }
+    }
     window.localStorage.setItem(
       PERSISTED_STATE_KEY,
       JSON.stringify({
         expandedProjectCwds,
         projectOrderCwds,
+        workspaceOrderByProjectCwd,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -230,9 +251,31 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
           })
           .map((project) => project.id);
 
+  // Hydrate workspace order from persisted cwd-keyed data when not yet loaded
+  let nextWorkspaceOrderByProjectId = state.workspaceOrderByProjectId;
+  if (
+    Object.keys(state.workspaceOrderByProjectId).length === 0 &&
+    persistedWorkspaceOrderByProjectCwd.size > 0
+  ) {
+    const cwdToProjectId = new Map(
+      mappedProjects.map((project) => [project.cwd, project.id] as const),
+    );
+    const hydrated: Record<string, WorkspaceId[]> = {};
+    for (const [cwd, ids] of persistedWorkspaceOrderByProjectCwd) {
+      const projectId = cwdToProjectId.get(cwd);
+      if (projectId) {
+        hydrated[projectId] = ids as WorkspaceId[];
+      }
+    }
+    if (Object.keys(hydrated).length > 0) {
+      nextWorkspaceOrderByProjectId = hydrated;
+    }
+  }
+
   if (
     recordsEqual(state.projectExpandedById, nextExpandedById) &&
     projectOrdersEqual(state.projectOrder, nextProjectOrder) &&
+    nextWorkspaceOrderByProjectId === state.workspaceOrderByProjectId &&
     !cwdMappingChanged
   ) {
     return state;
@@ -242,6 +285,7 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
     ...state,
     projectExpandedById: nextExpandedById,
     projectOrder: nextProjectOrder,
+    workspaceOrderByProjectId: nextWorkspaceOrderByProjectId,
   };
 }
 
@@ -261,12 +305,34 @@ export function syncWorkspaces(state: UiState, workspaces: readonly SyncWorkspac
       nextWorkspaceLastVisitedAtById[workspace.id] = workspace.seedVisitedAt;
     }
   }
-  if (recordsEqual(state.workspaceLastVisitedAtById, nextWorkspaceLastVisitedAtById)) {
+
+  // Clean stale workspace IDs from workspace order
+  let workspaceOrderChanged = false;
+  const nextWorkspaceOrderByProjectId = { ...state.workspaceOrderByProjectId };
+  for (const [projectId, order] of Object.entries(nextWorkspaceOrderByProjectId)) {
+    const filtered = order.filter((id) => retainedWorkspaceIds.has(id));
+    if (filtered.length !== order.length) {
+      workspaceOrderChanged = true;
+      if (filtered.length === 0) {
+        delete nextWorkspaceOrderByProjectId[projectId];
+      } else {
+        nextWorkspaceOrderByProjectId[projectId] = filtered;
+      }
+    }
+  }
+
+  if (
+    !workspaceOrderChanged &&
+    recordsEqual(state.workspaceLastVisitedAtById, nextWorkspaceLastVisitedAtById)
+  ) {
     return state;
   }
   return {
     ...state,
     workspaceLastVisitedAtById: nextWorkspaceLastVisitedAtById,
+    workspaceOrderByProjectId: workspaceOrderChanged
+      ? nextWorkspaceOrderByProjectId
+      : state.workspaceOrderByProjectId,
   };
 }
 
@@ -385,6 +451,53 @@ export function reorderProjects(
   };
 }
 
+export function reorderWorkspaces(
+  state: UiState,
+  projectId: ProjectId,
+  draggedWorkspaceId: WorkspaceId,
+  targetWorkspaceId: WorkspaceId,
+): UiState {
+  if (draggedWorkspaceId === targetWorkspaceId) {
+    return state;
+  }
+  const currentOrder = state.workspaceOrderByProjectId[projectId];
+  if (!currentOrder) {
+    return state;
+  }
+  const draggedIndex = currentOrder.indexOf(draggedWorkspaceId);
+  const targetIndex = currentOrder.indexOf(targetWorkspaceId);
+  if (draggedIndex < 0 || targetIndex < 0) {
+    return state;
+  }
+  const newOrder = [...currentOrder];
+  const [dragged] = newOrder.splice(draggedIndex, 1);
+  if (!dragged) {
+    return state;
+  }
+  newOrder.splice(targetIndex, 0, dragged);
+  return {
+    ...state,
+    workspaceOrderByProjectId: {
+      ...state.workspaceOrderByProjectId,
+      [projectId]: newOrder,
+    },
+  };
+}
+
+export function setWorkspaceOrder(
+  state: UiState,
+  projectId: ProjectId,
+  order: WorkspaceId[],
+): UiState {
+  return {
+    ...state,
+    workspaceOrderByProjectId: {
+      ...state.workspaceOrderByProjectId,
+      [projectId]: order,
+    },
+  };
+}
+
 interface UiStateStore extends UiState {
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
   syncWorkspaces: (workspaces: readonly SyncWorkspaceInput[]) => void;
@@ -397,6 +510,12 @@ interface UiStateStore extends UiState {
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
   reorderProjects: (draggedProjectId: ProjectId, targetProjectId: ProjectId) => void;
+  reorderWorkspaces: (
+    projectId: ProjectId,
+    draggedWorkspaceId: WorkspaceId,
+    targetWorkspaceId: WorkspaceId,
+  ) => void;
+  setWorkspaceOrder: (projectId: ProjectId, order: WorkspaceId[]) => void;
 }
 
 export const useUiStateStore = create<UiStateStore>((set) => ({
@@ -413,6 +532,10 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setProjectExpanded(state, projectId, expanded)),
   reorderProjects: (draggedProjectId, targetProjectId) =>
     set((state) => reorderProjects(state, draggedProjectId, targetProjectId)),
+  reorderWorkspaces: (projectId, draggedWorkspaceId, targetWorkspaceId) =>
+    set((state) => reorderWorkspaces(state, projectId, draggedWorkspaceId, targetWorkspaceId)),
+  setWorkspaceOrder: (projectId, order) =>
+    set((state) => setWorkspaceOrder(state, projectId, order)),
 }));
 
 useUiStateStore.subscribe((state) => debouncedPersistState.maybeExecute(state));

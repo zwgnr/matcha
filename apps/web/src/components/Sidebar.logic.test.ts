@@ -6,7 +6,6 @@ import {
   resolveAdjacentWorkspaceId,
   getFallbackWorkspaceIdAfterDelete,
   getVisibleWorkspacesForProject,
-  getProjectSortTimestamp,
   hasUnseenCompletion,
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
@@ -16,17 +15,11 @@ import {
   resolveWorkspaceRowClassName,
   resolveWorkspaceStatusPill,
   shouldClearWorkspaceSelectionOnMouseDown,
-  sortProjectsForSidebar,
-  sortWorkspacesForSidebar,
+  sortWorkspacesByCreatedAt,
   WORKSPACE_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
 import { OrchestrationLatestTurn, ProjectId, WorkspaceId } from "@matcha/contracts";
-import {
-  DEFAULT_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  type Project,
-  type Workspace,
-} from "../types";
+import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Workspace } from "../types";
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
@@ -627,24 +620,6 @@ describe("getVisibleWorkspacesForProject", () => {
   });
 });
 
-function makeProject(overrides: Partial<Project> = {}): Project {
-  const { defaultModelSelection, ...rest } = overrides;
-  return {
-    id: ProjectId.makeUnsafe("project-1"),
-    name: "Project",
-    cwd: "/tmp/project",
-    defaultModelSelection: {
-      provider: "codex",
-      model: "gpt-5.4",
-      ...defaultModelSelection,
-    },
-    createdAt: "2026-03-09T10:00:00.000Z",
-    updatedAt: "2026-03-09T10:00:00.000Z",
-    scripts: [],
-    ...rest,
-  };
-}
-
 function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
     id: WorkspaceId.makeUnsafe("workspace-1"),
@@ -674,77 +649,18 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   };
 }
 
-describe("sortWorkspacesForSidebar", () => {
-  it("sorts workspaces by the latest user message in recency mode", () => {
-    const sorted = sortWorkspacesForSidebar(
-      [
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-1"),
-          createdAt: "2026-03-09T10:00:00.000Z",
-          updatedAt: "2026-03-09T10:10:00.000Z",
-          messages: [
-            {
-              id: "message-1" as never,
-              role: "user",
-              text: "older",
-              createdAt: "2026-03-09T10:01:00.000Z",
-              streaming: false,
-              completedAt: "2026-03-09T10:01:00.000Z",
-            },
-          ],
-        }),
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-2"),
-          createdAt: "2026-03-09T10:05:00.000Z",
-          updatedAt: "2026-03-09T10:05:00.000Z",
-          messages: [
-            {
-              id: "message-2" as never,
-              role: "user",
-              text: "newer",
-              createdAt: "2026-03-09T10:06:00.000Z",
-              streaming: false,
-              completedAt: "2026-03-09T10:06:00.000Z",
-            },
-          ],
-        }),
-      ],
-      "updated_at",
-    );
-
-    expect(sorted.map((workspace) => workspace.id)).toEqual([
-      WorkspaceId.makeUnsafe("workspace-2"),
-      WorkspaceId.makeUnsafe("workspace-1"),
+describe("sortWorkspacesByCreatedAt", () => {
+  it("sorts workspaces by createdAt ascending (oldest first)", () => {
+    const sorted = sortWorkspacesByCreatedAt([
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe("workspace-1"),
+        createdAt: "2026-03-09T10:05:00.000Z",
+      }),
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe("workspace-2"),
+        createdAt: "2026-03-09T10:00:00.000Z",
+      }),
     ]);
-  });
-
-  it("falls back to workspace timestamps when there is no user message", () => {
-    const sorted = sortWorkspacesForSidebar(
-      [
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-1"),
-          createdAt: "2026-03-09T10:00:00.000Z",
-          updatedAt: "2026-03-09T10:01:00.000Z",
-          messages: [
-            {
-              id: "message-1" as never,
-              role: "assistant",
-              text: "assistant only",
-              createdAt: "2026-03-09T10:02:00.000Z",
-              streaming: false,
-              completedAt: "2026-03-09T10:02:00.000Z",
-            },
-          ],
-        }),
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-2"),
-          createdAt: "2026-03-09T10:05:00.000Z",
-          updatedAt: "2026-03-09T10:05:00.000Z",
-          messages: [],
-        }),
-      ],
-      "updated_at",
-    );
 
     expect(sorted.map((workspace) => workspace.id)).toEqual([
       WorkspaceId.makeUnsafe("workspace-2"),
@@ -753,46 +669,16 @@ describe("sortWorkspacesForSidebar", () => {
   });
 
   it("falls back to id ordering when workspaces have no sortable timestamps", () => {
-    const sorted = sortWorkspacesForSidebar(
-      [
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-1"),
-          createdAt: "" as never,
-          updatedAt: undefined,
-          messages: [],
-        }),
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-2"),
-          createdAt: "" as never,
-          updatedAt: undefined,
-          messages: [],
-        }),
-      ],
-      "updated_at",
-    );
-
-    expect(sorted.map((workspace) => workspace.id)).toEqual([
-      WorkspaceId.makeUnsafe("workspace-2"),
-      WorkspaceId.makeUnsafe("workspace-1"),
+    const sorted = sortWorkspacesByCreatedAt([
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe("workspace-2"),
+        createdAt: "" as never,
+      }),
+      makeWorkspace({
+        id: WorkspaceId.makeUnsafe("workspace-1"),
+        createdAt: "" as never,
+      }),
     ]);
-  });
-
-  it("can sort workspaces by createdAt when configured", () => {
-    const sorted = sortWorkspacesForSidebar(
-      [
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-1"),
-          createdAt: "2026-03-09T10:05:00.000Z",
-          updatedAt: "2026-03-09T10:05:00.000Z",
-        }),
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-2"),
-          createdAt: "2026-03-09T10:00:00.000Z",
-          updatedAt: "2026-03-09T10:10:00.000Z",
-        }),
-      ],
-      "created_at",
-    );
 
     expect(sorted.map((workspace) => workspace.id)).toEqual([
       WorkspaceId.makeUnsafe("workspace-1"),
@@ -802,39 +688,34 @@ describe("sortWorkspacesForSidebar", () => {
 });
 
 describe("getFallbackWorkspaceIdAfterDelete", () => {
-  it("returns the top remaining workspace in the deleted workspace's project sidebar order", () => {
+  it("returns the first remaining workspace in the deleted workspace's project by createdAt", () => {
     const fallbackWorkspaceId = getFallbackWorkspaceIdAfterDelete({
       workspaces: [
         makeWorkspace({
           id: WorkspaceId.makeUnsafe("workspace-oldest"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:00:00.000Z",
-          messages: [],
         }),
         makeWorkspace({
           id: WorkspaceId.makeUnsafe("workspace-active"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
-          messages: [],
         }),
         makeWorkspace({
           id: WorkspaceId.makeUnsafe("workspace-newest"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:10:00.000Z",
-          messages: [],
         }),
         makeWorkspace({
           id: WorkspaceId.makeUnsafe("workspace-other-project"),
           projectId: ProjectId.makeUnsafe("project-2"),
           createdAt: "2026-03-09T10:20:00.000Z",
-          messages: [],
         }),
       ],
       deletedWorkspaceId: WorkspaceId.makeUnsafe("workspace-active"),
-      sortOrder: "created_at",
     });
 
-    expect(fallbackWorkspaceId).toBe(WorkspaceId.makeUnsafe("workspace-newest"));
+    expect(fallbackWorkspaceId).toBe(WorkspaceId.makeUnsafe("workspace-oldest"));
   });
 
   it("skips other workspaces being deleted in the same action", () => {
@@ -844,19 +725,16 @@ describe("getFallbackWorkspaceIdAfterDelete", () => {
           id: WorkspaceId.makeUnsafe("workspace-active"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
-          messages: [],
         }),
         makeWorkspace({
           id: WorkspaceId.makeUnsafe("workspace-newest"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:10:00.000Z",
-          messages: [],
         }),
         makeWorkspace({
           id: WorkspaceId.makeUnsafe("workspace-next"),
           projectId: ProjectId.makeUnsafe("project-1"),
           createdAt: "2026-03-09T10:07:00.000Z",
-          messages: [],
         }),
       ],
       deletedWorkspaceId: WorkspaceId.makeUnsafe("workspace-active"),
@@ -864,167 +742,8 @@ describe("getFallbackWorkspaceIdAfterDelete", () => {
         WorkspaceId.makeUnsafe("workspace-active"),
         WorkspaceId.makeUnsafe("workspace-newest"),
       ]),
-      sortOrder: "created_at",
     });
 
     expect(fallbackWorkspaceId).toBe(WorkspaceId.makeUnsafe("workspace-next"));
-  });
-});
-
-describe("sortProjectsForSidebar", () => {
-  it("sorts projects by the most recent user message across their workspaces", () => {
-    const projects = [
-      makeProject({ id: ProjectId.makeUnsafe("project-1"), name: "Older project" }),
-      makeProject({ id: ProjectId.makeUnsafe("project-2"), name: "Newer project" }),
-    ];
-    const workspaces = [
-      makeWorkspace({
-        projectId: ProjectId.makeUnsafe("project-1"),
-        updatedAt: "2026-03-09T10:20:00.000Z",
-        messages: [
-          {
-            id: "message-1" as never,
-            role: "user",
-            text: "older project user message",
-            createdAt: "2026-03-09T10:01:00.000Z",
-            streaming: false,
-            completedAt: "2026-03-09T10:01:00.000Z",
-          },
-        ],
-      }),
-      makeWorkspace({
-        id: WorkspaceId.makeUnsafe("workspace-2"),
-        projectId: ProjectId.makeUnsafe("project-2"),
-        updatedAt: "2026-03-09T10:05:00.000Z",
-        messages: [
-          {
-            id: "message-2" as never,
-            role: "user",
-            text: "newer project user message",
-            createdAt: "2026-03-09T10:05:00.000Z",
-            streaming: false,
-            completedAt: "2026-03-09T10:05:00.000Z",
-          },
-        ],
-      }),
-    ];
-
-    const sorted = sortProjectsForSidebar(projects, workspaces, "updated_at");
-
-    expect(sorted.map((project) => project.id)).toEqual([
-      ProjectId.makeUnsafe("project-2"),
-      ProjectId.makeUnsafe("project-1"),
-    ]);
-  });
-
-  it("falls back to project timestamps when a project has no workspaces", () => {
-    const sorted = sortProjectsForSidebar(
-      [
-        makeProject({
-          id: ProjectId.makeUnsafe("project-1"),
-          name: "Older project",
-          updatedAt: "2026-03-09T10:01:00.000Z",
-        }),
-        makeProject({
-          id: ProjectId.makeUnsafe("project-2"),
-          name: "Newer project",
-          updatedAt: "2026-03-09T10:05:00.000Z",
-        }),
-      ],
-      [],
-      "updated_at",
-    );
-
-    expect(sorted.map((project) => project.id)).toEqual([
-      ProjectId.makeUnsafe("project-2"),
-      ProjectId.makeUnsafe("project-1"),
-    ]);
-  });
-
-  it("falls back to name and id ordering when projects have no sortable timestamps", () => {
-    const sorted = sortProjectsForSidebar(
-      [
-        makeProject({
-          id: ProjectId.makeUnsafe("project-2"),
-          name: "Beta",
-          createdAt: undefined,
-          updatedAt: undefined,
-        }),
-        makeProject({
-          id: ProjectId.makeUnsafe("project-1"),
-          name: "Alpha",
-          createdAt: undefined,
-          updatedAt: undefined,
-        }),
-      ],
-      [],
-      "updated_at",
-    );
-
-    expect(sorted.map((project) => project.id)).toEqual([
-      ProjectId.makeUnsafe("project-1"),
-      ProjectId.makeUnsafe("project-2"),
-    ]);
-  });
-
-  it("preserves manual project ordering", () => {
-    const projects = [
-      makeProject({ id: ProjectId.makeUnsafe("project-2"), name: "Second" }),
-      makeProject({ id: ProjectId.makeUnsafe("project-1"), name: "First" }),
-    ];
-
-    const sorted = sortProjectsForSidebar(projects, [], "manual");
-
-    expect(sorted.map((project) => project.id)).toEqual([
-      ProjectId.makeUnsafe("project-2"),
-      ProjectId.makeUnsafe("project-1"),
-    ]);
-  });
-
-  it("ignores archived workspaces when sorting projects", () => {
-    const sorted = sortProjectsForSidebar(
-      [
-        makeProject({
-          id: ProjectId.makeUnsafe("project-1"),
-          name: "Visible project",
-          updatedAt: "2026-03-09T10:01:00.000Z",
-        }),
-        makeProject({
-          id: ProjectId.makeUnsafe("project-2"),
-          name: "Archived-only project",
-          updatedAt: "2026-03-09T10:00:00.000Z",
-        }),
-      ],
-      [
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-visible"),
-          projectId: ProjectId.makeUnsafe("project-1"),
-          updatedAt: "2026-03-09T10:02:00.000Z",
-          archivedAt: null,
-        }),
-        makeWorkspace({
-          id: WorkspaceId.makeUnsafe("workspace-archived"),
-          projectId: ProjectId.makeUnsafe("project-2"),
-          updatedAt: "2026-03-09T10:10:00.000Z",
-          archivedAt: "2026-03-09T10:11:00.000Z",
-        }),
-      ].filter((workspace) => workspace.archivedAt === null),
-      "updated_at",
-    );
-
-    expect(sorted.map((project) => project.id)).toEqual([
-      ProjectId.makeUnsafe("project-1"),
-      ProjectId.makeUnsafe("project-2"),
-    ]);
-  });
-
-  it("returns the project timestamp when no workspaces are present", () => {
-    const timestamp = getProjectSortTimestamp(
-      makeProject({ updatedAt: "2026-03-09T10:10:00.000Z" }),
-      [],
-      "updated_at",
-    );
-
-    expect(timestamp).toBe(Date.parse("2026-03-09T10:10:00.000Z"));
   });
 });
