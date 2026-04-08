@@ -696,18 +696,16 @@ function PersistentWorkspaceTerminalDrawer({
 export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProps) {
   const { open: sidebarOpen } = useSidebar();
   const navigate = useNavigate();
-  const workspaceWorkspaceId = useWorkspaceTabStore(
-    (s) => s.findWorkspaceWorkspaceIdByProviderWorkspaceId(routeWorkspaceId) ?? routeWorkspaceId,
+  const rootWorkspaceId = useWorkspaceTabStore(
+    (s) => s.findRootWorkspaceId(routeWorkspaceId) ?? routeWorkspaceId,
   );
-  const tabState = useWorkspaceTabStore((s) => s.getOrInitTabs(workspaceWorkspaceId));
+  const tabState = useWorkspaceTabStore((s) => s.getOrInitTabs(rootWorkspaceId));
   const activeTab = useMemo(
     () => tabState.tabs.find((t) => t.id === tabState.activeTabId) ?? tabState.tabs[0],
     [tabState],
   );
   const workspaceId =
-    activeTab?.kind === "provider"
-      ? (activeTab.workspaceId ?? workspaceWorkspaceId)
-      : workspaceWorkspaceId;
+    activeTab?.kind === "provider" ? (activeTab.workspaceId ?? rootWorkspaceId) : rootWorkspaceId;
   const serverWorkspace = useWorkspaceById(workspaceId);
   const setStoreWorkspaceError = useStore((store) => store.setError);
   const markWorkspaceVisited = useUiStateStore((store) => store.markWorkspaceVisited);
@@ -998,9 +996,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const lastSyncedProviderTabWorkspaceIdRef = useRef<WorkspaceId | null>(null);
   const dismissedProviderWorkspaceIdsByWorkspaceRef = useRef<Record<string, Set<WorkspaceId>>>({});
   const currentWorkspaceProviderTab = activeWorkspaceId
-    ? findTabByWorkspaceId(workspaceWorkspaceId, activeWorkspaceId)
+    ? findTabByWorkspaceId(rootWorkspaceId, activeWorkspaceId)
     : undefined;
-  const isWorkspaceRootWorkspace = activeWorkspaceId === workspaceWorkspaceId;
+  const isWorkspaceRootWorkspace = activeWorkspaceId === rootWorkspaceId;
   const isWorkspaceDraftWorkspace = isLocalDraftWorkspace && isWorkspaceRootWorkspace;
   const isProviderTabActive = activeTab?.kind === "provider";
   const isTerminalTabActive = activeTab?.kind === "terminal";
@@ -1008,16 +1006,16 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const showWorkspaceSelectionState = activeTab === undefined;
 
   useEffect(() => {
-    if (routeWorkspaceId === workspaceWorkspaceId) {
+    if (routeWorkspaceId === rootWorkspaceId) {
       return;
     }
     void navigate({
       to: "/$workspaceId",
-      params: { workspaceId: workspaceWorkspaceId },
+      params: { workspaceId: rootWorkspaceId },
       replace: true,
       search: (previous) => previous,
     });
-  }, [navigate, routeWorkspaceId, workspaceWorkspaceId]);
+  }, [navigate, routeWorkspaceId, rootWorkspaceId]);
 
   useEffect(() => {
     if (!activeWorkspaceId || !activeWorkspace) {
@@ -1025,28 +1023,26 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       return;
     }
 
-    const existingProviderTab = findTabByWorkspaceId(workspaceWorkspaceId, activeWorkspaceId);
+    const existingProviderTab = findTabByWorkspaceId(rootWorkspaceId, activeWorkspaceId);
     if (!existingProviderTab) {
       if (isWorkspaceDraftWorkspace) {
         return;
       }
       const dismissedProviderWorkspaceIds =
-        dismissedProviderWorkspaceIdsByWorkspaceRef.current[workspaceWorkspaceId];
+        dismissedProviderWorkspaceIdsByWorkspaceRef.current[rootWorkspaceId];
       if (dismissedProviderWorkspaceIds?.has(activeWorkspaceId)) {
         return;
       }
       addTab(
-        workspaceWorkspaceId,
+        rootWorkspaceId,
         makeProviderTab(activeWorkspace.modelSelection.provider, activeWorkspaceId),
       );
       return;
     }
 
-    dismissedProviderWorkspaceIdsByWorkspaceRef.current[workspaceWorkspaceId]?.delete(
-      activeWorkspaceId,
-    );
+    dismissedProviderWorkspaceIdsByWorkspaceRef.current[rootWorkspaceId]?.delete(activeWorkspaceId);
     if (lastSyncedProviderTabWorkspaceIdRef.current !== activeWorkspaceId) {
-      setActiveTab(workspaceWorkspaceId, existingProviderTab.id);
+      setActiveTab(rootWorkspaceId, existingProviderTab.id);
     }
     lastSyncedProviderTabWorkspaceIdRef.current = activeWorkspaceId;
   }, [
@@ -1056,7 +1052,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     findTabByWorkspaceId,
     isWorkspaceDraftWorkspace,
     setActiveTab,
-    workspaceWorkspaceId,
+    rootWorkspaceId,
   ]);
 
   /** Create a brand-new terminal tab and switch to it. */
@@ -1068,9 +1064,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       if (activeWorkspaceId) {
         storeEnsureTerminal(activeWorkspaceId, tid, { open: true, active: false });
       }
-      addTab(workspaceWorkspaceId, tab);
-      if (routeWorkspaceId !== workspaceWorkspaceId) {
-        void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
+      addTab(rootWorkspaceId, tab);
+      if (routeWorkspaceId !== rootWorkspaceId) {
+        void navigate({ to: "/$workspaceId", params: { workspaceId: rootWorkspaceId } });
       }
       setTerminalFocusRequestId((value) => value + 1);
       return tab;
@@ -1082,7 +1078,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       routeWorkspaceId,
       storeEnsureTerminal,
       tabState?.tabs,
-      workspaceWorkspaceId,
+      rootWorkspaceId,
     ],
   );
 
@@ -1090,9 +1086,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const openOrCreateTerminalTab = useCallback(() => {
     const existingTerminalTab = tabState?.tabs?.find((t) => t.kind === "terminal");
     if (existingTerminalTab) {
-      setActiveTab(workspaceWorkspaceId, existingTerminalTab.id);
-      if (routeWorkspaceId !== workspaceWorkspaceId) {
-        void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
+      setActiveTab(rootWorkspaceId, existingTerminalTab.id);
+      if (routeWorkspaceId !== rootWorkspaceId) {
+        void navigate({ to: "/$workspaceId", params: { workspaceId: rootWorkspaceId } });
       }
       setTerminalFocusRequestId((value) => value + 1);
     } else {
@@ -1104,24 +1100,24 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     routeWorkspaceId,
     setActiveTab,
     tabState?.tabs,
-    workspaceWorkspaceId,
+    rootWorkspaceId,
   ]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
-      setActiveTab(workspaceWorkspaceId, tabId);
-      if (routeWorkspaceId !== workspaceWorkspaceId) {
-        void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
+      setActiveTab(rootWorkspaceId, tabId);
+      if (routeWorkspaceId !== rootWorkspaceId) {
+        void navigate({ to: "/$workspaceId", params: { workspaceId: rootWorkspaceId } });
       }
     },
-    [navigate, routeWorkspaceId, setActiveTab, workspaceWorkspaceId],
+    [navigate, routeWorkspaceId, setActiveTab, rootWorkspaceId],
   );
 
   const handleReorderTab = useCallback(
     (activeTabId: string, overTabId: string) => {
-      reorderTabs(workspaceWorkspaceId, activeTabId, overTabId);
+      reorderTabs(rootWorkspaceId, activeTabId, overTabId);
     },
-    [reorderTabs, workspaceWorkspaceId],
+    [reorderTabs, rootWorkspaceId],
   );
 
   const handleCloseTab = useCallback(
@@ -1129,10 +1125,10 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       const closedTab = tabState.tabs.find((t) => t.id === tabId);
       if (closedTab?.kind === "provider" && closedTab.workspaceId) {
         const dismissedProviderWorkspaceIds =
-          dismissedProviderWorkspaceIdsByWorkspaceRef.current[workspaceWorkspaceId] ??
+          dismissedProviderWorkspaceIdsByWorkspaceRef.current[rootWorkspaceId] ??
           new Set<WorkspaceId>();
         dismissedProviderWorkspaceIds.add(closedTab.workspaceId);
-        dismissedProviderWorkspaceIdsByWorkspaceRef.current[workspaceWorkspaceId] =
+        dismissedProviderWorkspaceIdsByWorkspaceRef.current[rootWorkspaceId] =
           dismissedProviderWorkspaceIds;
       }
       // Clean up terminal session when closing a terminal tab.
@@ -1149,11 +1145,11 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         }
         storeCloseTerminal(activeWorkspaceId, closedTab.terminalId);
       }
-      removeTab(workspaceWorkspaceId, tabId);
+      removeTab(rootWorkspaceId, tabId);
       // If we closed the active tab, navigate to the next active tab's workspace.
       if (closedTab && tabState.activeTabId === tabId) {
-        if (routeWorkspaceId !== workspaceWorkspaceId) {
-          void navigate({ to: "/$workspaceId", params: { workspaceId: workspaceWorkspaceId } });
+        if (routeWorkspaceId !== rootWorkspaceId) {
+          void navigate({ to: "/$workspaceId", params: { workspaceId: rootWorkspaceId } });
         }
       }
     },
@@ -1164,7 +1160,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       routeWorkspaceId,
       storeCloseTerminal,
       tabState,
-      workspaceWorkspaceId,
+      rootWorkspaceId,
     ],
   );
 
@@ -1176,12 +1172,12 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         const nextEnvMode =
           draftWorkspace?.envMode ?? (activeWorkspace?.worktreePath ? "worktree" : "local");
         if (isWorkspaceDraftWorkspace && currentWorkspaceProviderTab) {
-          setActiveTab(workspaceWorkspaceId, currentWorkspaceProviderTab.id);
+          setActiveTab(rootWorkspaceId, currentWorkspaceProviderTab.id);
           return;
         }
         const shouldReuseWorkspaceDraft =
           isWorkspaceDraftWorkspace && currentWorkspaceProviderTab === undefined;
-        const nextWorkspaceId = shouldReuseWorkspaceDraft ? workspaceWorkspaceId : newWorkspaceId();
+        const nextWorkspaceId = shouldReuseWorkspaceDraft ? rootWorkspaceId : newWorkspaceId();
         if (shouldReuseWorkspaceDraft) {
           store.setDraftWorkspaceContext(nextWorkspaceId, {
             branch: activeWorkspace?.branch ?? null,
@@ -1206,11 +1202,11 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           provider,
           model: DEFAULT_MODEL_BY_PROVIDER[provider],
         });
-        dismissedProviderWorkspaceIdsByWorkspaceRef.current[workspaceWorkspaceId]?.delete(
+        dismissedProviderWorkspaceIdsByWorkspaceRef.current[rootWorkspaceId]?.delete(
           nextWorkspaceId,
         );
         const tab = makeProviderTab(provider, nextWorkspaceId);
-        addTab(workspaceWorkspaceId, tab);
+        addTab(rootWorkspaceId, tab);
       } else if (kind === "terminal") {
         createNewTerminalTab();
       }
@@ -1225,7 +1221,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       currentWorkspaceProviderTab,
       isWorkspaceDraftWorkspace,
       setActiveTab,
-      workspaceWorkspaceId,
+      rootWorkspaceId,
     ],
   );
 
@@ -2100,9 +2096,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       }
       storeCloseTerminal(activeWorkspaceId, terminalId);
       // Also close the tab that owns this terminal.
-      const terminalTab = findTerminalTabByTerminalId(workspaceWorkspaceId, terminalId);
+      const terminalTab = findTerminalTabByTerminalId(rootWorkspaceId, terminalId);
       if (terminalTab) {
-        removeTab(workspaceWorkspaceId, terminalTab.id);
+        removeTab(rootWorkspaceId, terminalTab.id);
       }
     },
     [
@@ -2110,7 +2106,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       findTerminalTabByTerminalId,
       removeTab,
       storeCloseTerminal,
-      workspaceWorkspaceId,
+      rootWorkspaceId,
     ],
   );
   const runProjectScript = useCallback(
@@ -2150,7 +2146,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         targetTerminalId = newTab.terminalId!;
       } else {
         targetTerminalId = activeTerminalTab!.terminalId!;
-        setActiveTab(workspaceWorkspaceId, activeTerminalTab!.id);
+        setActiveTab(rootWorkspaceId, activeTerminalTab!.id);
       }
 
       setTerminalLaunchContext({
@@ -2210,7 +2206,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       setWorkspaceError,
       setLastInvokedScriptByProjectId,
       terminalState.runningTerminalIds,
-      workspaceWorkspaceId,
+      rootWorkspaceId,
     ],
   );
 
@@ -2365,13 +2361,13 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     // Reuse existing run-command terminal if the tab still exists
     const previousTerminalId = runCommandRuntime.terminalId;
     const existingTab = previousTerminalId
-      ? findTerminalTabByTerminalId(workspaceWorkspaceId, previousTerminalId)
+      ? findTerminalTabByTerminalId(rootWorkspaceId, previousTerminalId)
       : null;
 
     let targetTerminalId: string;
     if (existingTab) {
       targetTerminalId = previousTerminalId!;
-      setActiveTab(workspaceWorkspaceId, existingTab.id);
+      setActiveTab(rootWorkspaceId, existingTab.id);
     } else {
       const newTab = createNewTerminalTab();
       targetTerminalId = newTab.terminalId!;
@@ -2424,7 +2420,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     runCommandStart,
     setActiveTab,
     setWorkspaceError,
-    workspaceWorkspaceId,
+    rootWorkspaceId,
   ]);
 
   const stopRunCommand = useCallback(async () => {
@@ -4438,9 +4434,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       const toTurnCount = checkpointTurnCount;
 
       // Reuse existing tab if open
-      const existing = findDiffTab(workspaceWorkspaceId, activeWorkspaceId, turnId, filePath);
+      const existing = findDiffTab(rootWorkspaceId, activeWorkspaceId, turnId, filePath);
       if (existing) {
-        setActiveTab(workspaceWorkspaceId, existing.id);
+        setActiveTab(rootWorkspaceId, existing.id);
         return;
       }
 
@@ -4453,7 +4449,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         diffFilePath: filePath,
         label: fileName,
       });
-      addTab(workspaceWorkspaceId, tab);
+      addTab(rootWorkspaceId, tab);
     },
     [
       activeWorkspaceId,
@@ -4462,7 +4458,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       inferredCheckpointTurnCountByTurnId,
       setActiveTab,
       turnDiffSummaries,
-      workspaceWorkspaceId,
+      rootWorkspaceId,
     ],
   );
   const onRevertUserMessage = (messageId: MessageId) => {

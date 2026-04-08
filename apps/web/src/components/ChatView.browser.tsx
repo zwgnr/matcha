@@ -34,7 +34,7 @@ import { __resetNativeApiForTests } from "../nativeApi";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
-import { useWorkspaceTabStore } from "../workspaceTabStore";
+import { makeProviderTab, useWorkspaceTabStore } from "../workspaceTabStore";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
 import { DEFAULT_CLIENT_SETTINGS } from "@matcha/contracts/settings";
@@ -315,6 +315,7 @@ function buildFixture(snapshot: OrchestrationReadModel): TestFixture {
 function addWorkspaceToSnapshot(
   snapshot: OrchestrationReadModel,
   workspaceId: WorkspaceId,
+  overrides: Partial<OrchestrationReadModel["workspaces"][number]> = {},
 ): OrchestrationReadModel {
   return {
     ...snapshot,
@@ -351,6 +352,7 @@ function addWorkspaceToSnapshot(
           lastError: null,
           updatedAt: NOW_ISO,
         },
+        ...overrides,
       },
     ],
   };
@@ -1027,6 +1029,7 @@ async function mountChatView(options: {
   snapshot: OrchestrationReadModel;
   configureFixture?: (fixture: TestFixture) => void;
   resolveRpc?: (body: NormalizedWsRpcRequestBody) => unknown | undefined;
+  initialPath?: string;
 }): Promise<MountedChatView> {
   fixture = buildFixture(options.snapshot);
   options.configureFixture?.(fixture);
@@ -1046,7 +1049,7 @@ async function mountChatView(options: {
 
   const router = getRouter(
     createMemoryHistory({
-      initialEntries: [`/${WORKSPACE_ID}`],
+      initialEntries: [options.initialPath ?? `/${WORKSPACE_ID}`],
     }),
   );
 
@@ -1171,7 +1174,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
     useWorkspaceTabStore.persist.clearStorage();
     useWorkspaceTabStore.setState({
-      tabStateByWorkspaceWorkspaceId: {},
+      tabStateByRootWorkspaceId: {},
+      rootWorkspaceIdByWorkspaceId: {},
     });
   });
 
@@ -2581,13 +2585,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
       },
     });
     useWorkspaceTabStore.setState({
-      tabStateByWorkspaceWorkspaceId: {
+      tabStateByRootWorkspaceId: {
         [WORKSPACE_ID]: {
           tabs: [
             { id: "terminal-tab-1", kind: "terminal", terminalId: "default", label: "Terminal" },
           ],
           activeTabId: "terminal-tab-1",
         },
+      },
+      rootWorkspaceIdByWorkspaceId: {
+        [WORKSPACE_ID]: WORKSPACE_ID,
       },
     });
 
@@ -2759,7 +2766,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         "Opening a provider tab should keep the current workspace route.",
       );
 
-      const tabState = useWorkspaceTabStore.getState().tabStateByWorkspaceWorkspaceId[WORKSPACE_ID];
+      const tabState = useWorkspaceTabStore.getState().tabStateByRootWorkspaceId[WORKSPACE_ID];
       expect(tabState).toBeDefined();
       expect(tabState?.tabs.filter((tab) => tab.kind === "provider")).toHaveLength(2);
       const activeProviderTab = tabState?.tabs.find((tab) => tab.id === tabState.activeTabId);
@@ -2830,6 +2837,92 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(page.getByText("New workspace")).toBeInTheDocument();
       expect(document.body.textContent).not.toContain(targetText);
       expect(document.querySelector('[contenteditable="true"]')).toBeNull();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps a grouped child workspace hidden after closing its provider tab", async () => {
+    const childWorkspaceId = "workspace-child-provider-hidden" as WorkspaceId;
+    const rootProviderTab = makeProviderTab("codex", WORKSPACE_ID);
+    const childProviderTab = makeProviderTab("claudeAgent", childWorkspaceId);
+
+    useWorkspaceTabStore.setState({
+      tabStateByRootWorkspaceId: {
+        [WORKSPACE_ID]: {
+          tabs: [rootProviderTab, childProviderTab],
+          activeTabId: childProviderTab.id,
+        },
+      },
+      rootWorkspaceIdByWorkspaceId: {
+        [WORKSPACE_ID]: WORKSPACE_ID,
+        [childWorkspaceId]: WORKSPACE_ID,
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      initialPath: `/${childWorkspaceId}`,
+      snapshot: addWorkspaceToSnapshot(
+        createSnapshotForTargetUser({
+          targetMessageId: "msg-user-child-provider-hidden-test" as MessageId,
+          targetText: "child provider hidden test",
+        }),
+        childWorkspaceId,
+        {
+          title: "Child Claude workspace",
+          modelSelection: {
+            provider: "claudeAgent",
+            model: "claude-sonnet-4-6",
+          },
+          session: {
+            workspaceId: childWorkspaceId,
+            status: "ready",
+            providerName: "claudeAgent",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: NOW_ISO,
+          },
+        },
+      ),
+    });
+
+    try {
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${WORKSPACE_ID}`,
+        "Grouped child workspaces should resolve back to the root workspace route.",
+      );
+
+      expect(
+        document.querySelector(`[data-testid="workspace-row-${childWorkspaceId}"]`),
+      ).toBeNull();
+
+      const closeTabButton = await waitForElement(
+        () => document.querySelector('[aria-label="Close Claude Code tab"]') as HTMLElement | null,
+        "Unable to find the grouped child provider tab close button.",
+      );
+      closeTabButton.click();
+
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${WORKSPACE_ID}`,
+        "Closing a child provider tab should keep the root workspace selected.",
+      );
+
+      expect(useWorkspaceTabStore.getState().tabStateByRootWorkspaceId[childWorkspaceId]).toBe(
+        undefined,
+      );
+      expect(useWorkspaceTabStore.getState().findRootWorkspaceId(childWorkspaceId)).toBe(
+        WORKSPACE_ID,
+      );
+      expect(useWorkspaceTabStore.getState().findGroupedWorkspaceIds(WORKSPACE_ID)).toContain(
+        childWorkspaceId,
+      );
+      expect(
+        document.querySelector(`[data-testid="workspace-row-${childWorkspaceId}"]`),
+      ).toBeNull();
     } finally {
       await mounted.cleanup();
     }

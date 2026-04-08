@@ -23,9 +23,12 @@ function ChatRouteGlobalShortcuts() {
     routeWorkspaceId,
   } = useHandleNewWorkspace();
   const keybindings = useServerKeybindings();
+  const resolvedRouteWorkspaceId = useWorkspaceTabStore((state) =>
+    routeWorkspaceId ? (state.findRootWorkspaceId(routeWorkspaceId) ?? routeWorkspaceId) : null,
+  );
   const terminalOpen = useWorkspaceTabStore((state) => {
-    if (!routeWorkspaceId) return false;
-    const tabState = state.tabStateByWorkspaceWorkspaceId[routeWorkspaceId];
+    if (!resolvedRouteWorkspaceId) return false;
+    const tabState = state.tabStateByRootWorkspaceId[resolvedRouteWorkspaceId];
     if (!tabState) return false;
     const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
     return activeTab?.kind === "terminal";
@@ -90,6 +93,7 @@ function ChatRouteGlobalShortcuts() {
     defaultProjectId,
     selectedWorkspaceIdsSize,
     terminalOpen,
+    resolvedRouteWorkspaceId,
     appSettings.defaultWorkspaceEnvMode,
   ]);
 

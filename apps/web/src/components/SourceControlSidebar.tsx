@@ -270,10 +270,8 @@ function SourceControlSidebarInner() {
   // -----------------------------------------------------------------------
   // Tab store (for opening diffs)
   // -----------------------------------------------------------------------
-  const workspaceWorkspaceId = useWorkspaceTabStore((s) =>
-    activeWorkspaceId
-      ? (s.findWorkspaceWorkspaceIdByProviderWorkspaceId(activeWorkspaceId) ?? activeWorkspaceId)
-      : null,
+  const rootWorkspaceId = useWorkspaceTabStore((s) =>
+    activeWorkspaceId ? (s.findRootWorkspaceId(activeWorkspaceId) ?? activeWorkspaceId) : null,
   );
   const addTab = useWorkspaceTabStore((s) => s.addTab);
   const setActiveTab = useWorkspaceTabStore((s) => s.setActiveTab);
@@ -281,19 +279,19 @@ function SourceControlSidebarInner() {
 
   const openDiffFileTab = useCallback(
     (turnId: TurnId | null, filePath: string, fromTurnCount: number, toTurnCount: number) => {
-      if (!activeWorkspaceId || !workspaceWorkspaceId) return;
+      if (!activeWorkspaceId || !rootWorkspaceId) return;
       const existing = findDiffTab(
-        workspaceWorkspaceId,
+        rootWorkspaceId,
         activeWorkspaceId,
         turnId ?? undefined,
         filePath,
       );
       if (existing) {
-        setActiveTab(workspaceWorkspaceId, existing.id);
+        setActiveTab(rootWorkspaceId, existing.id);
         return;
       }
       addTab(
-        workspaceWorkspaceId,
+        rootWorkspaceId,
         makeDiffTab({
           diffSourceWorkspaceId: activeWorkspaceId,
           diffTurnId: turnId,
@@ -304,7 +302,7 @@ function SourceControlSidebarInner() {
         }),
       );
     },
-    [activeWorkspaceId, workspaceWorkspaceId, addTab, setActiveTab, findDiffTab],
+    [activeWorkspaceId, rootWorkspaceId, addTab, setActiveTab, findDiffTab],
   );
 
   const onOpenFile = useCallback(

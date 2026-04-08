@@ -1,8 +1,9 @@
 /**
- * Zustand store for workspace tab state, keyed by the workspace's root workspace id.
+ * Zustand store for workspace tab state.
  *
- * Each workspace owns its own tab bar. Provider tabs point at the workspace
- * they run in; terminal tabs are workspace-scoped.
+ * Root workspaces own tab bars. Provider workspaces may be grouped under a
+ * different root workspace, but that ownership is explicit state rather than
+ * something inferred from currently-open tabs.
  */
 
 import { type ProviderKind, type TurnId, type WorkspaceId } from "@matcha/contracts";
@@ -49,6 +50,7 @@ export interface WorkspaceTabState {
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "matcha:workspace-tabs:v3";
+const STORAGE_VERSION = 1;
 
 let nextId = 1;
 function generateTabId(): string {
@@ -107,31 +109,126 @@ export function makeDiffTab(input: {
   return tab;
 }
 
+function normalizeActiveTabId(tabs: WorkspaceTab[], activeTabId: string): string {
+  if (tabs.some((tab) => tab.id === activeTabId)) {
+    return activeTabId;
+  }
+  return tabs[0]?.id ?? "";
+}
+
+function deriveRootWorkspaceIdByWorkspaceId(
+  tabStateByRootWorkspaceId: Record<string, WorkspaceTabState>,
+): Record<string, WorkspaceId> {
+  const nextRootWorkspaceIdByWorkspaceId: Record<string, WorkspaceId> = {};
+  for (const rootWorkspaceId of Object.keys(tabStateByRootWorkspaceId)) {
+    nextRootWorkspaceIdByWorkspaceId[rootWorkspaceId] = rootWorkspaceId as WorkspaceId;
+    const tabState = tabStateByRootWorkspaceId[rootWorkspaceId];
+    for (const tab of tabState?.tabs ?? []) {
+      if (tab.kind !== "provider" || !tab.workspaceId) {
+        continue;
+      }
+      nextRootWorkspaceIdByWorkspaceId[tab.workspaceId] = rootWorkspaceId as WorkspaceId;
+    }
+  }
+  return nextRootWorkspaceIdByWorkspaceId;
+}
+
+function getEffectiveRootWorkspaceIdByWorkspaceId(input: {
+  tabStateByRootWorkspaceId: Record<string, WorkspaceTabState>;
+  rootWorkspaceIdByWorkspaceId: Record<string, WorkspaceId>;
+}): Record<string, WorkspaceId> {
+  return {
+    ...deriveRootWorkspaceIdByWorkspaceId(input.tabStateByRootWorkspaceId),
+    ...input.rootWorkspaceIdByWorkspaceId,
+  };
+}
+
+export function sanitizeWorkspaceTabPersistenceState(input: {
+  tabStateByRootWorkspaceId: Record<string, WorkspaceTabState>;
+  rootWorkspaceIdByWorkspaceId?: Record<string, WorkspaceId>;
+}): {
+  tabStateByRootWorkspaceId: Record<string, WorkspaceTabState>;
+  rootWorkspaceIdByWorkspaceId: Record<string, WorkspaceId>;
+} {
+  const explicitRootWorkspaceIdByWorkspaceId = input.rootWorkspaceIdByWorkspaceId ?? {};
+  const effectiveRootWorkspaceIdByWorkspaceId = getEffectiveRootWorkspaceIdByWorkspaceId({
+    tabStateByRootWorkspaceId: input.tabStateByRootWorkspaceId,
+    rootWorkspaceIdByWorkspaceId: explicitRootWorkspaceIdByWorkspaceId,
+  });
+  const nextTabStateByRootWorkspaceId: Record<string, WorkspaceTabState> = {};
+  const claimedProviderWorkspaceIds = new Set<WorkspaceId>();
+
+  for (const [rootWorkspaceId, tabState] of Object.entries(input.tabStateByRootWorkspaceId)) {
+    const normalizedRootWorkspaceId = rootWorkspaceId as WorkspaceId;
+    const nextTabs: WorkspaceTab[] = [];
+
+    for (const tab of tabState.tabs) {
+      if (tab.kind !== "provider" || !tab.workspaceId) {
+        nextTabs.push(tab);
+        continue;
+      }
+
+      const claimedRootWorkspaceId =
+        effectiveRootWorkspaceIdByWorkspaceId[tab.workspaceId] ?? normalizedRootWorkspaceId;
+      if (claimedRootWorkspaceId !== normalizedRootWorkspaceId) {
+        continue;
+      }
+      if (claimedProviderWorkspaceIds.has(tab.workspaceId)) {
+        continue;
+      }
+
+      claimedProviderWorkspaceIds.add(tab.workspaceId);
+      nextTabs.push(tab);
+    }
+
+    nextTabStateByRootWorkspaceId[normalizedRootWorkspaceId] = {
+      tabs: nextTabs,
+      activeTabId: normalizeActiveTabId(nextTabs, tabState.activeTabId),
+    };
+  }
+
+  const nextRootWorkspaceIdByWorkspaceId = getEffectiveRootWorkspaceIdByWorkspaceId({
+    tabStateByRootWorkspaceId: nextTabStateByRootWorkspaceId,
+    rootWorkspaceIdByWorkspaceId: explicitRootWorkspaceIdByWorkspaceId,
+  });
+
+  for (const rootWorkspaceId of Object.keys(nextTabStateByRootWorkspaceId)) {
+    nextRootWorkspaceIdByWorkspaceId[rootWorkspaceId] = rootWorkspaceId as WorkspaceId;
+  }
+
+  return {
+    tabStateByRootWorkspaceId: nextTabStateByRootWorkspaceId,
+    rootWorkspaceIdByWorkspaceId: nextRootWorkspaceIdByWorkspaceId,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
 interface WorkspaceTabStoreState {
-  tabStateByWorkspaceWorkspaceId: Record<string, WorkspaceTabState>;
+  tabStateByRootWorkspaceId: Record<string, WorkspaceTabState>;
+  rootWorkspaceIdByWorkspaceId: Record<string, WorkspaceId>;
 
-  getOrInitTabs: (workspaceWorkspaceId: WorkspaceId) => WorkspaceTabState;
-  addTab: (workspaceWorkspaceId: WorkspaceId, tab: WorkspaceTab) => void;
-  removeTab: (workspaceWorkspaceId: WorkspaceId, tabId: string) => void;
-  setActiveTab: (workspaceWorkspaceId: WorkspaceId, tabId: string) => void;
-  reorderTabs: (workspaceWorkspaceId: WorkspaceId, activeTabId: string, overTabId: string) => void;
+  getOrInitTabs: (rootWorkspaceId: WorkspaceId) => WorkspaceTabState;
+  addTab: (rootWorkspaceId: WorkspaceId, tab: WorkspaceTab) => void;
+  removeTab: (rootWorkspaceId: WorkspaceId, tabId: string) => void;
+  setActiveTab: (rootWorkspaceId: WorkspaceId, tabId: string) => void;
+  reorderTabs: (rootWorkspaceId: WorkspaceId, activeTabId: string, overTabId: string) => void;
   /** Find the tab that owns a given workspaceId. */
   findTabByWorkspaceId: (
-    workspaceWorkspaceId: WorkspaceId,
+    rootWorkspaceId: WorkspaceId,
     workspaceId: WorkspaceId,
   ) => WorkspaceTab | undefined;
   findTerminalTabByTerminalId: (
-    workspaceWorkspaceId: WorkspaceId,
+    rootWorkspaceId: WorkspaceId,
     terminalId: string,
   ) => WorkspaceTab | undefined;
-  findWorkspaceWorkspaceIdByProviderWorkspaceId: (workspaceId: WorkspaceId) => WorkspaceId | null;
+  findRootWorkspaceId: (workspaceId: WorkspaceId) => WorkspaceId | null;
+  findGroupedWorkspaceIds: (rootWorkspaceId: WorkspaceId) => WorkspaceId[];
   /** Find a diff tab matching the given source workspace, turn, and file path. */
   findDiffTab: (
-    workspaceWorkspaceId: WorkspaceId,
+    rootWorkspaceId: WorkspaceId,
     diffSourceWorkspaceId: WorkspaceId,
     diffTurnId: TurnId | undefined,
     diffFilePath: string,
@@ -145,40 +242,71 @@ function createTabStateStorage() {
 export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
   persist(
     (set, get) => ({
-      tabStateByWorkspaceWorkspaceId: {},
+      tabStateByRootWorkspaceId: {},
+      rootWorkspaceIdByWorkspaceId: {},
 
-      getOrInitTabs: (workspaceWorkspaceId) => {
-        const existing = get().tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+      getOrInitTabs: (rootWorkspaceId) => {
+        const existing = get().tabStateByRootWorkspaceId[rootWorkspaceId];
         if (existing) return existing;
         // Start with an empty tab bar — user adds instances via "+".
         const initial: WorkspaceTabState = { tabs: [], activeTabId: "" };
         set((state) => ({
-          tabStateByWorkspaceWorkspaceId: {
-            ...state.tabStateByWorkspaceWorkspaceId,
-            [workspaceWorkspaceId]: initial,
+          tabStateByRootWorkspaceId: {
+            ...state.tabStateByRootWorkspaceId,
+            [rootWorkspaceId]: initial,
+          },
+          rootWorkspaceIdByWorkspaceId: {
+            ...state.rootWorkspaceIdByWorkspaceId,
+            [rootWorkspaceId]: rootWorkspaceId,
           },
         }));
         return initial;
       },
 
-      addTab: (workspaceWorkspaceId, tab) =>
+      addTab: (rootWorkspaceId, tab) =>
         set((state) => {
-          const current = state.tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+          const current = state.tabStateByRootWorkspaceId[rootWorkspaceId];
           if (!current) return state;
+          const nextTabStateByRootWorkspaceId = { ...state.tabStateByRootWorkspaceId };
+          const nextRootWorkspaceIdByWorkspaceId = {
+            ...state.rootWorkspaceIdByWorkspaceId,
+            [rootWorkspaceId]: rootWorkspaceId,
+          };
+
+          if (tab.kind === "provider" && tab.workspaceId) {
+            nextRootWorkspaceIdByWorkspaceId[tab.workspaceId] = rootWorkspaceId;
+            for (const [existingRootWorkspaceId, existingTabState] of Object.entries(
+              nextTabStateByRootWorkspaceId,
+            )) {
+              const dedupedTabs = existingTabState.tabs.filter(
+                (existingTab) =>
+                  !(existingTab.kind === "provider" && existingTab.workspaceId === tab.workspaceId),
+              );
+              if (dedupedTabs.length === existingTabState.tabs.length) {
+                continue;
+              }
+              nextTabStateByRootWorkspaceId[existingRootWorkspaceId] = {
+                tabs: dedupedTabs,
+                activeTabId: normalizeActiveTabId(dedupedTabs, existingTabState.activeTabId),
+              };
+            }
+          }
+
           return {
-            tabStateByWorkspaceWorkspaceId: {
-              ...state.tabStateByWorkspaceWorkspaceId,
-              [workspaceWorkspaceId]: {
+            tabStateByRootWorkspaceId: {
+              ...nextTabStateByRootWorkspaceId,
+              [rootWorkspaceId]: {
                 tabs: [...current.tabs, tab],
                 activeTabId: tab.id,
               },
             },
+            rootWorkspaceIdByWorkspaceId: nextRootWorkspaceIdByWorkspaceId,
           };
         }),
 
-      removeTab: (workspaceWorkspaceId, tabId) =>
+      removeTab: (rootWorkspaceId, tabId) =>
         set((state) => {
-          const current = state.tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+          const current = state.tabStateByRootWorkspaceId[rootWorkspaceId];
           if (!current) return state;
 
           const nextTabs = current.tabs.filter((t) => t.id !== tabId);
@@ -190,30 +318,30 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
             : current.activeTabId;
 
           return {
-            tabStateByWorkspaceWorkspaceId: {
-              ...state.tabStateByWorkspaceWorkspaceId,
-              [workspaceWorkspaceId]: { tabs: nextTabs, activeTabId: nextActiveTabId },
+            tabStateByRootWorkspaceId: {
+              ...state.tabStateByRootWorkspaceId,
+              [rootWorkspaceId]: { tabs: nextTabs, activeTabId: nextActiveTabId },
             },
           };
         }),
 
-      setActiveTab: (workspaceWorkspaceId, tabId) =>
+      setActiveTab: (rootWorkspaceId, tabId) =>
         set((state) => {
-          const current = state.tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+          const current = state.tabStateByRootWorkspaceId[rootWorkspaceId];
           if (!current || current.activeTabId === tabId) return state;
           if (!current.tabs.some((t) => t.id === tabId)) return state;
           return {
-            tabStateByWorkspaceWorkspaceId: {
-              ...state.tabStateByWorkspaceWorkspaceId,
-              [workspaceWorkspaceId]: { ...current, activeTabId: tabId },
+            tabStateByRootWorkspaceId: {
+              ...state.tabStateByRootWorkspaceId,
+              [rootWorkspaceId]: { ...current, activeTabId: tabId },
             },
           };
         }),
 
-      reorderTabs: (workspaceWorkspaceId, activeTabId, overTabId) =>
+      reorderTabs: (rootWorkspaceId, activeTabId, overTabId) =>
         set((state) => {
           if (activeTabId === overTabId) return state;
-          const current = state.tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+          const current = state.tabStateByRootWorkspaceId[rootWorkspaceId];
           if (!current) return state;
           const fromIndex = current.tabs.findIndex((t) => t.id === activeTabId);
           const toIndex = current.tabs.findIndex((t) => t.id === overTabId);
@@ -223,38 +351,47 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
           if (!moved) return state;
           nextTabs.splice(toIndex, 0, moved);
           return {
-            tabStateByWorkspaceWorkspaceId: {
-              ...state.tabStateByWorkspaceWorkspaceId,
-              [workspaceWorkspaceId]: { ...current, tabs: nextTabs },
+            tabStateByRootWorkspaceId: {
+              ...state.tabStateByRootWorkspaceId,
+              [rootWorkspaceId]: { ...current, tabs: nextTabs },
             },
           };
         }),
 
-      findTabByWorkspaceId: (workspaceWorkspaceId, workspaceId) => {
-        const current = get().tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+      findTabByWorkspaceId: (rootWorkspaceId, workspaceId) => {
+        const current = get().tabStateByRootWorkspaceId[rootWorkspaceId];
         return current?.tabs.find((t) => t.kind === "provider" && t.workspaceId === workspaceId);
       },
 
-      findTerminalTabByTerminalId: (workspaceWorkspaceId, terminalId) => {
-        const current = get().tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+      findTerminalTabByTerminalId: (rootWorkspaceId, terminalId) => {
+        const current = get().tabStateByRootWorkspaceId[rootWorkspaceId];
         return current?.tabs.find((t) => t.kind === "terminal" && t.terminalId === terminalId);
       },
 
-      findWorkspaceWorkspaceIdByProviderWorkspaceId: (workspaceId) => {
-        for (const [workspaceWorkspaceId, current] of Object.entries(
-          get().tabStateByWorkspaceWorkspaceId,
-        )) {
-          if (
-            current.tabs.some((tab) => tab.kind === "provider" && tab.workspaceId === workspaceId)
-          ) {
-            return workspaceWorkspaceId as WorkspaceId;
-          }
-        }
-        return null;
+      findRootWorkspaceId: (workspaceId) => {
+        const state = get();
+        const rootWorkspaceId =
+          state.rootWorkspaceIdByWorkspaceId[workspaceId] ??
+          deriveRootWorkspaceIdByWorkspaceId(state.tabStateByRootWorkspaceId)[workspaceId];
+        return rootWorkspaceId ?? null;
       },
 
-      findDiffTab: (workspaceWorkspaceId, diffSourceWorkspaceId, diffTurnId, diffFilePath) => {
-        const current = get().tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+      findGroupedWorkspaceIds: (rootWorkspaceId) => {
+        const state = get();
+        const effectiveRootWorkspaceIdByWorkspaceId = getEffectiveRootWorkspaceIdByWorkspaceId({
+          tabStateByRootWorkspaceId: state.tabStateByRootWorkspaceId,
+          rootWorkspaceIdByWorkspaceId: state.rootWorkspaceIdByWorkspaceId,
+        });
+        return Object.entries(effectiveRootWorkspaceIdByWorkspaceId)
+          .filter(
+            ([workspaceId, groupedRootWorkspaceId]) =>
+              workspaceId !== rootWorkspaceId && groupedRootWorkspaceId === rootWorkspaceId,
+          )
+          .map(([workspaceId]) => workspaceId as WorkspaceId);
+      },
+
+      findDiffTab: (rootWorkspaceId, diffSourceWorkspaceId, diffTurnId, diffFilePath) => {
+        const current = get().tabStateByRootWorkspaceId[rootWorkspaceId];
         return current?.tabs.find(
           (t) =>
             t.kind === "diff" &&
@@ -266,9 +403,33 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
     }),
     {
       name: STORAGE_KEY,
+      version: STORAGE_VERSION,
       storage: createJSONStorage(createTabStateStorage),
+      migrate: (persistedState) => {
+        const rawState =
+          typeof persistedState === "object" && persistedState !== null
+            ? (persistedState as {
+                tabStateByRootWorkspaceId?: Record<string, WorkspaceTabState>;
+                tabStateByWorkspaceWorkspaceId?: Record<string, WorkspaceTabState>;
+                rootWorkspaceIdByWorkspaceId?: Record<string, WorkspaceId>;
+              })
+            : {};
+        const tabStateByRootWorkspaceId =
+          rawState.tabStateByRootWorkspaceId ?? rawState.tabStateByWorkspaceWorkspaceId ?? {};
+        const sanitized = sanitizeWorkspaceTabPersistenceState({
+          tabStateByRootWorkspaceId,
+          ...(rawState.rootWorkspaceIdByWorkspaceId
+            ? { rootWorkspaceIdByWorkspaceId: rawState.rootWorkspaceIdByWorkspaceId }
+            : {}),
+        });
+        return {
+          tabStateByRootWorkspaceId: sanitized.tabStateByRootWorkspaceId,
+          rootWorkspaceIdByWorkspaceId: sanitized.rootWorkspaceIdByWorkspaceId,
+        };
+      },
       partialize: (state) => ({
-        tabStateByWorkspaceWorkspaceId: state.tabStateByWorkspaceWorkspaceId,
+        tabStateByRootWorkspaceId: state.tabStateByRootWorkspaceId,
+        rootWorkspaceIdByWorkspaceId: state.rootWorkspaceIdByWorkspaceId,
       }),
     },
   ),

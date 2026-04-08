@@ -682,12 +682,11 @@ export default function Sidebar() {
   const getDraftWorkspaceByProjectId = useComposerDraftStore(
     (store) => store.getDraftWorkspaceByProjectId,
   );
-  const tabStateByWorkspaceWorkspaceId = useWorkspaceTabStore(
-    (store) => store.tabStateByWorkspaceWorkspaceId,
+  const tabStateByRootWorkspaceId = useWorkspaceTabStore(
+    (store) => store.tabStateByRootWorkspaceId,
   );
-  const findWorkspaceWorkspaceIdByProviderWorkspaceId = useWorkspaceTabStore(
-    (store) => store.findWorkspaceWorkspaceIdByProviderWorkspaceId,
-  );
+  const findRootWorkspaceId = useWorkspaceTabStore((store) => store.findRootWorkspaceId);
+  const findGroupedWorkspaceIds = useWorkspaceTabStore((store) => store.findGroupedWorkspaceIds);
   const clearProjectDraftWorkspaceId = useComposerDraftStore(
     (store) => store.clearProjectDraftWorkspaceId,
   );
@@ -702,7 +701,7 @@ export default function Sidebar() {
     select: (params) => (params.workspaceId ? WorkspaceId.makeUnsafe(params.workspaceId) : null),
   });
   const effectiveRouteWorkspaceId = routeWorkspaceId
-    ? (findWorkspaceWorkspaceIdByProviderWorkspaceId(routeWorkspaceId) ?? routeWorkspaceId)
+    ? (findRootWorkspaceId(routeWorkspaceId) ?? routeWorkspaceId)
     : null;
   const keybindings = useServerKeybindings();
   const { toggleSidebar } = useSidebar();
@@ -758,24 +757,17 @@ export default function Sidebar() {
   const { hiddenChildProviderWorkspaceIds, childWorkspaceIdsByRootId } = useMemo(() => {
     const hiddenIds = new Set<WorkspaceId>();
     const childMap = new Map<WorkspaceId, WorkspaceId[]>();
-    for (const [workspaceWorkspaceId, tabState] of Object.entries(tabStateByWorkspaceWorkspaceId)) {
-      const childIds: WorkspaceId[] = [];
-      for (const tab of tabState.tabs) {
-        if (
-          tab.kind === "provider" &&
-          tab.workspaceId &&
-          tab.workspaceId !== workspaceWorkspaceId
-        ) {
-          hiddenIds.add(tab.workspaceId);
-          childIds.push(tab.workspaceId);
-        }
+    for (const rootWorkspaceId of Object.keys(tabStateByRootWorkspaceId)) {
+      const childIds = findGroupedWorkspaceIds(rootWorkspaceId as WorkspaceId);
+      for (const childWorkspaceId of childIds) {
+        hiddenIds.add(childWorkspaceId);
       }
       if (childIds.length > 0) {
-        childMap.set(workspaceWorkspaceId as WorkspaceId, childIds);
+        childMap.set(rootWorkspaceId as WorkspaceId, childIds);
       }
     }
     return { hiddenChildProviderWorkspaceIds: hiddenIds, childWorkspaceIdsByRootId: childMap };
-  }, [tabStateByWorkspaceWorkspaceId]);
+  }, [findGroupedWorkspaceIds, tabStateByRootWorkspaceId]);
   const visibleWorkspaceIdsByProjectId = useMemo(
     () =>
       Object.fromEntries(
@@ -798,12 +790,12 @@ export default function Sidebar() {
     [projects],
   );
   const routeTerminalOpen = useMemo(() => {
-    if (!routeWorkspaceId) return false;
-    const tabState = tabStateByWorkspaceWorkspaceId[routeWorkspaceId];
+    if (!effectiveRouteWorkspaceId) return false;
+    const tabState = tabStateByRootWorkspaceId[effectiveRouteWorkspaceId];
     if (!tabState) return false;
     const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
     return activeTab?.kind === "terminal";
-  }, [routeWorkspaceId, tabStateByWorkspaceWorkspaceId]);
+  }, [effectiveRouteWorkspaceId, tabStateByRootWorkspaceId]);
   const sidebarShortcutLabelOptions = useMemo(
     () => ({
       platform,
@@ -1353,13 +1345,13 @@ export default function Sidebar() {
       void navigate({
         to: "/$workspaceId",
         params: {
-          workspaceId: findWorkspaceWorkspaceIdByProviderWorkspaceId(workspaceId) ?? workspaceId,
+          workspaceId: findRootWorkspaceId(workspaceId) ?? workspaceId,
         },
       });
     },
     [
       clearSelection,
-      findWorkspaceWorkspaceIdByProviderWorkspaceId,
+      findRootWorkspaceId,
       navigate,
       rangeSelectTo,
       selectedWorkspaceIds.size,
@@ -1377,17 +1369,11 @@ export default function Sidebar() {
       void navigate({
         to: "/$workspaceId",
         params: {
-          workspaceId: findWorkspaceWorkspaceIdByProviderWorkspaceId(workspaceId) ?? workspaceId,
+          workspaceId: findRootWorkspaceId(workspaceId) ?? workspaceId,
         },
       });
     },
-    [
-      clearSelection,
-      findWorkspaceWorkspaceIdByProviderWorkspaceId,
-      navigate,
-      selectedWorkspaceIds.size,
-      setSelectionAnchor,
-    ],
+    [clearSelection, findRootWorkspaceId, navigate, selectedWorkspaceIds.size, setSelectionAnchor],
   );
 
   const handleProjectContextMenu = useCallback(
