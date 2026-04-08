@@ -1,6 +1,8 @@
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
   GitPreparePullRequestWorkspaceInput,
   GitPreparePullRequestWorkspaceResult,
   GitPullRequestRefInput,
@@ -159,6 +161,7 @@ export interface NativeApi {
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<void>;
+    renameBranch: (input: GitRenameBranchInput) => Promise<GitRenameBranchResult>;
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
     log: (input: GitLogInput) => Promise<GitLogResult>;

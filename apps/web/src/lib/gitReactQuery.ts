@@ -30,6 +30,7 @@ export const gitQueryKeys = {
 export const gitMutationKeys = {
   init: (cwd: string | null) => ["git", "mutation", "init", cwd] as const,
   checkout: (cwd: string | null) => ["git", "mutation", "checkout", cwd] as const,
+  renameBranch: (cwd: string | null) => ["git", "mutation", "rename-branch", cwd] as const,
   runStackedAction: (cwd: string | null) => ["git", "mutation", "run-stacked-action", cwd] as const,
   pull: (cwd: string | null) => ["git", "mutation", "pull", cwd] as const,
   preparePullRequestWorkspace: (cwd: string | null) =>
@@ -262,6 +263,30 @@ export function gitCheckoutMutationOptions(input: {
     },
     onSuccess: async () => {
       await invalidateGitQueries(input.queryClient);
+    },
+  });
+}
+
+export function gitRenameBranchMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.renameBranch(input.cwd),
+    mutationFn: async ({ oldBranch, newBranch }: { oldBranch: string; newBranch: string }) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git branch rename is unavailable.");
+      return api.git.renameBranch({ cwd: input.cwd, oldBranch, newBranch });
+    },
+    onSuccess: async (result) => {
+      if (input.cwd) {
+        input.queryClient.setQueryData(gitQueryKeys.status(input.cwd), (current) =>
+          current && typeof current === "object" && "branch" in current
+            ? { ...current, branch: result.branch }
+            : current,
+        );
+      }
+      await invalidateGitQueries(input.queryClient, { cwd: input.cwd });
     },
   });
 }

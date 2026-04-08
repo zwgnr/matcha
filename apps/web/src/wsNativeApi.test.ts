@@ -60,6 +60,7 @@ const rpcClientMock = {
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     createBranch: vi.fn(),
+    renameBranch: vi.fn(),
     checkout: vi.fn(),
     init: vi.fn(),
     resolvePullRequest: vi.fn(),
@@ -294,6 +295,26 @@ describe("wsNativeApi", () => {
       cwd: "/tmp/project",
       relativePath: "plan.md",
       contents: "# Plan\n",
+    });
+  });
+
+  it("forwards branch renames directly to the git RPC", async () => {
+    rpcClientMock.git.renameBranch.mockResolvedValue({ branch: "feature/renamed" });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await expect(
+      api.git.renameBranch({
+        cwd: "/tmp/project",
+        oldBranch: "feature/original",
+        newBranch: "feature/renamed",
+      }),
+    ).resolves.toEqual({ branch: "feature/renamed" });
+
+    expect(rpcClientMock.git.renameBranch).toHaveBeenCalledWith({
+      cwd: "/tmp/project",
+      oldBranch: "feature/original",
+      newBranch: "feature/renamed",
     });
   });
 

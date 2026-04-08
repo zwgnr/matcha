@@ -8,6 +8,8 @@ import {
   GitCheckoutInput,
   GitCommandError,
   GitCreateBranchInput,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitDiscardFilesInput,
@@ -99,6 +101,7 @@ export const WS_METHODS = {
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",
   gitCreateBranch: "git.createBranch",
+  gitRenameBranch: "git.renameBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
   gitLog: "git.log",
@@ -278,6 +281,12 @@ export const WsGitCreateBranchRpc = Rpc.make(WS_METHODS.gitCreateBranch, {
   error: GitCommandError,
 });
 
+export const WsGitRenameBranchRpc = Rpc.make(WS_METHODS.gitRenameBranch, {
+  payload: GitRenameBranchInput,
+  success: GitRenameBranchResult,
+  error: GitCommandError,
+});
+
 export const WsGitCheckoutRpc = Rpc.make(WS_METHODS.gitCheckout, {
   payload: GitCheckoutInput,
   error: GitCommandError,
@@ -402,6 +411,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,
   WsGitCreateBranchRpc,
+  WsGitRenameBranchRpc,
   WsGitCheckoutRpc,
   WsGitInitRpc,
   WsGitLogRpc,

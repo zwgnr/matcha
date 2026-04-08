@@ -613,6 +613,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.gitCreateBranch, git.createBranch(input), {
           "rpc.aggregate": "git",
         }),
+      [WS_METHODS.gitRenameBranch]: (input) =>
+        observeRpcEffect(WS_METHODS.gitRenameBranch, git.renameBranch(input), {
+          "rpc.aggregate": "git",
+        }),
       [WS_METHODS.gitCheckout]: (input) =>
         observeRpcEffect(WS_METHODS.gitCheckout, Effect.scoped(git.checkoutBranch(input)), {
           "rpc.aggregate": "git",

@@ -5,9 +5,13 @@ import {
   type ResolvedKeybindingsConfig,
   type WorkspaceId,
 } from "@matcha/contracts";
-import { memo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DiffIcon } from "lucide-react";
+import { memo, useEffect, useRef, useState } from "react";
+import { gitRenameBranchMutationOptions } from "~/lib/gitReactQuery";
 import { Badge } from "../ui/badge";
+import { toastManager } from "../ui/toast";
+import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { RunCommandControl } from "../RunCommandControl";
@@ -20,6 +24,8 @@ interface ChatHeaderProps {
   activeProjectName: string | undefined;
   activeProjectId: ProjectId | undefined;
   activeWorkspaceId: WorkspaceId | undefined;
+  currentBranch: string | null;
+  activeWorkspaceWorktreePath: string | null;
   isGitRepo: boolean;
   openInCwd: string | null;
   activeProjectScripts: ProjectScript[] | undefined;
@@ -38,11 +44,118 @@ interface ChatHeaderProps {
   onToggleSourceControl: () => void;
 }
 
+function BranchNameControl(props: { currentBranch: string; cwd: string }) {
+  const queryClient = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftBranch, setDraftBranch] = useState(props.currentBranch);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const renameBranchMutation = useMutation(
+    gitRenameBranchMutationOptions({ cwd: props.cwd, queryClient }),
+  );
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftBranch(props.currentBranch);
+    }
+  }, [isEditing, props.currentBranch]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [isEditing]);
+
+  const finishEditing = () => {
+    setIsEditing(false);
+    setDraftBranch(props.currentBranch);
+  };
+
+  const commitRename = async () => {
+    const nextBranch = draftBranch.trim();
+    if (nextBranch.length === 0) {
+      toastManager.add({
+        type: "warning",
+        title: "Branch name cannot be empty",
+      });
+      finishEditing();
+      return;
+    }
+
+    if (nextBranch === props.currentBranch) {
+      finishEditing();
+      return;
+    }
+
+    try {
+      await renameBranchMutation.mutateAsync({
+        oldBranch: props.currentBranch,
+        newBranch: nextBranch,
+      });
+      setIsEditing(false);
+      setDraftBranch(nextBranch);
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Failed to rename branch",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+      });
+      finishEditing();
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="min-w-0 shrink" data-testid="chat-header-branch-editor">
+        <Input
+          ref={inputRef}
+          value={draftBranch}
+          size="sm"
+          className="h-7 w-[min(32ch,42vw)] rounded-full border-border/70 bg-muted/35 font-mono text-xs"
+          aria-label="Rename branch"
+          data-testid="chat-header-branch-input"
+          disabled={renameBranchMutation.isPending}
+          onBlur={() => {
+            if (renameBranchMutation.isPending) return;
+            void commitRename();
+          }}
+          onChange={(event) => setDraftBranch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void commitRename();
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              finishEditing();
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="min-w-0 shrink rounded-full border border-border/70 bg-muted/35 px-2.5 py-1 font-mono text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+      title={props.currentBranch}
+      aria-label={`Rename branch ${props.currentBranch}`}
+      data-testid="chat-header-branch-button"
+      onClick={() => setIsEditing(true)}
+    >
+      <span className="block min-w-0 truncate">{props.currentBranch}</span>
+    </button>
+  );
+}
+
 export const ChatHeader = memo(function ChatHeader({
   activeWorkspaceTitle,
   activeProjectName,
   activeProjectId,
   activeWorkspaceId,
+  currentBranch,
+  activeWorkspaceWorktreePath,
   isGitRepo,
   openInCwd,
   activeProjectScripts,
@@ -70,9 +183,20 @@ export const ChatHeader = memo(function ChatHeader({
         >
           {activeWorkspaceTitle}
         </h2>
+        {isGitRepo && currentBranch && openInCwd && (
+          <BranchNameControl currentBranch={currentBranch} cwd={openInCwd} />
+        )}
         {activeProjectName && (
-          <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
-            <span className="min-w-0 truncate">{activeProjectName}</span>
+          <Badge
+            variant="outline"
+            className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/75"
+            title={
+              activeWorkspaceWorktreePath
+                ? `Worktree: ${activeWorkspaceWorktreePath}`
+                : "Using the project root, not a linked worktree."
+            }
+          >
+            {activeWorkspaceWorktreePath ? "Worktree" : "Local"}
           </Badge>
         )}
         {activeProjectName && !isGitRepo && (

@@ -715,6 +715,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   );
   const workspaceId =
     activeTab?.kind === "provider" ? (activeTab.workspaceId ?? rootWorkspaceId) : rootWorkspaceId;
+  const rootWorkspace = useWorkspaceById(rootWorkspaceId);
   const serverWorkspace = useWorkspaceById(workspaceId);
   const setStoreWorkspaceError = useStore((store) => store.setError);
   const markWorkspaceVisited = useUiStateStore((store) => store.markWorkspaceVisited);
@@ -1699,6 +1700,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   );
   const effectivePathQuery = pathTriggerQuery.length > 0 ? debouncedPathQuery : "";
   const gitStatusQuery = useQuery(gitStatusQueryOptions(gitCwd));
+  const headerWorkspaceTitle = rootWorkspace?.title ?? activeWorkspace?.title ?? "";
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
   const modelOptionsByProvider = useMemo(
@@ -1885,6 +1887,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       : (storeServerTerminalLaunchContext ?? null);
   // Default true while loading to avoid toolbar flicker.
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
+  const currentBranch = gitStatusQuery.data?.branch ?? null;
   const terminalShortcutLabelOptions = useMemo(
     () => ({
       context: {
@@ -4477,10 +4480,12 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         style={isElectron && !sidebarOpen ? ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE : undefined}
       >
         <ChatHeader
-          activeWorkspaceTitle={activeWorkspace.title}
+          activeWorkspaceTitle={headerWorkspaceTitle}
           activeProjectName={activeProject?.name}
           activeProjectId={activeProject?.id}
           activeWorkspaceId={terminalWorkspaceId}
+          currentBranch={currentBranch}
+          activeWorkspaceWorktreePath={activeWorkspaceWorktreePath}
           isGitRepo={isGitRepo}
           openInCwd={gitCwd}
           activeProjectScripts={activeProject?.scripts}

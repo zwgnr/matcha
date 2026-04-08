@@ -185,6 +185,13 @@ export const GitCheckoutInput = Schema.Struct({
 });
 export type GitCheckoutInput = typeof GitCheckoutInput.Type;
 
+export const GitRenameBranchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  oldBranch: TrimmedNonEmptyStringSchema,
+  newBranch: TrimmedNonEmptyStringSchema,
+});
+export type GitRenameBranchInput = typeof GitRenameBranchInput.Type;
+
 export const GitInitInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
 });
@@ -363,6 +370,11 @@ export const GitPullResult = Schema.Struct({
   upstreamBranch: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
 export type GitPullResult = typeof GitPullResult.Type;
+
+export const GitRenameBranchResult = Schema.Struct({
+  branch: TrimmedNonEmptyStringSchema,
+});
+export type GitRenameBranchResult = typeof GitRenameBranchResult.Type;
 
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {

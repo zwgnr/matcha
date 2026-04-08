@@ -70,6 +70,7 @@ export function createWsNativeApi(): NativeApi {
       createWorktree: rpcClient.git.createWorktree,
       removeWorktree: rpcClient.git.removeWorktree,
       createBranch: rpcClient.git.createBranch,
+      renameBranch: rpcClient.git.renameBranch,
       checkout: rpcClient.git.checkout,
       init: rpcClient.git.init,
       log: rpcClient.git.log,
