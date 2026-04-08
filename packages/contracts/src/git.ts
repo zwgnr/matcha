@@ -175,6 +175,50 @@ export const GitInitInput = Schema.Struct({
 });
 export type GitInitInput = typeof GitInitInput.Type;
 
+export const GitLogInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  /** Max commits to return. Defaults to 50 on the server if omitted. */
+  limit: Schema.optional(PositiveInt),
+});
+export type GitLogInput = typeof GitLogInput.Type;
+
+export const GitStageFilesInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  /** File paths to stage. Omit to stage all. */
+  paths: Schema.optional(Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1))),
+});
+export type GitStageFilesInput = typeof GitStageFilesInput.Type;
+
+export const GitUnstageFilesInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  /** File paths to unstage. Omit to unstage all. */
+  paths: Schema.optional(Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1))),
+});
+export type GitUnstageFilesInput = typeof GitUnstageFilesInput.Type;
+
+export const GitDiscardFilesInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  /** File paths to discard working tree changes for. Omit to discard all. */
+  paths: Schema.optional(Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1))),
+});
+export type GitDiscardFilesInput = typeof GitDiscardFilesInput.Type;
+
+export const GitFetchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitFetchInput = typeof GitFetchInput.Type;
+
+export const GitStashPushInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  message: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type GitStashPushInput = typeof GitStashPushInput.Type;
+
+export const GitStashPopInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitStashPopInput = typeof GitStashPopInput.Type;
+
 // RPC Results
 
 const GitStatusPr = Schema.Struct({
@@ -186,6 +230,12 @@ const GitStatusPr = Schema.Struct({
   state: GitStatusPrState,
 });
 
+const GitStatusFileEntry = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  insertions: NonNegativeInt,
+  deletions: NonNegativeInt,
+});
+
 export const GitStatusResult = Schema.Struct({
   isRepo: Schema.Boolean,
   hasOriginRemote: Schema.Boolean,
@@ -193,15 +243,14 @@ export const GitStatusResult = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyStringSchema),
   hasWorkingTreeChanges: Schema.Boolean,
   workingTree: Schema.Struct({
-    files: Schema.Array(
-      Schema.Struct({
-        path: TrimmedNonEmptyStringSchema,
-        insertions: NonNegativeInt,
-        deletions: NonNegativeInt,
-      }),
-    ),
+    /** Combined (staged + unstaged) file list. */
+    files: Schema.Array(GitStatusFileEntry),
     insertions: NonNegativeInt,
     deletions: NonNegativeInt,
+    /** Files with staged changes (in the index). */
+    staged: Schema.Array(GitStatusFileEntry),
+    /** Files with unstaged changes (working tree vs index). */
+    unstaged: Schema.Array(GitStatusFileEntry),
   }),
   hasUpstream: Schema.Boolean,
   aheadCount: NonNegativeInt,
@@ -264,6 +313,29 @@ export const GitRunStackedActionResult = Schema.Struct({
   toast: GitRunStackedActionToast,
 });
 export type GitRunStackedActionResult = typeof GitRunStackedActionResult.Type;
+
+export const GitLogCommitFile = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  insertions: NonNegativeInt,
+  deletions: NonNegativeInt,
+});
+export type GitLogCommitFile = typeof GitLogCommitFile.Type;
+
+export const GitLogCommit = Schema.Struct({
+  hash: TrimmedNonEmptyStringSchema,
+  shortHash: TrimmedNonEmptyStringSchema,
+  subject: Schema.String,
+  authorDate: TrimmedNonEmptyStringSchema,
+  files: Schema.Array(GitLogCommitFile),
+});
+export type GitLogCommit = typeof GitLogCommit.Type;
+
+export const GitLogResult = Schema.Struct({
+  commits: Schema.Array(GitLogCommit),
+  /** The base branch these commits are compared against (e.g. "main"). Null if no upstream. */
+  baseBranch: Schema.NullOr(TrimmedNonEmptyStringSchema),
+});
+export type GitLogResult = typeof GitLogResult.Type;
 
 export const GitPullResult = Schema.Struct({
   status: Schema.Literals(["pulled", "skipped_up_to_date"]),

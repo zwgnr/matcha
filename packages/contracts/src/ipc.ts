@@ -6,15 +6,23 @@ import type {
   GitPullRequestRefInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitDiscardFilesInput,
+  GitFetchInput,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitLogInput,
+  GitLogResult,
   GitPullInput,
   GitPullResult,
   GitRemoveWorktreeInput,
   GitResolvePullRequestResult,
+  GitStageFilesInput,
+  GitStashPopInput,
+  GitStashPushInput,
   GitStatusInput,
   GitStatusResult,
+  GitUnstageFilesInput,
 } from "./git";
 import type {
   ProjectSearchEntriesInput,
@@ -151,6 +159,13 @@ export interface NativeApi {
     createBranch: (input: GitCreateBranchInput) => Promise<void>;
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
+    log: (input: GitLogInput) => Promise<GitLogResult>;
+    stageFiles: (input: GitStageFilesInput) => Promise<void>;
+    unstageFiles: (input: GitUnstageFilesInput) => Promise<void>;
+    discardFiles: (input: GitDiscardFilesInput) => Promise<void>;
+    fetch: (input: GitFetchInput) => Promise<void>;
+    stashPush: (input: GitStashPushInput) => Promise<void>;
+    stashPop: (input: GitStashPopInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
     preparePullRequestWorkspace: (
       input: GitPreparePullRequestWorkspaceInput,

@@ -2,10 +2,8 @@ import {
   type EditorId,
   type ProjectScript,
   type ResolvedKeybindingsConfig,
-  type WorkspaceId,
 } from "@matcha/contracts";
 import { memo } from "react";
-import GitActionsControl from "../GitActionsControl";
 import { DiffIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -15,7 +13,6 @@ import { Toggle } from "../ui/toggle";
 import { OpenInPicker } from "./OpenInPicker";
 
 interface ChatHeaderProps {
-  activeWorkspaceId: WorkspaceId;
   activeWorkspaceTitle: string;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
@@ -24,18 +21,16 @@ interface ChatHeaderProps {
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
-  diffToggleShortcutLabel: string | null;
-  gitCwd: string | null;
-  diffOpen: boolean;
+  sourceControlToggleShortcutLabel: string | null;
+  sourceControlOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
-  onToggleDiff: () => void;
+  onToggleSourceControl: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
-  activeWorkspaceId,
   activeWorkspaceTitle,
   activeProjectName,
   isGitRepo,
@@ -44,14 +39,13 @@ export const ChatHeader = memo(function ChatHeader({
   preferredScriptId,
   keybindings,
   availableEditors,
-  diffToggleShortcutLabel,
-  gitCwd,
-  diffOpen,
+  sourceControlToggleShortcutLabel,
+  sourceControlOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
-  onToggleDiff,
+  onToggleSourceControl,
 }: ChatHeaderProps) {
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -93,17 +87,14 @@ export const ChatHeader = memo(function ChatHeader({
             openInCwd={openInCwd}
           />
         )}
-        {activeProjectName && (
-          <GitActionsControl gitCwd={gitCwd} activeWorkspaceId={activeWorkspaceId} />
-        )}
         <Tooltip>
           <TooltipTrigger
             render={
               <Toggle
                 className="shrink-0"
-                pressed={diffOpen}
-                onPressedChange={onToggleDiff}
-                aria-label="Toggle diff panel"
+                pressed={sourceControlOpen}
+                onPressedChange={onToggleSourceControl}
+                aria-label="Toggle source control"
                 variant="outline"
                 size="xs"
                 disabled={!isGitRepo}
@@ -114,10 +105,10 @@ export const ChatHeader = memo(function ChatHeader({
           />
           <TooltipPopup side="bottom">
             {!isGitRepo
-              ? "Diff panel is unavailable because this project is not a git repository."
-              : diffToggleShortcutLabel
-                ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                : "Toggle diff panel"}
+              ? "Source control is unavailable because this project is not a git repository."
+              : sourceControlToggleShortcutLabel
+                ? `Toggle source control (${sourceControlToggleShortcutLabel})`
+                : "Toggle source control"}
           </TooltipPopup>
         </Tooltip>
       </div>

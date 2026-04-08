@@ -3,42 +3,39 @@ import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/reac
 import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
 
 import ChatView from "../components/ChatView";
-import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
 import {
-  DiffPanelHeaderSkeleton,
-  DiffPanelLoadingState,
-  DiffPanelShell,
-  type DiffPanelMode,
-} from "../components/DiffPanelShell";
+  SourceControlPanelLoadingState,
+  type SourceControlPanelMode,
+} from "../components/SourceControlPanelShell";
 import { useComposerDraftStore } from "../composerDraftStore";
 import {
-  type DiffRouteSearch,
-  parseDiffRouteSearch,
-  stripDiffSearchParams,
-} from "../diffRouteSearch";
+  type SourceControlRouteSearch,
+  parseSourceControlRouteSearch,
+  stripSourceControlSearchParams,
+} from "../sourceControlRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useStore } from "../store";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
-const DiffPanel = lazy(() => import("../components/DiffPanel"));
-const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
-const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
-const DIFF_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
-const DIFF_INLINE_SIDEBAR_MIN_WIDTH = 26 * 16;
+const SourceControlPanel = lazy(() => import("../components/SourceControlPanel"));
+const SC_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
+const SC_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
+const SC_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
+const SC_INLINE_SIDEBAR_MIN_WIDTH = 26 * 16;
 const COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX = 208;
 
-const DiffPanelSheet = (props: {
+const SourceControlSheet = (props: {
   children: ReactNode;
-  diffOpen: boolean;
-  onCloseDiff: () => void;
+  sourceControlOpen: boolean;
+  onCloseSourceControl: () => void;
 }) => {
   return (
     <Sheet
-      open={props.diffOpen}
+      open={props.sourceControlOpen}
       onOpenChange={(open) => {
         if (!open) {
-          props.onCloseDiff();
+          props.onCloseSourceControl();
         }
       }}
     >
@@ -54,40 +51,43 @@ const DiffPanelSheet = (props: {
   );
 };
 
-const DiffLoadingFallback = (props: { mode: DiffPanelMode }) => {
+const SourceControlLoadingFallback = () => {
   return (
-    <DiffPanelShell mode={props.mode} header={<DiffPanelHeaderSkeleton />}>
-      <DiffPanelLoadingState label="Loading diff viewer..." />
-    </DiffPanelShell>
+    <div className="flex h-full min-w-0 flex-col bg-background">
+      <SourceControlPanelLoadingState label="Loading changes..." />
+    </div>
   );
 };
 
-const LazyDiffPanel = (props: { mode: DiffPanelMode }) => {
+const LazySourceControlPanel = (props: { mode: SourceControlPanelMode }) => {
   return (
-    <DiffWorkerPoolProvider>
-      <Suspense fallback={<DiffLoadingFallback mode={props.mode} />}>
-        <DiffPanel mode={props.mode} />
-      </Suspense>
-    </DiffWorkerPoolProvider>
+    <Suspense fallback={<SourceControlLoadingFallback />}>
+      <SourceControlPanel mode={props.mode} />
+    </Suspense>
   );
 };
 
-const DiffPanelInlineSidebar = (props: {
-  diffOpen: boolean;
-  onCloseDiff: () => void;
-  onOpenDiff: () => void;
-  renderDiffContent: boolean;
+const SourceControlInlineSidebar = (props: {
+  sourceControlOpen: boolean;
+  onCloseSourceControl: () => void;
+  onOpenSourceControl: () => void;
+  renderSourceControlContent: boolean;
 }) => {
-  const { diffOpen, onCloseDiff, onOpenDiff, renderDiffContent } = props;
+  const {
+    sourceControlOpen,
+    onCloseSourceControl,
+    onOpenSourceControl,
+    renderSourceControlContent,
+  } = props;
   const onOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
-        onOpenDiff();
+        onOpenSourceControl();
         return;
       }
-      onCloseDiff();
+      onCloseSourceControl();
     },
-    [onCloseDiff, onOpenDiff],
+    [onCloseSourceControl, onOpenSourceControl],
   );
   const shouldAcceptInlineSidebarWidth = useCallback(
     ({ nextWidth, wrapper }: { nextWidth: number; wrapper: HTMLElement }) => {
@@ -138,22 +138,22 @@ const DiffPanelInlineSidebar = (props: {
   return (
     <SidebarProvider
       defaultOpen={false}
-      open={diffOpen}
+      open={sourceControlOpen}
       onOpenChange={onOpenChange}
       className="w-auto min-h-0 flex-none bg-transparent"
-      style={{ "--sidebar-width": DIFF_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+      style={{ "--sidebar-width": SC_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
     >
       <Sidebar
         side="right"
         collapsible="offcanvas"
         className="border-l border-border bg-card text-foreground"
         resizable={{
-          minWidth: DIFF_INLINE_SIDEBAR_MIN_WIDTH,
+          minWidth: SC_INLINE_SIDEBAR_MIN_WIDTH,
           shouldAcceptWidth: shouldAcceptInlineSidebarWidth,
-          storageKey: DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
+          storageKey: SC_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        {renderDiffContent ? <LazyDiffPanel mode="sidebar" /> : null}
+        {renderSourceControlContent ? <LazySourceControlPanel mode="sidebar" /> : null}
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
@@ -174,34 +174,34 @@ function ChatWorkspaceRouteView() {
     Object.hasOwn(store.draftWorkspacesByWorkspaceId, workspaceId),
   );
   const routeWorkspaceExists = workspaceExists || draftWorkspaceExists;
-  const diffOpen = search.diff === "1";
-  const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
+  const sourceControlOpen = search.diff === "1";
+  const shouldUseSourceControlSheet = useMediaQuery(SC_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across workspace switches.
-  const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);
-  const closeDiff = useCallback(() => {
+  const [hasOpenedSourceControl, setHasOpenedDiff] = useState(sourceControlOpen);
+  const closeSourceControl = useCallback(() => {
     void navigate({
       to: "/$workspaceId",
       params: { workspaceId },
       search: { diff: undefined },
     });
   }, [navigate, workspaceId]);
-  const openDiff = useCallback(() => {
+  const openSourceControl = useCallback(() => {
     void navigate({
       to: "/$workspaceId",
       params: { workspaceId },
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
+        const rest = stripSourceControlSearchParams(previous);
         return { ...rest, diff: "1" };
       },
     });
   }, [navigate, workspaceId]);
 
   useEffect(() => {
-    if (diffOpen) {
+    if (sourceControlOpen) {
       setHasOpenedDiff(true);
     }
-  }, [diffOpen]);
+  }, [sourceControlOpen]);
 
   useEffect(() => {
     if (!bootstrapComplete) {
@@ -218,19 +218,19 @@ function ChatWorkspaceRouteView() {
     return null;
   }
 
-  const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const shouldRenderSourceControlContent = sourceControlOpen || hasOpenedSourceControl;
 
-  if (!shouldUseDiffSheet) {
+  if (!shouldUseSourceControlSheet) {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
           <ChatView workspaceId={workspaceId} />
         </SidebarInset>
-        <DiffPanelInlineSidebar
-          diffOpen={diffOpen}
-          onCloseDiff={closeDiff}
-          onOpenDiff={openDiff}
-          renderDiffContent={shouldRenderDiffContent}
+        <SourceControlInlineSidebar
+          sourceControlOpen={sourceControlOpen}
+          onCloseSourceControl={closeSourceControl}
+          onOpenSourceControl={openSourceControl}
+          renderSourceControlContent={shouldRenderSourceControlContent}
         />
       </>
     );
@@ -241,17 +241,20 @@ function ChatWorkspaceRouteView() {
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
         <ChatView workspaceId={workspaceId} />
       </SidebarInset>
-      <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
-        {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
-      </DiffPanelSheet>
+      <SourceControlSheet
+        sourceControlOpen={sourceControlOpen}
+        onCloseSourceControl={closeSourceControl}
+      >
+        {shouldRenderSourceControlContent ? <LazySourceControlPanel mode="sheet" /> : null}
+      </SourceControlSheet>
     </>
   );
 }
 
 export const Route = createFileRoute("/_chat/$workspaceId")({
-  validateSearch: (search) => parseDiffRouteSearch(search),
+  validateSearch: (search) => parseSourceControlRouteSearch(search),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
+    middlewares: [retainSearchParams<SourceControlRouteSearch>(["diff"])],
   },
   component: ChatWorkspaceRouteView,
 });

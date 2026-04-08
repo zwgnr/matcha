@@ -5,7 +5,7 @@
  * they run in; terminal tabs are workspace-scoped.
  */
 
-import { type ProviderKind, type WorkspaceId } from "@matcha/contracts";
+import { type ProviderKind, type TurnId, type WorkspaceId } from "@matcha/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "./lib/storage";
@@ -14,7 +14,7 @@ import { resolveStorage } from "./lib/storage";
 // Types
 // ---------------------------------------------------------------------------
 
-export type TabKind = "provider" | "terminal";
+export type TabKind = "provider" | "terminal" | "diff";
 
 export interface WorkspaceTab {
   id: string;
@@ -26,6 +26,17 @@ export interface WorkspaceTab {
   /** Terminal session ID — only set when `kind === "terminal"`. */
   terminalId?: string;
   label: string;
+  // -- Diff tab fields --
+  /** Source workspace for diff data — only set when `kind === "diff"`. */
+  diffSourceWorkspaceId?: WorkspaceId;
+  /** Turn ID whose diff to display. Undefined means full conversation ("against main"). */
+  diffTurnId?: TurnId;
+  /** Checkpoint turn count range start — only for diff tabs. */
+  diffFromTurnCount?: number;
+  /** Checkpoint turn count range end — only for diff tabs. */
+  diffToTurnCount?: number;
+  /** File path within the diff to render — only for diff tabs. */
+  diffFilePath?: string;
 }
 
 export interface WorkspaceTabState {
@@ -73,6 +84,29 @@ export function nextTerminalTabLabel(tabs: WorkspaceTab[]): string {
   return `Terminal ${terminalTabs.length + 1}`;
 }
 
+export function makeDiffTab(input: {
+  diffSourceWorkspaceId: WorkspaceId;
+  diffTurnId: TurnId | null;
+  diffFromTurnCount: number;
+  diffToTurnCount: number;
+  diffFilePath: string;
+  label: string;
+}): WorkspaceTab {
+  const tab: WorkspaceTab = {
+    id: generateTabId(),
+    kind: "diff",
+    label: input.label,
+    diffSourceWorkspaceId: input.diffSourceWorkspaceId,
+    diffFromTurnCount: input.diffFromTurnCount,
+    diffToTurnCount: input.diffToTurnCount,
+    diffFilePath: input.diffFilePath,
+  };
+  if (input.diffTurnId !== null) {
+    tab.diffTurnId = input.diffTurnId;
+  }
+  return tab;
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -94,6 +128,13 @@ interface WorkspaceTabStoreState {
     terminalId: string,
   ) => WorkspaceTab | undefined;
   findWorkspaceWorkspaceIdByProviderWorkspaceId: (workspaceId: WorkspaceId) => WorkspaceId | null;
+  /** Find a diff tab matching the given source workspace, turn, and file path. */
+  findDiffTab: (
+    workspaceWorkspaceId: WorkspaceId,
+    diffSourceWorkspaceId: WorkspaceId,
+    diffTurnId: TurnId | undefined,
+    diffFilePath: string,
+  ) => WorkspaceTab | undefined;
 }
 
 function createTabStateStorage() {
@@ -189,6 +230,17 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
           }
         }
         return null;
+      },
+
+      findDiffTab: (workspaceWorkspaceId, diffSourceWorkspaceId, diffTurnId, diffFilePath) => {
+        const current = get().tabStateByWorkspaceWorkspaceId[workspaceWorkspaceId];
+        return current?.tabs.find(
+          (t) =>
+            t.kind === "diff" &&
+            t.diffSourceWorkspaceId === diffSourceWorkspaceId &&
+            t.diffTurnId === diffTurnId &&
+            t.diffFilePath === diffFilePath,
+        );
       },
     }),
     {

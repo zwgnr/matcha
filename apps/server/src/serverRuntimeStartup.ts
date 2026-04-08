@@ -116,7 +116,6 @@ export const makeCommandGate = Effect.gen(function* () {
   } satisfies CommandGate;
 });
 
-
 const autoBootstrapWelcome = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const projectionReadModelQuery = yield* ProjectionSnapshotQuery;

@@ -321,7 +321,7 @@ export function isDiffToggleShortcut(
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): boolean {
-  return matchesCommandShortcut(event, keybindings, "diff.toggle", options);
+  return matchesCommandShortcut(event, keybindings, "sourceControl.toggle", options);
 }
 
 export function isChatNewShortcut(

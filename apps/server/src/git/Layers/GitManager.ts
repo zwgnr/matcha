@@ -705,7 +705,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
           branch: null,
           upstreamRef: null,
           hasWorkingTreeChanges: false,
-          workingTree: { files: [], insertions: 0, deletions: 0 },
+          workingTree: { files: [], insertions: 0, deletions: 0, staged: [], unstaged: [] },
           hasUpstream: false,
           aheadCount: 0,
           behindCount: 0,

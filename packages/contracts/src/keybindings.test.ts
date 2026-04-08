@@ -37,9 +37,9 @@ it.effect("parses keybinding rules", () =>
 
     const parsedDiffToggle = yield* decode(KeybindingRule, {
       key: "mod+d",
-      command: "diff.toggle",
+      command: "sourceControl.toggle",
     });
-    assert.strictEqual(parsedDiffToggle.command, "diff.toggle");
+    assert.strictEqual(parsedDiffToggle.command, "sourceControl.toggle");
 
     const parsedLocal = yield* decode(KeybindingRule, {
       key: "mod+shift+n",

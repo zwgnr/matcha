@@ -1,5 +1,5 @@
 import { type ProviderKind } from "@matcha/contracts";
-import { PlusIcon, TerminalSquareIcon, XIcon } from "lucide-react";
+import { FileDiffIcon, PlusIcon, TerminalSquareIcon, XIcon } from "lucide-react";
 import { memo } from "react";
 import type { TabKind, WorkspaceTab } from "../../workspaceTabStore";
 import { ClaudeAI, OpenAI } from "../Icons";
@@ -15,6 +15,9 @@ const TAB_ICON_BY_PROVIDER: Record<ProviderKind, React.ComponentType<{ className
 function TabIcon({ tab }: { tab: WorkspaceTab }) {
   if (tab.kind === "terminal") {
     return <TerminalSquareIcon className="size-3.5" />;
+  }
+  if (tab.kind === "diff") {
+    return <FileDiffIcon className="size-3.5" />;
   }
   const IconComponent = tab.provider ? TAB_ICON_BY_PROVIDER[tab.provider] : null;
   return IconComponent ? <IconComponent className="size-3.5" /> : null;

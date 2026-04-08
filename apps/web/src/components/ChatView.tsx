@@ -24,7 +24,16 @@ import { applyClaudePromptEffortPrefix } from "@matcha/shared/model";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@matcha/shared/projectScripts";
 import { isLeadingSlashCommandInput } from "@matcha/shared/slashCommands";
 import { truncate } from "@matcha/shared/String";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -32,7 +41,10 @@ import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { isElectron } from "../env";
 import { ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE } from "../lib/titleBar";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import {
+  parseSourceControlRouteSearch,
+  stripSourceControlSearchParams,
+} from "../sourceControlRouteSearch";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -159,6 +171,7 @@ import { buildExpandedImagePreview, ExpandedImagePreview } from "./chat/Expanded
 import { AVAILABLE_PROVIDER_OPTIONS, ProviderModelPicker } from "./chat/ProviderModelPicker";
 import { WorkspaceTabBar } from "./chat/WorkspaceTabBar";
 import {
+  makeDiffTab,
   makeProviderTab,
   makeTerminalTab,
   nextTerminalTabLabel,
@@ -179,6 +192,25 @@ import {
 } from "./chat/composerProviderRegistry";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
 import { WorkspaceErrorBanner } from "./chat/WorkspaceErrorBanner";
+import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
+
+const LazyDiffFileTab = lazy(() => import("./DiffFileTab"));
+
+function DiffFileTabLazy(props: React.ComponentProps<typeof LazyDiffFileTab>) {
+  return (
+    <DiffWorkerPoolProvider>
+      <Suspense
+        fallback={
+          <div className="flex h-full min-w-0 flex-1 items-center justify-center text-xs text-muted-foreground/70">
+            Loading diff...
+          </div>
+        }
+      >
+        <LazyDiffFileTab {...props} />
+      </Suspense>
+    </DiffWorkerPoolProvider>
+  );
+}
 import {
   buildExpiredTerminalContextToastCopy,
   buildLocalDraftWorkspace,
@@ -688,7 +720,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const timestampFormat = settings.timestampFormat;
   const rawSearch = useSearch({
     strict: false,
-    select: (params) => parseDiffRouteSearch(params),
+    select: (params) => parseSourceControlRouteSearch(params),
   });
   const { resolvedTheme } = useTheme();
   const composerDraft = useComposerWorkspaceDraft(workspaceId);
@@ -931,7 +963,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const isServerWorkspace = serverWorkspace !== undefined;
   const isLocalDraftWorkspace = !isServerWorkspace && localDraftWorkspace !== undefined;
   const canCheckoutPullRequestIntoWorkspace = isLocalDraftWorkspace;
-  const diffOpen = rawSearch.diff === "1";
+  const sourceControlOpen = rawSearch.diff === "1";
   const activeWorkspaceId = activeWorkspace?.id ?? null;
   const activeLatestTurn = activeWorkspace?.latestTurn ?? null;
   const workspacePlanCatalog = useWorkspacePlanCatalog(
@@ -970,6 +1002,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const isWorkspaceDraftWorkspace = isLocalDraftWorkspace && isWorkspaceRootWorkspace;
   const isProviderTabActive = activeTab?.kind === "provider";
   const isTerminalTabActive = activeTab?.kind === "terminal";
+  const isDiffTabActive = activeTab?.kind === "diff";
   const showWorkspaceSelectionState = activeTab === undefined;
 
   useEffect(() => {
@@ -1930,21 +1963,22 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     () => shortcutLabelForCommand(keybindings, "terminal.close", terminalShortcutLabelOptions),
     [keybindings, terminalShortcutLabelOptions],
   );
-  const diffPanelShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "diff.toggle", nonTerminalShortcutLabelOptions),
+  const sourceControlShortcutLabel = useMemo(
+    () =>
+      shortcutLabelForCommand(keybindings, "sourceControl.toggle", nonTerminalShortcutLabelOptions),
     [keybindings, nonTerminalShortcutLabelOptions],
   );
-  const onToggleDiff = useCallback(() => {
+  const onToggleSourceControl = useCallback(() => {
     void navigate({
       to: "/$workspaceId",
       params: { workspaceId: routeWorkspaceId },
       replace: true,
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
+        const rest = stripSourceControlSearchParams(previous);
+        return sourceControlOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
       },
     });
-  }, [diffOpen, navigate, routeWorkspaceId]);
+  }, [sourceControlOpen, navigate, routeWorkspaceId]);
 
   const envLocked = Boolean(
     activeWorkspace &&
@@ -2985,10 +3019,10 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         return;
       }
 
-      if (command === "diff.toggle") {
+      if (command === "sourceControl.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        onToggleDiff();
+        onToggleSourceControl();
         return;
       }
 
@@ -3013,7 +3047,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     runProjectScript,
     splitTerminal,
     keybindings,
-    onToggleDiff,
+    onToggleSourceControl,
   ]);
 
   const addComposerImages = (files: File[]) => {
@@ -4211,20 +4245,47 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     setExpandedImage(preview);
   }, []);
   const expandedImageItem = expandedImage ? expandedImage.images[expandedImage.index] : null;
+  const findDiffTab = useWorkspaceTabStore((s) => s.findDiffTab);
   const onOpenTurnDiff = useCallback(
     (turnId: TurnId, filePath?: string) => {
-      void navigate({
-        to: "/$workspaceId",
-        params: { workspaceId: routeWorkspaceId },
-        search: (previous) => {
-          const rest = stripDiffSearchParams(previous);
-          return filePath
-            ? { ...rest, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-            : { ...rest, diff: "1", diffTurnId: turnId };
-        },
+      if (!filePath || !activeWorkspaceId) return;
+
+      // Resolve checkpoint turn count for this turn
+      const summary = turnDiffSummaries.find((s) => s.turnId === turnId);
+      const checkpointTurnCount =
+        summary?.checkpointTurnCount ?? inferredCheckpointTurnCountByTurnId[turnId];
+      if (typeof checkpointTurnCount !== "number") return;
+
+      const fromTurnCount = Math.max(0, checkpointTurnCount - 1);
+      const toTurnCount = checkpointTurnCount;
+
+      // Reuse existing tab if open
+      const existing = findDiffTab(workspaceWorkspaceId, activeWorkspaceId, turnId, filePath);
+      if (existing) {
+        setActiveTab(workspaceWorkspaceId, existing.id);
+        return;
+      }
+
+      const fileName = filePath.split("/").at(-1) ?? filePath;
+      const tab = makeDiffTab({
+        diffSourceWorkspaceId: activeWorkspaceId,
+        diffTurnId: turnId,
+        diffFromTurnCount: fromTurnCount,
+        diffToTurnCount: toTurnCount,
+        diffFilePath: filePath,
+        label: fileName,
       });
+      addTab(workspaceWorkspaceId, tab);
     },
-    [navigate, routeWorkspaceId],
+    [
+      activeWorkspaceId,
+      addTab,
+      findDiffTab,
+      inferredCheckpointTurnCountByTurnId,
+      setActiveTab,
+      turnDiffSummaries,
+      workspaceWorkspaceId,
+    ],
   );
   const onRevertUserMessage = (messageId: MessageId) => {
     const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);
@@ -4274,7 +4335,6 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         style={isElectron && !sidebarOpen ? ELECTRON_TRAFFIC_LIGHTS_LEFT_INSET_STYLE : undefined}
       >
         <ChatHeader
-          activeWorkspaceId={activeWorkspace.id}
           activeWorkspaceTitle={activeWorkspace.title}
           activeProjectName={activeProject?.name}
           isGitRepo={isGitRepo}
@@ -4285,16 +4345,15 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           }
           keybindings={keybindings}
           availableEditors={availableEditors}
-          diffToggleShortcutLabel={diffPanelShortcutLabel}
-          gitCwd={gitCwd}
-          diffOpen={diffOpen}
+          sourceControlToggleShortcutLabel={sourceControlShortcutLabel}
+          sourceControlOpen={sourceControlOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
-          onToggleDiff={onToggleDiff}
+          onToggleSourceControl={onToggleSourceControl}
         />
       </header>
 
@@ -4320,7 +4379,17 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       )}
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">
-        {isTerminalTabActive && activeTab?.terminalId ? (
+        {isDiffTabActive && activeTab?.diffFilePath && activeTab?.diffSourceWorkspaceId ? (
+          /* Diff tab content — single file diff fills the area */
+          <DiffFileTabLazy
+            workspaceId={activeTab.diffSourceWorkspaceId}
+            turnId={activeTab.diffTurnId}
+            fromTurnCount={activeTab.diffFromTurnCount ?? 0}
+            toTurnCount={activeTab.diffToTurnCount ?? 0}
+            filePath={activeTab.diffFilePath}
+            resolvedTheme={resolvedTheme}
+          />
+        ) : isTerminalTabActive && activeTab?.terminalId ? (
           /* Terminal tab content — inline terminal fills the area */
           <PersistentWorkspaceTerminalDrawer
             workspaceId={activeWorkspace.id}

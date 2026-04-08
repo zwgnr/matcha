@@ -260,4 +260,3 @@ jobs:
             release-assets/*.blockmap
             release-assets/latest*.yml
           fail_on_unmatched_files: false
-

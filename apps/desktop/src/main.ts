@@ -934,7 +934,9 @@ async function installUpdateByAsarReplace(zipPath: string): Promise<void> {
   const extractedEntries = originalFs.readdirSync(tmpDir);
   const appBundle = extractedEntries.find((e) => e.endsWith(".app"));
   if (!appBundle) {
-    throw new Error(`No .app bundle found in update ZIP (contents: ${extractedEntries.join(", ")})`);
+    throw new Error(
+      `No .app bundle found in update ZIP (contents: ${extractedEntries.join(", ")})`,
+    );
   }
   const resourcesDir = Path.join(tmpDir, appBundle, "Contents", "Resources");
   const newAsar = Path.join(resourcesDir, "app.asar");
@@ -1082,7 +1084,9 @@ function configureAutoUpdater(): void {
   autoUpdater.on("update-downloaded", (info) => {
     downloadedUpdateZipPath = (info as any).downloadedFile ?? null;
     setUpdateState(reduceDesktopUpdateStateOnDownloadComplete(updateState, info.version));
-    console.info(`[desktop-updater] Update downloaded: ${info.version} path=${downloadedUpdateZipPath}`);
+    console.info(
+      `[desktop-updater] Update downloaded: ${info.version} path=${downloadedUpdateZipPath}`,
+    );
   });
 
   clearUpdatePollTimer();

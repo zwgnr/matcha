@@ -1267,6 +1267,28 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
 
     const stagedEntries = parseNumstatEntries(stagedNumstatStdout);
     const unstagedEntries = parseNumstatEntries(unstagedNumstatStdout);
+
+    // Build separate staged/unstaged file lists
+    const stagedFiles = stagedEntries
+      .map((e) => ({ path: e.path, insertions: e.insertions, deletions: e.deletions }))
+      .toSorted((a, b) => a.path.localeCompare(b.path));
+    const stagedPaths = new Set(stagedEntries.map((e) => e.path));
+
+    const unstagedFiles = unstagedEntries
+      .map((e) => ({ path: e.path, insertions: e.insertions, deletions: e.deletions }))
+      .toSorted((a, b) => a.path.localeCompare(b.path));
+    const unstagedPaths = new Set(unstagedEntries.map((e) => e.path));
+
+    // Files from porcelain status that don't appear in either numstat
+    // (e.g. new untracked files) — treat as unstaged
+    for (const filePath of changedFilesWithoutNumstat) {
+      if (!stagedPaths.has(filePath) && !unstagedPaths.has(filePath)) {
+        unstagedFiles.push({ path: filePath, insertions: 0, deletions: 0 });
+      }
+    }
+    unstagedFiles.sort((a, b) => a.path.localeCompare(b.path));
+
+    // Combined file list (backward compat)
     const fileStatMap = new Map<string, { insertions: number; deletions: number }>();
     for (const entry of [...stagedEntries, ...unstagedEntries]) {
       const existing = fileStatMap.get(entry.path) ?? { insertions: 0, deletions: 0 };
@@ -1305,6 +1327,8 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         files,
         insertions,
         deletions,
+        staged: stagedFiles,
+        unstaged: unstagedFiles,
       },
       hasUpstream: upstreamRef !== null,
       aheadCount,
@@ -2102,6 +2126,215 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       ),
     );
 
+  // -------------------------------------------------------------------------
+  // git log — commits on current branch relative to default/upstream branch
+  // -------------------------------------------------------------------------
+
+  const GIT_LOG_DEFAULT_LIMIT = 50;
+  const GIT_LOG_RECORD_SEP = "---END_COMMIT---";
+  const GIT_LOG_FORMAT = ["%H", "%h", "%s", "%aI"].join("%n");
+
+  /**
+   * Resolve the base branch for log comparisons.
+   * Tries: symbolic HEAD of origin, then falls back to common defaults.
+   */
+  const resolveBaseBranch = (cwd: string): Effect.Effect<string | null, GitCommandError> =>
+    Effect.gen(function* () {
+      // Try symbolic-ref for origin HEAD (e.g. origin/main)
+      const symResult = yield* executeGit(
+        "GitCore.log.resolveBaseBranch.symbolicRef",
+        cwd,
+        ["symbolic-ref", "refs/remotes/origin/HEAD"],
+        { allowNonZeroExit: true },
+      );
+      if (symResult.code === 0) {
+        const ref = symResult.stdout.trim();
+        // Convert refs/remotes/origin/main → origin/main
+        const short = ref.replace(/^refs\/remotes\//, "");
+        if (short.length > 0) return short;
+      }
+
+      // Fallback: check common default branch names
+      for (const candidate of ["origin/main", "origin/master"]) {
+        const verifyResult = yield* executeGit(
+          "GitCore.log.resolveBaseBranch.verify",
+          cwd,
+          ["rev-parse", "--verify", candidate],
+          { allowNonZeroExit: true },
+        );
+        if (verifyResult.code === 0) return candidate;
+      }
+
+      return null;
+    });
+
+  const parseNumstatLine = (
+    line: string,
+  ): { path: string; insertions: number; deletions: number } | null => {
+    // Format: <insertions>\t<deletions>\t<path>
+    // Binary files show "-" for insertions/deletions
+    const parts = line.split("\t");
+    if (parts.length < 3) return null;
+    const ins = parts[0] === "-" ? 0 : Number.parseInt(parts[0]!, 10);
+    const del = parts[1] === "-" ? 0 : Number.parseInt(parts[1]!, 10);
+    const path = parts.slice(2).join("\t");
+    if (path.length === 0) return null;
+    return {
+      path,
+      insertions: Number.isNaN(ins) ? 0 : ins,
+      deletions: Number.isNaN(del) ? 0 : del,
+    };
+  };
+
+  const log: GitCoreShape["log"] = Effect.fn("log")(function* (input) {
+    const limit = input.limit ?? GIT_LOG_DEFAULT_LIMIT;
+    const baseBranch = yield* resolveBaseBranch(input.cwd);
+
+    // Build range — if no base branch, just show last N commits
+    const rangeArg = baseBranch !== null ? `${baseBranch}..HEAD` : "HEAD";
+
+    // Get commit metadata
+    const logStdout = yield* runGitStdout(
+      "GitCore.log.commits",
+      input.cwd,
+      ["log", `--format=${GIT_LOG_FORMAT}${GIT_LOG_RECORD_SEP}`, `-n`, `${limit}`, rangeArg],
+      true,
+    );
+
+    // Get per-commit numstat (file changes)
+    const numstatStdout = yield* runGitStdout(
+      "GitCore.log.numstat",
+      input.cwd,
+      ["log", "--format=COMMIT:%H", "--numstat", `-n`, `${limit}`, rangeArg],
+      true,
+    );
+
+    // Parse commits from log output
+    const rawCommits = logStdout
+      .split(GIT_LOG_RECORD_SEP)
+      .map((block) => block.trim())
+      .filter((block) => block.length > 0);
+
+    // Parse numstat into a map of hash → files
+    const filesByHash = new Map<
+      string,
+      Array<{ path: string; insertions: number; deletions: number }>
+    >();
+    let currentHash: string | null = null;
+    for (const line of numstatStdout.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0) continue;
+      if (trimmed.startsWith("COMMIT:")) {
+        currentHash = trimmed.slice(7);
+        if (!filesByHash.has(currentHash)) {
+          filesByHash.set(currentHash, []);
+        }
+        continue;
+      }
+      if (currentHash !== null) {
+        const parsed = parseNumstatLine(trimmed);
+        if (parsed) {
+          filesByHash.get(currentHash)!.push(parsed);
+        }
+      }
+    }
+
+    const commits = rawCommits.map((block) => {
+      const lines = block.split("\n");
+      const hash = lines[0] ?? "";
+      const shortHash = lines[1] ?? hash.slice(0, 7);
+      const subject = lines[2] ?? "";
+      const authorDate = lines[3] ?? "";
+
+      return {
+        hash,
+        shortHash,
+        subject,
+        authorDate,
+        files: (filesByHash.get(hash) ?? []).map((f) => ({
+          path: f.path as string & { readonly TrimmedNonEmptyString: unique symbol },
+          insertions: f.insertions as number & { readonly NonNegativeInt: unique symbol },
+          deletions: f.deletions as number & { readonly NonNegativeInt: unique symbol },
+        })),
+      };
+    });
+
+    // Extract base branch display name
+    const baseBranchDisplay = baseBranch?.replace(/^origin\//, "") ?? null;
+
+    return {
+      commits,
+      baseBranch: baseBranchDisplay as typeof baseBranchDisplay & {
+        readonly TrimmedNonEmptyString: unique symbol;
+      },
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // Stage / unstage / discard
+  // -------------------------------------------------------------------------
+
+  const stageFiles: GitCoreShape["stageFiles"] = Effect.fn("stageFiles")(function* (input) {
+    if (input.paths && input.paths.length > 0) {
+      yield* runGit("GitCore.stageFiles", input.cwd, ["add", "--", ...input.paths]);
+    } else {
+      yield* runGit("GitCore.stageFiles.all", input.cwd, ["add", "-A"]);
+    }
+  });
+
+  const unstageFiles: GitCoreShape["unstageFiles"] = Effect.fn("unstageFiles")(function* (input) {
+    if (input.paths && input.paths.length > 0) {
+      yield* runGit("GitCore.unstageFiles", input.cwd, [
+        "restore",
+        "--staged",
+        "--",
+        ...input.paths,
+      ]);
+    } else {
+      yield* runGit("GitCore.unstageFiles.all", input.cwd, ["restore", "--staged", "."]);
+    }
+  });
+
+  const discardFiles: GitCoreShape["discardFiles"] = Effect.fn("discardFiles")(function* (input) {
+    if (input.paths && input.paths.length > 0) {
+      // Discard tracked file changes
+      yield* executeGit(
+        "GitCore.discardFiles.restore",
+        input.cwd,
+        ["restore", "--", ...input.paths],
+        { allowNonZeroExit: true },
+      );
+      // Also remove untracked files if they exist
+      yield* executeGit(
+        "GitCore.discardFiles.clean",
+        input.cwd,
+        ["clean", "-fd", "--", ...input.paths],
+        { allowNonZeroExit: true },
+      );
+    } else {
+      yield* runGit("GitCore.discardFiles.all.restore", input.cwd, ["restore", "."]);
+      yield* executeGit("GitCore.discardFiles.all.clean", input.cwd, ["clean", "-fd"], {
+        allowNonZeroExit: true,
+      });
+    }
+  });
+
+  const fetchRemotes: GitCoreShape["fetch"] = Effect.fn("fetch")(function* (input) {
+    yield* runGit("GitCore.fetch", input.cwd, ["fetch", "--all", "--prune"]);
+  });
+
+  const stashPush: GitCoreShape["stashPush"] = Effect.fn("stashPush")(function* (input) {
+    const args = ["stash", "push", "--include-untracked"];
+    if (input.message) {
+      args.push("-m", input.message);
+    }
+    yield* runGit("GitCore.stashPush", input.cwd, args);
+  });
+
+  const stashPop: GitCoreShape["stashPop"] = Effect.fn("stashPop")(function* (input) {
+    yield* runGit("GitCore.stashPop", input.cwd, ["stash", "pop"]);
+  });
+
   return {
     execute,
     status,
@@ -2127,6 +2360,13 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     checkoutBranch,
     initRepo,
     listLocalBranchNames,
+    log,
+    stageFiles,
+    unstageFiles,
+    discardFiles,
+    fetch: fetchRemotes,
+    stashPush,
+    stashPop,
   } satisfies GitCoreShape;
 });
 

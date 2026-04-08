@@ -13,13 +13,21 @@ import type {
   GitCreateBranchInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitDiscardFilesInput,
+  GitFetchInput,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitLogInput,
+  GitLogResult,
   GitPullResult,
   GitRemoveWorktreeInput,
+  GitStageFilesInput,
+  GitStashPopInput,
+  GitStashPushInput,
   GitStatusInput,
   GitStatusResult,
+  GitUnstageFilesInput,
 } from "@matcha/contracts";
 
 import type { GitCommandError } from "@matcha/contracts";
@@ -296,6 +304,41 @@ export interface GitCoreShape {
    * List local branch names (short format).
    */
   readonly listLocalBranchNames: (cwd: string) => Effect.Effect<string[], GitCommandError>;
+
+  /**
+   * Return commit log for the current branch relative to its base branch.
+   */
+  readonly log: (input: GitLogInput) => Effect.Effect<GitLogResult, GitCommandError>;
+
+  /**
+   * Stage files. If paths omitted, stages all changes.
+   */
+  readonly stageFiles: (input: GitStageFilesInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Unstage files. If paths omitted, unstages all.
+   */
+  readonly unstageFiles: (input: GitUnstageFilesInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Discard working tree changes for files. If paths omitted, discards all.
+   */
+  readonly discardFiles: (input: GitDiscardFilesInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Fetch from all remotes.
+   */
+  readonly fetch: (input: GitFetchInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Stash working tree changes.
+   */
+  readonly stashPush: (input: GitStashPushInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Pop most recent stash entry.
+   */
+  readonly stashPop: (input: GitStashPopInput) => Effect.Effect<void, GitCommandError>;
 }
 
 /**

@@ -15,8 +15,17 @@ export const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   allDirectoriesExpanded: boolean;
   resolvedTheme: "light" | "dark";
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  /** Optional render function for per-file action buttons (e.g. stage/unstage/discard). */
+  renderFileActions?: (filePath: string) => React.ReactNode;
 }) {
-  const { files, allDirectoriesExpanded, onOpenTurnDiff, resolvedTheme, turnId } = props;
+  const {
+    files,
+    allDirectoriesExpanded,
+    onOpenTurnDiff,
+    resolvedTheme,
+    turnId,
+    renderFileActions,
+  } = props;
   const treeNodes = useMemo(() => buildTurnDiffTree(files), [files]);
   const directoryPathsKey = useMemo(
     () => collectDirectoryPaths(treeNodes).join("\u0000"),
@@ -95,29 +104,38 @@ export const ChangedFilesTree = memo(function ChangedFilesTree(props: {
     }
 
     return (
-      <button
+      <div
         key={`file:${node.path}`}
-        type="button"
-        className="group flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left hover:bg-background/80"
-        style={{ paddingLeft: `${leftPadding}px` }}
-        onClick={() => onOpenTurnDiff(turnId, node.path)}
+        className="group/file flex w-full items-center rounded-md hover:bg-background/80"
       >
-        <span aria-hidden="true" className="size-3.5 shrink-0" />
-        <VscodeEntryIcon
-          pathValue={node.path}
-          kind="file"
-          theme={resolvedTheme}
-          className="size-3.5 text-muted-foreground/70"
-        />
-        <span className="truncate font-mono text-[11px] text-muted-foreground/80 group-hover:text-foreground/90">
-          {node.name}
-        </span>
-        {node.stat && (
-          <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums">
-            <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-2 text-left"
+          style={{ paddingLeft: `${leftPadding}px` }}
+          onClick={() => onOpenTurnDiff(turnId, node.path)}
+        >
+          <span aria-hidden="true" className="size-3.5 shrink-0" />
+          <VscodeEntryIcon
+            pathValue={node.path}
+            kind="file"
+            theme={resolvedTheme}
+            className="size-3.5 text-muted-foreground/70"
+          />
+          <span className="truncate font-mono text-[11px] text-muted-foreground/80 group-hover/file:text-foreground/90">
+            {node.name}
+          </span>
+          {node.stat && (
+            <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums">
+              <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />
+            </span>
+          )}
+        </button>
+        {renderFileActions && (
+          <span className="flex shrink-0 items-center gap-0.5 pr-2 opacity-0 transition-opacity group-hover/file:opacity-100">
+            {renderFileActions(node.path)}
           </span>
         )}
-      </button>
+      </div>
     );
   };
 

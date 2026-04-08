@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDiffRouteSearch } from "./diffRouteSearch";
+import { parseSourceControlRouteSearch } from "./sourceControlRouteSearch";
 
-describe("parseDiffRouteSearch", () => {
+describe("parseSourceControlRouteSearch", () => {
   it("parses valid diff search values", () => {
-    const parsed = parseDiffRouteSearch({
+    const parsed = parseSourceControlRouteSearch({
       diff: "1",
       diffTurnId: "turn-1",
       diffFilePath: "src/app.ts",
@@ -19,7 +19,7 @@ describe("parseDiffRouteSearch", () => {
 
   it("treats numeric and boolean diff toggles as open", () => {
     expect(
-      parseDiffRouteSearch({
+      parseSourceControlRouteSearch({
         diff: 1,
         diffTurnId: "turn-1",
       }),
@@ -29,7 +29,7 @@ describe("parseDiffRouteSearch", () => {
     });
 
     expect(
-      parseDiffRouteSearch({
+      parseSourceControlRouteSearch({
         diff: true,
         diffTurnId: "turn-1",
       }),
@@ -40,7 +40,7 @@ describe("parseDiffRouteSearch", () => {
   });
 
   it("drops turn and file values when diff is closed", () => {
-    const parsed = parseDiffRouteSearch({
+    const parsed = parseSourceControlRouteSearch({
       diff: "0",
       diffTurnId: "turn-1",
       diffFilePath: "src/app.ts",
@@ -50,7 +50,7 @@ describe("parseDiffRouteSearch", () => {
   });
 
   it("drops file value when turn is not selected", () => {
-    const parsed = parseDiffRouteSearch({
+    const parsed = parseSourceControlRouteSearch({
       diff: "1",
       diffFilePath: "src/app.ts",
     });
@@ -61,7 +61,7 @@ describe("parseDiffRouteSearch", () => {
   });
 
   it("normalizes whitespace-only values", () => {
-    const parsed = parseDiffRouteSearch({
+    const parsed = parseSourceControlRouteSearch({
       diff: "1",
       diffTurnId: "  ",
       diffFilePath: "  ",

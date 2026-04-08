@@ -619,6 +619,30 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         }),
       [WS_METHODS.gitInit]: (input) =>
         observeRpcEffect(WS_METHODS.gitInit, git.initRepo(input), { "rpc.aggregate": "git" }),
+      [WS_METHODS.gitLog]: (input) =>
+        observeRpcEffect(WS_METHODS.gitLog, git.log(input), { "rpc.aggregate": "git" }),
+      [WS_METHODS.gitStageFiles]: (input) =>
+        observeRpcEffect(WS_METHODS.gitStageFiles, git.stageFiles(input), {
+          "rpc.aggregate": "git",
+        }),
+      [WS_METHODS.gitUnstageFiles]: (input) =>
+        observeRpcEffect(WS_METHODS.gitUnstageFiles, git.unstageFiles(input), {
+          "rpc.aggregate": "git",
+        }),
+      [WS_METHODS.gitDiscardFiles]: (input) =>
+        observeRpcEffect(WS_METHODS.gitDiscardFiles, git.discardFiles(input), {
+          "rpc.aggregate": "git",
+        }),
+      [WS_METHODS.gitFetch]: (input) =>
+        observeRpcEffect(WS_METHODS.gitFetch, git.fetch(input), { "rpc.aggregate": "git" }),
+      [WS_METHODS.gitStashPush]: (input) =>
+        observeRpcEffect(WS_METHODS.gitStashPush, git.stashPush(input), {
+          "rpc.aggregate": "git",
+        }),
+      [WS_METHODS.gitStashPop]: (input) =>
+        observeRpcEffect(WS_METHODS.gitStashPop, git.stashPop(input), {
+          "rpc.aggregate": "git",
+        }),
       [WS_METHODS.terminalOpen]: (input) =>
         observeRpcEffect(WS_METHODS.terminalOpen, terminalManager.open(input), {
           "rpc.aggregate": "terminal",

@@ -46,4 +46,3 @@ it.effect("enqueueCommand fails queued work when readiness fails", () =>
     }),
   ),
 );
-

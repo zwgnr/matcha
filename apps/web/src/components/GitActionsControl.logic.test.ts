@@ -22,6 +22,8 @@ function status(overrides: Partial<GitStatusResult> = {}): GitStatusResult {
       files: [],
       insertions: 0,
       deletions: 0,
+      staged: [],
+      unstaged: [],
     },
     hasUpstream: true,
     aheadCount: 0,

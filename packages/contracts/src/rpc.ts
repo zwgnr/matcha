@@ -10,10 +10,18 @@ import {
   GitCreateBranchInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitDiscardFilesInput,
+  GitFetchInput,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitLogInput,
+  GitLogResult,
   GitManagerServiceError,
+  GitStageFilesInput,
+  GitStashPopInput,
+  GitStashPushInput,
+  GitUnstageFilesInput,
   GitPreparePullRequestWorkspaceInput,
   GitPreparePullRequestWorkspaceResult,
   GitPullInput,
@@ -91,6 +99,13 @@ export const WS_METHODS = {
   gitCreateBranch: "git.createBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
+  gitLog: "git.log",
+  gitStageFiles: "git.stageFiles",
+  gitUnstageFiles: "git.unstageFiles",
+  gitDiscardFiles: "git.discardFiles",
+  gitFetch: "git.fetch",
+  gitStashPush: "git.stashPush",
+  gitStashPop: "git.stashPop",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestWorkspace: "git.preparePullRequestWorkspace",
 
@@ -179,6 +194,42 @@ export const WsGitRunStackedActionRpc = Rpc.make(WS_METHODS.gitRunStackedAction,
   success: GitActionProgressEvent,
   error: GitManagerServiceError,
   stream: true,
+});
+
+export const WsGitLogRpc = Rpc.make(WS_METHODS.gitLog, {
+  payload: GitLogInput,
+  success: GitLogResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitStageFilesRpc = Rpc.make(WS_METHODS.gitStageFiles, {
+  payload: GitStageFilesInput,
+  error: GitManagerServiceError,
+});
+
+export const WsGitUnstageFilesRpc = Rpc.make(WS_METHODS.gitUnstageFiles, {
+  payload: GitUnstageFilesInput,
+  error: GitManagerServiceError,
+});
+
+export const WsGitDiscardFilesRpc = Rpc.make(WS_METHODS.gitDiscardFiles, {
+  payload: GitDiscardFilesInput,
+  error: GitManagerServiceError,
+});
+
+export const WsGitFetchRpc = Rpc.make(WS_METHODS.gitFetch, {
+  payload: GitFetchInput,
+  error: GitManagerServiceError,
+});
+
+export const WsGitStashPushRpc = Rpc.make(WS_METHODS.gitStashPush, {
+  payload: GitStashPushInput,
+  error: GitManagerServiceError,
+});
+
+export const WsGitStashPopRpc = Rpc.make(WS_METHODS.gitStashPop, {
+  payload: GitStashPopInput,
+  error: GitManagerServiceError,
 });
 
 export const WsGitResolvePullRequestRpc = Rpc.make(WS_METHODS.gitResolvePullRequest, {
@@ -344,6 +395,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCreateBranchRpc,
   WsGitCheckoutRpc,
   WsGitInitRpc,
+  WsGitLogRpc,
+  WsGitStageFilesRpc,
+  WsGitUnstageFilesRpc,
+  WsGitDiscardFilesRpc,
+  WsGitFetchRpc,
+  WsGitStashPushRpc,
+  WsGitStashPopRpc,
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalResizeRpc,

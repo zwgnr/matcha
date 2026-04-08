@@ -1279,7 +1279,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 isDefaultBranch: true,
                 branch: "main",
                 hasWorkingTreeChanges: false,
-                workingTree: { files: [], insertions: 0, deletions: 0 },
+                workingTree: { files: [], insertions: 0, deletions: 0, staged: [], unstaged: [] },
                 hasUpstream: true,
                 aheadCount: 0,
                 behindCount: 0,

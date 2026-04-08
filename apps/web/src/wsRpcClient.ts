@@ -75,6 +75,13 @@ export interface WsRpcClient {
     readonly createBranch: RpcUnaryMethod<typeof WS_METHODS.gitCreateBranch>;
     readonly checkout: RpcUnaryMethod<typeof WS_METHODS.gitCheckout>;
     readonly init: RpcUnaryMethod<typeof WS_METHODS.gitInit>;
+    readonly log: RpcUnaryMethod<typeof WS_METHODS.gitLog>;
+    readonly stageFiles: RpcUnaryMethod<typeof WS_METHODS.gitStageFiles>;
+    readonly unstageFiles: RpcUnaryMethod<typeof WS_METHODS.gitUnstageFiles>;
+    readonly discardFiles: RpcUnaryMethod<typeof WS_METHODS.gitDiscardFiles>;
+    readonly fetch: RpcUnaryMethod<typeof WS_METHODS.gitFetch>;
+    readonly stashPush: RpcUnaryMethod<typeof WS_METHODS.gitStashPush>;
+    readonly stashPop: RpcUnaryMethod<typeof WS_METHODS.gitStashPop>;
     readonly resolvePullRequest: RpcUnaryMethod<typeof WS_METHODS.gitResolvePullRequest>;
     readonly preparePullRequestWorkspace: RpcUnaryMethod<
       typeof WS_METHODS.gitPreparePullRequestWorkspace
@@ -181,6 +188,15 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gitCreateBranch](input)),
       checkout: (input) => transport.request((client) => client[WS_METHODS.gitCheckout](input)),
       init: (input) => transport.request((client) => client[WS_METHODS.gitInit](input)),
+      log: (input) => transport.request((client) => client[WS_METHODS.gitLog](input)),
+      stageFiles: (input) => transport.request((client) => client[WS_METHODS.gitStageFiles](input)),
+      unstageFiles: (input) =>
+        transport.request((client) => client[WS_METHODS.gitUnstageFiles](input)),
+      discardFiles: (input) =>
+        transport.request((client) => client[WS_METHODS.gitDiscardFiles](input)),
+      fetch: (input) => transport.request((client) => client[WS_METHODS.gitFetch](input)),
+      stashPush: (input) => transport.request((client) => client[WS_METHODS.gitStashPush](input)),
+      stashPop: (input) => transport.request((client) => client[WS_METHODS.gitStashPop](input)),
       resolvePullRequest: (input) =>
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
       preparePullRequestWorkspace: (input) =>

@@ -98,7 +98,7 @@ const DEFAULT_BINDINGS = compile([
   },
   {
     shortcut: modShortcut("d"),
-    command: "diff.toggle",
+    command: "sourceControl.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
@@ -248,7 +248,10 @@ describe("shortcutLabelForCommand", () => {
 
   it("returns effective labels for non-terminal commands", () => {
     assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "chat.new", "MacIntel"), "⇧⌘O");
-    assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "diff.toggle", "Linux"), "Ctrl+D");
+    assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "sourceControl.toggle", "Linux"),
+      "Ctrl+D",
+    );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "editor.openFavorite", "Linux"),
       "Ctrl+O",
@@ -275,7 +278,7 @@ describe("shortcutLabelForCommand", () => {
 
   it("respects when-context while resolving labels", () => {
     const bindings = compile([
-      { shortcut: modShortcut("d"), command: "diff.toggle" },
+      { shortcut: modShortcut("d"), command: "sourceControl.toggle" },
       {
         shortcut: modShortcut("d"),
         command: "terminal.split",
@@ -284,14 +287,14 @@ describe("shortcutLabelForCommand", () => {
     ]);
 
     assert.strictEqual(
-      shortcutLabelForCommand(bindings, "diff.toggle", {
+      shortcutLabelForCommand(bindings, "sourceControl.toggle", {
         platform: "Linux",
         context: { terminalFocus: false },
       }),
       "Ctrl+D",
     );
     assert.isNull(
-      shortcutLabelForCommand(bindings, "diff.toggle", {
+      shortcutLabelForCommand(bindings, "sourceControl.toggle", {
         platform: "Linux",
         context: { terminalFocus: true },
       }),
@@ -382,7 +385,7 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
-  it("matches diff.toggle shortcut outside terminal focus", () => {
+  it("matches sourceControl.toggle shortcut outside terminal focus", () => {
     assert.isTrue(
       isDiffToggleShortcut(event({ key: "d", metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",

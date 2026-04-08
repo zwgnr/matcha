@@ -5,9 +5,9 @@ import { cn } from "~/lib/utils";
 
 import { Skeleton } from "./ui/skeleton";
 
-export type DiffPanelMode = "inline" | "sheet" | "sidebar";
+export type SourceControlPanelMode = "inline" | "sheet" | "sidebar";
 
-function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
+function getDiffPanelHeaderRowClassName(mode: SourceControlPanelMode) {
   const shouldUseDragRegion = isElectron && mode !== "sheet";
   return cn(
     "flex items-center justify-between gap-2 px-4",
@@ -15,8 +15,8 @@ function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
   );
 }
 
-export function DiffPanelShell(props: {
-  mode: DiffPanelMode;
+export function SourceControlPanelShell(props: {
+  mode: SourceControlPanelMode;
   header: ReactNode;
   children: ReactNode;
 }) {
@@ -43,7 +43,7 @@ export function DiffPanelShell(props: {
   );
 }
 
-export function DiffPanelHeaderSkeleton() {
+export function SourceControlPanelHeaderSkeleton() {
   return (
     <>
       <div className="relative min-w-0 flex-1">
@@ -63,7 +63,7 @@ export function DiffPanelHeaderSkeleton() {
   );
 }
 
-export function DiffPanelLoadingState(props: { label: string }) {
+export function SourceControlPanelLoadingState(props: { label: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col p-2">
       <div

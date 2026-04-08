@@ -24,6 +24,7 @@ export const gitQueryKeys = {
   branches: (cwd: string | null) => ["git", "branches", cwd] as const,
   branchSearch: (cwd: string | null, query: string) =>
     ["git", "branches", cwd, "search", query] as const,
+  log: (cwd: string | null) => ["git", "log", cwd] as const,
 };
 
 export const gitMutationKeys = {
@@ -97,6 +98,76 @@ export function gitBranchSearchInfiniteQueryOptions(input: {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchInterval: GIT_BRANCHES_REFETCH_INTERVAL_MS,
+  });
+}
+
+const GIT_LOG_STALE_TIME_MS = 10_000;
+const GIT_LOG_REFETCH_INTERVAL_MS = 30_000;
+
+export function gitLogQueryOptions(cwd: string | null) {
+  return queryOptions({
+    queryKey: gitQueryKeys.log(cwd),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!cwd) throw new Error("Git log is unavailable.");
+      return api.git.log({ cwd });
+    },
+    enabled: cwd !== null,
+    staleTime: GIT_LOG_STALE_TIME_MS,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    refetchInterval: GIT_LOG_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function gitStageFilesMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: ["git", "mutation", "stageFiles", input.cwd] as const,
+    mutationFn: async (paths?: string[]) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git stage is unavailable.");
+      await api.git.stageFiles({ cwd: input.cwd, ...(paths ? { paths } : {}) });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient, { cwd: input.cwd });
+    },
+  });
+}
+
+export function gitUnstageFilesMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: ["git", "mutation", "unstageFiles", input.cwd] as const,
+    mutationFn: async (paths?: string[]) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git unstage is unavailable.");
+      await api.git.unstageFiles({ cwd: input.cwd, ...(paths ? { paths } : {}) });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient, { cwd: input.cwd });
+    },
+  });
+}
+
+export function gitDiscardFilesMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: ["git", "mutation", "discardFiles", input.cwd] as const,
+    mutationFn: async (paths?: string[]) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git discard is unavailable.");
+      await api.git.discardFiles({ cwd: input.cwd, ...(paths ? { paths } : {}) });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient, { cwd: input.cwd });
+    },
   });
 }
 

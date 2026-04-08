@@ -711,6 +711,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           files: [],
           insertions: 0,
           deletions: 0,
+          staged: [],
+          unstaged: [],
         },
         hasUpstream: false,
         aheadCount: 0,
