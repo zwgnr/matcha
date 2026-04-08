@@ -70,7 +70,7 @@ import {
   isLatestTurnSettled,
   formatElapsed,
 } from "../session-logic";
-import { isScrollContainerNearBottom } from "../chat-scroll";
+import { getScrollContainerBottomScrollTop, isScrollContainerNearBottom } from "../chat-scroll";
 import {
   buildPendingUserInputAnswers,
   derivePendingUserInputProgress,
@@ -2452,8 +2452,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
-    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
-    lastKnownScrollTopRef.current = scrollContainer.scrollTop;
+    const bottomScrollTop = getScrollContainerBottomScrollTop(scrollContainer);
+    scrollContainer.scrollTo({ top: bottomScrollTop, behavior });
+    lastKnownScrollTopRef.current = bottomScrollTop;
     shouldAutoScrollRef.current = true;
   }, []);
   const cancelPendingStickToBottom = useCallback(() => {
@@ -2515,9 +2516,21 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     scrollMessagesToBottom();
     scheduleStickToBottom();
   }, [cancelPendingStickToBottom, scheduleStickToBottom, scrollMessagesToBottom]);
+  const onTimelineContentHeightChange = useCallback(() => {
+    if (document.hidden) return;
+    if (!shouldAutoScrollRef.current) return;
+    scheduleStickToBottom();
+  }, [scheduleStickToBottom]);
   const onMessagesScroll = useCallback(() => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
+
+    // While the document is hidden (e.g. browser tab switch), virtualizer
+    // remeasurements and ResizeObserver callbacks can fire with stale values,
+    // causing the scroll offset to shift.  Ignore those synthetic scroll events
+    // so we don't accidentally break auto-scroll state.
+    if (document.hidden) return;
+
     const currentScrollTop = scrollContainer.scrollTop;
     const isNearBottom = isScrollContainerNearBottom(scrollContainer);
 
@@ -2583,6 +2596,49 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       cancelPendingInteractionAnchorAdjustment();
     };
   }, [cancelPendingInteractionAnchorAdjustment, cancelPendingStickToBottom]);
+
+  // When the browser tab becomes visible again after being hidden, the
+  // virtualizer may have fired remeasurements with stale dimensions, leaving
+  // the scroll position somewhere in the middle.  Re-sync: if we were
+  // auto-scrolling, force back to the bottom; otherwise just update the
+  // lastKnownScrollTop so the scroll handler doesn't misinterpret the offset
+  // delta as a user-initiated scroll-up.
+  useEffect(() => {
+    let visibilityResyncTimeout: number | null = null;
+
+    const onVisibilityChange = () => {
+      if (document.hidden) return;
+      const scrollContainer = messagesScrollRef.current;
+      if (!scrollContainer) return;
+
+      if (shouldAutoScrollRef.current) {
+        // Immediate scroll + delayed retry to let virtualizer measurements
+        // settle (items re-measured after becoming visible may change the
+        // total content height).
+        forceStickToBottom();
+        if (visibilityResyncTimeout !== null) {
+          window.clearTimeout(visibilityResyncTimeout);
+        }
+        visibilityResyncTimeout = window.setTimeout(() => {
+          forceStickToBottom();
+        }, 100);
+        return;
+      }
+
+      // Not auto-scrolling — just re-sync the last-known scroll position so
+      // the scroll handler doesn't see a phantom scroll-up delta.
+      lastKnownScrollTopRef.current = scrollContainer.scrollTop;
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      if (visibilityResyncTimeout !== null) {
+        window.clearTimeout(visibilityResyncTimeout);
+      }
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [forceStickToBottom]);
+
   useLayoutEffect(() => {
     if (!activeWorkspace?.id) return;
     shouldAutoScrollRef.current = true;
@@ -4477,6 +4533,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
                     resolvedTheme={resolvedTheme}
                     timestampFormat={timestampFormat}
                     workspaceRoot={activeWorkspaceRoot}
+                    onContentHeightChange={onTimelineContentHeightChange}
                   />
                 </div>
 
@@ -4485,7 +4542,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
                   <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
                     <button
                       type="button"
-                      onClick={() => scrollMessagesToBottom("smooth")}
+                      onClick={() => forceStickToBottom()}
                       className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
                     >
                       <ChevronDownIcon className="size-3.5" />

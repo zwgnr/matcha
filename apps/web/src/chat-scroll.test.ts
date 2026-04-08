@@ -1,8 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX, isScrollContainerNearBottom } from "./chat-scroll";
+import {
+  AUTO_SCROLL_BOTTOM_THRESHOLD_PX,
+  getScrollContainerBottomScrollTop,
+  isScrollContainerNearBottom,
+} from "./chat-scroll";
 
 describe("isScrollContainerNearBottom", () => {
+  it("computes the clamped bottom scroll offset", () => {
+    expect(
+      getScrollContainerBottomScrollTop({
+        scrollTop: 0,
+        clientHeight: 400,
+        scrollHeight: 1_000,
+      }),
+    ).toBe(600);
+    expect(
+      getScrollContainerBottomScrollTop({
+        scrollTop: 0,
+        clientHeight: 1_000,
+        scrollHeight: 400,
+      }),
+    ).toBe(0);
+  });
+
   it("returns true when already at bottom", () => {
     expect(
       isScrollContainerNearBottom({

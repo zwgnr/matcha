@@ -1,9 +1,18 @@
 export const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 64;
 
-interface ScrollPosition {
+export interface ScrollPosition {
   scrollTop: number;
   clientHeight: number;
   scrollHeight: number;
+}
+
+export function getScrollContainerBottomScrollTop(position: ScrollPosition): number {
+  const { clientHeight, scrollHeight } = position;
+  if (![clientHeight, scrollHeight].every(Number.isFinite)) {
+    return 0;
+  }
+
+  return Math.max(0, scrollHeight - clientHeight);
 }
 
 export function isScrollContainerNearBottom(
@@ -19,6 +28,6 @@ export function isScrollContainerNearBottom(
     return true;
   }
 
-  const distanceFromBottom = scrollHeight - clientHeight - scrollTop;
+  const distanceFromBottom = getScrollContainerBottomScrollTop(position) - scrollTop;
   return distanceFromBottom <= threshold;
 }

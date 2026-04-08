@@ -85,6 +85,7 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  onContentHeightChange?: () => void;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{
@@ -120,6 +121,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  onContentHeightChange,
   onVirtualizerSnapshot,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
@@ -234,6 +236,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   }, [rowVirtualizer, timelineWidthPx]);
   useEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+      // While the document is hidden (e.g. browser tab switch), item
+      // measurements are unreliable.  Never adjust scroll position based on
+      // stale/zero dimensions — the parent will re-sync when the tab becomes
+      // visible again.
+      if (document.hidden) {
+        return false;
+      }
+
       const viewportHeight = instance.scrollRect?.height ?? 0;
       const scrollOffset = instance.scrollOffset ?? 0;
       const itemIntersectsViewport =
@@ -290,6 +300,21 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         }),
     });
   }, [onVirtualizerSnapshot, rowVirtualizer, rows, virtualizedRowCount]);
+  useLayoutEffect(() => {
+    const timelineRoot = timelineRootRef.current;
+    if (!timelineRoot || !onContentHeightChange || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    onContentHeightChange();
+    const observer = new ResizeObserver(() => {
+      onContentHeightChange();
+    });
+    observer.observe(timelineRoot);
+    return () => {
+      observer.disconnect();
+    };
+  }, [onContentHeightChange, rows.length, virtualizedRowCount]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const nonVirtualizedRows = rows.slice(virtualizedRowCount);
