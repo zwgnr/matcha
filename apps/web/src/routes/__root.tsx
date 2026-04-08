@@ -585,6 +585,18 @@ function EventRouter() {
           runCommandState.stop(event.workspaceId as WorkspaceId);
         }
       }
+
+      if (event.type === "activity") {
+        const runCommandState = useRunCommandStore.getState();
+        const runtime = runCommandState.runtimeByWorkspaceId[event.workspaceId];
+        if (
+          runtime?.running &&
+          runtime.terminalId === event.terminalId &&
+          !event.hasRunningSubprocess
+        ) {
+          runCommandState.stop(event.workspaceId as WorkspaceId);
+        }
+      }
     });
     return () => {
       disposed = true;

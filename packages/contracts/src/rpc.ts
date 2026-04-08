@@ -17,6 +17,8 @@ import {
   GitListBranchesResult,
   GitLogInput,
   GitLogResult,
+  GitReadFileDiffInput,
+  GitReadFileDiffResult,
   GitManagerServiceError,
   GitStageFilesInput,
   GitStashPopInput,
@@ -100,6 +102,7 @@ export const WS_METHODS = {
   gitCheckout: "git.checkout",
   gitInit: "git.init",
   gitLog: "git.log",
+  gitReadFileDiff: "git.readFileDiff",
   gitStageFiles: "git.stageFiles",
   gitUnstageFiles: "git.unstageFiles",
   gitDiscardFiles: "git.discardFiles",
@@ -200,6 +203,12 @@ export const WsGitLogRpc = Rpc.make(WS_METHODS.gitLog, {
   payload: GitLogInput,
   success: GitLogResult,
   error: GitManagerServiceError,
+});
+
+export const WsGitReadFileDiffRpc = Rpc.make(WS_METHODS.gitReadFileDiff, {
+  payload: GitReadFileDiffInput,
+  success: GitReadFileDiffResult,
+  error: GitCommandError,
 });
 
 export const WsGitStageFilesRpc = Rpc.make(WS_METHODS.gitStageFiles, {
@@ -396,6 +405,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCheckoutRpc,
   WsGitInitRpc,
   WsGitLogRpc,
+  WsGitReadFileDiffRpc,
   WsGitStageFilesRpc,
   WsGitUnstageFilesRpc,
   WsGitDiscardFilesRpc,

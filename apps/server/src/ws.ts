@@ -621,6 +621,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.gitInit, git.initRepo(input), { "rpc.aggregate": "git" }),
       [WS_METHODS.gitLog]: (input) =>
         observeRpcEffect(WS_METHODS.gitLog, git.log(input), { "rpc.aggregate": "git" }),
+      [WS_METHODS.gitReadFileDiff]: (input) =>
+        observeRpcEffect(WS_METHODS.gitReadFileDiff, git.readFileDiff(input), {
+          "rpc.aggregate": "git",
+        }),
       [WS_METHODS.gitStageFiles]: (input) =>
         observeRpcEffect(WS_METHODS.gitStageFiles, git.stageFiles(input), {
           "rpc.aggregate": "git",

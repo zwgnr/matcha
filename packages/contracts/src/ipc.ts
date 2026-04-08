@@ -13,6 +13,8 @@ import type {
   GitListBranchesResult,
   GitLogInput,
   GitLogResult,
+  GitReadFileDiffInput,
+  GitReadFileDiffResult,
   GitPullInput,
   GitPullResult,
   GitRemoveWorktreeInput,
@@ -160,6 +162,7 @@ export interface NativeApi {
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
     log: (input: GitLogInput) => Promise<GitLogResult>;
+    readFileDiff: (input: GitReadFileDiffInput) => Promise<GitReadFileDiffResult>;
     stageFiles: (input: GitStageFilesInput) => Promise<void>;
     unstageFiles: (input: GitUnstageFilesInput) => Promise<void>;
     discardFiles: (input: GitDiscardFilesInput) => Promise<void>;

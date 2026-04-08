@@ -32,9 +32,10 @@ import {
 import { isMacPlatform } from "../lib/utils";
 import { __resetNativeApiForTests } from "../nativeApi";
 import { getRouter } from "../router";
+import { useRunCommandStore } from "../runCommandStore";
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
-import { makeProviderTab, useWorkspaceTabStore } from "../workspaceTabStore";
+import { makeProviderTab, makeTerminalTab, useWorkspaceTabStore } from "../workspaceTabStore";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
 import { DEFAULT_CLIENT_SETTINGS } from "@matcha/contracts/settings";
@@ -1728,6 +1729,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
         { timeout: 8_000, interval: 16 },
       );
 
+      expect(wsRequests.filter((request) => request._tag === WS_METHODS.terminalOpen)).toHaveLength(
+        1,
+      );
+
       await vi.waitFor(
         () => {
           const writeRequest = wsRequests.find(
@@ -1738,6 +1743,104 @@ describe("ChatView timeline estimator parity (full app)", () => {
             workspaceId: WORKSPACE_ID,
             data: "bun run lint\r",
           });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shares run-command runtime state across grouped workspace tabs", async () => {
+    const childWorkspaceId = "workspace-child-run-command-shared" as WorkspaceId;
+    const rootProviderTab = makeProviderTab("codex", WORKSPACE_ID);
+    const childProviderTab = makeProviderTab("claudeAgent", childWorkspaceId);
+
+    useWorkspaceTabStore.setState({
+      tabStateByRootWorkspaceId: {
+        [WORKSPACE_ID]: {
+          tabs: [rootProviderTab, childProviderTab],
+          activeTabId: childProviderTab.id,
+        },
+      },
+      rootWorkspaceIdByWorkspaceId: {
+        [WORKSPACE_ID]: WORKSPACE_ID,
+        [childWorkspaceId]: WORKSPACE_ID,
+      },
+    });
+    useRunCommandStore.setState({
+      runtimeByWorkspaceId: {
+        [WORKSPACE_ID]: {
+          running: true,
+          terminalId: "terminal-run",
+          detectedPorts: [3000],
+        },
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      initialPath: `/${childWorkspaceId}`,
+      snapshot: addWorkspaceToSnapshot(
+        createSnapshotForTargetUser({
+          targetMessageId: "msg-user-run-command-shared" as MessageId,
+          targetText: "run command shared runtime",
+        }),
+        childWorkspaceId,
+        {
+          title: "Child Claude workspace",
+          modelSelection: {
+            provider: "claudeAgent",
+            model: "claude-sonnet-4-6",
+          },
+          session: {
+            workspaceId: childWorkspaceId,
+            status: "ready",
+            providerName: "claudeAgent",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: NOW_ISO,
+          },
+        },
+      ),
+    });
+
+    try {
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${WORKSPACE_ID}`,
+        "Grouped child workspaces should resolve back to the root workspace route.",
+      );
+
+      await expect.element(page.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+      await expect.element(page.getByText(":3000")).toBeInTheDocument();
+
+      const rootTabButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("button")).find(
+            (button) => button.textContent?.trim() === "Codex",
+          ) as HTMLButtonElement | null,
+        "Unable to find the root provider tab button.",
+      );
+      rootTabButton.click();
+
+      await expect.element(page.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+      await expect.element(page.getByText(":3000")).toBeInTheDocument();
+
+      const childTabButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("button")).find(
+            (button) => button.textContent?.trim() === "Claude Code",
+          ) as HTMLButtonElement | null,
+        "Unable to find the child provider tab button.",
+      );
+      childTabButton.click();
+
+      await vi.waitFor(
+        () => {
+          expect(document.querySelector('button[aria-label="Stop"]')).toBeTruthy();
+          expect(document.body.textContent).toContain(":3000");
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -2923,6 +3026,89 @@ describe("ChatView timeline estimator parity (full app)", () => {
       expect(
         document.querySelector(`[data-testid="workspace-row-${childWorkspaceId}"]`),
       ).toBeNull();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps the terminal tab active when selected from a grouped child provider workspace", async () => {
+    const childWorkspaceId = "workspace-child-provider-terminal-nav" as WorkspaceId;
+    const rootProviderTab = makeProviderTab("codex", WORKSPACE_ID);
+    const childProviderTab = makeProviderTab("codex", childWorkspaceId);
+    const terminalTab = makeTerminalTab("terminal-3", "Terminal 3");
+
+    useWorkspaceTabStore.setState({
+      tabStateByRootWorkspaceId: {
+        [WORKSPACE_ID]: {
+          tabs: [rootProviderTab, childProviderTab, terminalTab],
+          activeTabId: childProviderTab.id,
+        },
+      },
+      rootWorkspaceIdByWorkspaceId: {
+        [WORKSPACE_ID]: WORKSPACE_ID,
+        [childWorkspaceId]: WORKSPACE_ID,
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      initialPath: `/${childWorkspaceId}`,
+      snapshot: addWorkspaceToSnapshot(
+        createSnapshotForTargetUser({
+          targetMessageId: "msg-user-child-provider-terminal-nav" as MessageId,
+          targetText: "child provider terminal nav",
+        }),
+        childWorkspaceId,
+        {
+          title: "Child Codex workspace",
+          modelSelection: {
+            provider: "codex",
+            model: "gpt-5-codex",
+          },
+          session: {
+            workspaceId: childWorkspaceId,
+            status: "ready",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: NOW_ISO,
+          },
+        },
+      ),
+    });
+
+    try {
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${WORKSPACE_ID}`,
+        "Grouped child workspaces should resolve back to the root workspace route.",
+      );
+
+      const terminalTabButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("button")).find(
+            (button) => button.textContent?.trim() === "Terminal 3",
+          ) as HTMLButtonElement | null,
+        "Unable to find the terminal tab button.",
+      );
+      terminalTabButton.click();
+
+      await vi.waitFor(
+        () => {
+          expect(
+            useWorkspaceTabStore.getState().tabStateByRootWorkspaceId[WORKSPACE_ID]?.activeTabId,
+          ).toBe(terminalTab.id);
+          expect(document.querySelector(".workspace-terminal-drawer")).toBeTruthy();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      await waitForURL(
+        mounted.router,
+        (path) => path === `/${WORKSPACE_ID}`,
+        "Selecting the terminal tab should keep the root workspace route.",
+      );
     } finally {
       await mounted.cleanup();
     }

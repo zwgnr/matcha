@@ -214,6 +214,14 @@ interface TerminalViewportProps {
   cwd: string;
   worktreePath?: string | null;
   runtimeEnv?: Record<string, string>;
+  pendingInput?:
+    | {
+        id: string;
+        data: string;
+        onSettled?: ((error?: Error) => void) | undefined;
+      }
+    | undefined;
+  onPendingInputHandled?: ((terminalId: string) => void) | undefined;
   onSessionExited: () => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   focusRequestId: number;
@@ -229,6 +237,8 @@ function TerminalViewport({
   cwd,
   worktreePath,
   runtimeEnv,
+  pendingInput,
+  onPendingInputHandled,
   onSessionExited,
   onAddTerminalContext,
   focusRequestId,
@@ -246,14 +256,51 @@ function TerminalViewport({
   const selectionActionOpenRef = useRef(false);
   const selectionActionTimerRef = useRef<number | null>(null);
   const lastAppliedTerminalEventIdRef = useRef(0);
+  const lastHandledPendingInputIdRef = useRef<string | null>(null);
   const terminalHydratedRef = useRef(false);
+  const pendingInputRef = useRef(pendingInput);
+  pendingInputRef.current = pendingInput;
   const handleSessionExited = useEffectEvent(() => {
     onSessionExited();
   });
   const handleAddTerminalContext = useEffectEvent((selection: TerminalContextSelection) => {
     onAddTerminalContext(selection);
   });
+  const handlePendingInputHandled = useEffectEvent(() => {
+    onPendingInputHandled?.(terminalId);
+  });
   const readTerminalLabel = useEffectEvent(() => terminalLabel);
+  const flushPendingInput = useEffectEvent(async () => {
+    const nextPendingInput = pendingInputRef.current;
+    const activeTerminal = terminalRef.current;
+    const api = readNativeApi();
+    if (
+      !nextPendingInput ||
+      !activeTerminal ||
+      !api ||
+      !terminalHydratedRef.current ||
+      lastHandledPendingInputIdRef.current === nextPendingInput.id
+    ) {
+      return;
+    }
+
+    lastHandledPendingInputIdRef.current = nextPendingInput.id;
+    try {
+      await api.terminal.write({
+        workspaceId,
+        terminalId,
+        data: nextPendingInput.data,
+      });
+      nextPendingInput.onSettled?.();
+    } catch (error) {
+      const resolvedError =
+        error instanceof Error ? error : new Error("Failed to write terminal input");
+      writeSystemMessage(activeTerminal, resolvedError.message);
+      nextPendingInput.onSettled?.(resolvedError);
+    } finally {
+      handlePendingInputHandled();
+    }
+  });
 
   useEffect(() => {
     const mount = containerRef.current;
@@ -620,6 +667,7 @@ function TerminalViewport({
         }
         lastAppliedTerminalEventIdRef.current = bufferedEntries.at(-1)?.id ?? 0;
         terminalHydratedRef.current = true;
+        await flushPendingInput();
         if (autoFocus) {
           window.requestAnimationFrame(() => {
             activeTerminal.focus();
@@ -659,6 +707,7 @@ function TerminalViewport({
       disposed = true;
       terminalHydratedRef.current = false;
       lastAppliedTerminalEventIdRef.current = 0;
+      lastHandledPendingInputIdRef.current = null;
       unsubscribeTerminalEvents();
       window.clearTimeout(fitTimer);
       inputDisposable.dispose();
@@ -678,6 +727,13 @@ function TerminalViewport({
     // it is only read at mount time and must not trigger terminal teardown/recreation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd, runtimeEnv, terminalId, workspaceId]);
+
+  useEffect(() => {
+    if (!pendingInput || !terminalHydratedRef.current) {
+      return;
+    }
+    void flushPendingInput();
+  }, [pendingInput]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -733,6 +789,14 @@ interface WorkspaceTerminalDrawerProps {
   activeTerminalId: string;
   terminalGroups: WorkspaceTerminalGroup[];
   activeTerminalGroupId: string;
+  pendingInputByTerminalId: Record<
+    string,
+    {
+      id: string;
+      data: string;
+      onSettled?: ((error?: Error) => void) | undefined;
+    }
+  >;
   focusRequestId: number;
   onSplitTerminal: () => void;
   onNewTerminal: () => void;
@@ -743,6 +807,7 @@ interface WorkspaceTerminalDrawerProps {
   onCloseTerminal: (terminalId: string) => void;
   onHeightChange: (height: number) => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
+  onPendingTerminalInputHandled: (terminalId: string) => void;
 }
 
 interface TerminalActionButtonProps {
@@ -786,6 +851,7 @@ export default function WorkspaceTerminalDrawer({
   activeTerminalId,
   terminalGroups,
   activeTerminalGroupId,
+  pendingInputByTerminalId,
   focusRequestId,
   onSplitTerminal,
   onNewTerminal,
@@ -796,6 +862,7 @@ export default function WorkspaceTerminalDrawer({
   onCloseTerminal,
   onHeightChange,
   onAddTerminalContext,
+  onPendingTerminalInputHandled,
 }: WorkspaceTerminalDrawerProps) {
   const [drawerHeight, setDrawerHeight] = useState(() => clampDrawerHeight(height));
   const [resizeEpoch, setResizeEpoch] = useState(0);
@@ -927,7 +994,6 @@ export default function WorkspaceTerminalDrawer({
   const onNewTerminalAction = useCallback(() => {
     onNewTerminal();
   }, [onNewTerminal]);
-
   useEffect(() => {
     onHeightChangeRef.current = onHeightChange;
   }, [onHeightChange]);
@@ -1115,6 +1181,8 @@ export default function WorkspaceTerminalDrawer({
                         cwd={cwd}
                         {...(worktreePath !== undefined ? { worktreePath } : {})}
                         {...(runtimeEnv ? { runtimeEnv } : {})}
+                        pendingInput={pendingInputByTerminalId[terminalId]}
+                        onPendingInputHandled={onPendingTerminalInputHandled}
                         onSessionExited={() => onCloseTerminal(terminalId)}
                         onAddTerminalContext={onAddTerminalContext}
                         focusRequestId={focusRequestId}
@@ -1136,6 +1204,8 @@ export default function WorkspaceTerminalDrawer({
                   cwd={cwd}
                   {...(worktreePath !== undefined ? { worktreePath } : {})}
                   {...(runtimeEnv ? { runtimeEnv } : {})}
+                  pendingInput={pendingInputByTerminalId[resolvedActiveTerminalId]}
+                  onPendingInputHandled={onPendingTerminalInputHandled}
                   onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
                   onAddTerminalContext={onAddTerminalContext}
                   focusRequestId={focusRequestId}

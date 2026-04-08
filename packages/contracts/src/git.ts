@@ -102,6 +102,21 @@ export const GitStatusInput = Schema.Struct({
 });
 export type GitStatusInput = typeof GitStatusInput.Type;
 
+export const GitReadFileDiffInput = Schema.Union([
+  Schema.Struct({
+    cwd: TrimmedNonEmptyStringSchema,
+    filePath: TrimmedNonEmptyStringSchema,
+    source: Schema.Literal("workingTree"),
+  }),
+  Schema.Struct({
+    cwd: TrimmedNonEmptyStringSchema,
+    filePath: TrimmedNonEmptyStringSchema,
+    source: Schema.Literal("commit"),
+    commitHash: TrimmedNonEmptyStringSchema,
+  }),
+]);
+export type GitReadFileDiffInput = typeof GitReadFileDiffInput.Type;
+
 export const GitPullInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
 });
@@ -258,6 +273,11 @@ export const GitStatusResult = Schema.Struct({
   pr: Schema.NullOr(GitStatusPr),
 });
 export type GitStatusResult = typeof GitStatusResult.Type;
+
+export const GitReadFileDiffResult = Schema.Struct({
+  diff: Schema.String,
+});
+export type GitReadFileDiffResult = typeof GitReadFileDiffResult.Type;
 
 export const GitListBranchesResult = Schema.Struct({
   branches: Schema.Array(GitBranch),

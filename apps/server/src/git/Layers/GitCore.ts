@@ -2270,6 +2270,94 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     };
   });
 
+  const hasHeadCommit = (cwd: string): Effect.Effect<boolean, GitCommandError> =>
+    executeGit("GitCore.readFileDiff.hasHeadCommit", cwd, ["rev-parse", "--verify", "HEAD"], {
+      allowNonZeroExit: true,
+    }).pipe(Effect.map((result) => result.code === 0));
+
+  const isTrackedPath = (cwd: string, filePath: string): Effect.Effect<boolean, GitCommandError> =>
+    executeGit(
+      "GitCore.readFileDiff.isTrackedPath",
+      cwd,
+      ["ls-files", "--error-unmatch", "--", filePath],
+      {
+        allowNonZeroExit: true,
+      },
+    ).pipe(Effect.map((result) => result.code === 0));
+
+  const readUntrackedFileDiff = Effect.fn("readUntrackedFileDiff")(function* (
+    cwd: string,
+    filePath: string,
+  ) {
+    const absolutePath = path.join(cwd, filePath);
+    const exists = yield* fileSystem
+      .exists(absolutePath)
+      .pipe(
+        Effect.mapError((cause) =>
+          createGitCommandError(
+            "GitCore.readFileDiff.readUntrackedFileDiff",
+            cwd,
+            ["diff", "--no-index", "--", "/dev/null", absolutePath],
+            cause.message,
+          ),
+        ),
+      );
+    if (!exists) {
+      return "";
+    }
+
+    return yield* runGitStdoutWithOptions(
+      "GitCore.readFileDiff.untracked",
+      cwd,
+      ["diff", "--no-index", "--relative", "--", "/dev/null", absolutePath],
+      { allowNonZeroExit: true },
+    );
+  });
+
+  const readFileDiff: GitCoreShape["readFileDiff"] = Effect.fn("readFileDiff")(function* (input) {
+    if (input.source === "commit") {
+      const diff = yield* runGitStdoutWithOptions(
+        "GitCore.readFileDiff.commit",
+        input.cwd,
+        [
+          "show",
+          "--format=",
+          "--find-renames",
+          "--find-copies",
+          "--binary",
+          input.commitHash,
+          "--",
+          input.filePath,
+        ],
+        { allowNonZeroExit: true },
+      );
+      return { diff };
+    }
+
+    const hasHead = yield* hasHeadCommit(input.cwd);
+    const diff = hasHead
+      ? yield* runGitStdoutWithOptions(
+          "GitCore.readFileDiff.workingTree",
+          input.cwd,
+          ["diff", "--find-renames", "--find-copies", "--binary", "HEAD", "--", input.filePath],
+          { allowNonZeroExit: true },
+        )
+      : "";
+
+    if (diff.trim().length > 0) {
+      return { diff };
+    }
+
+    const tracked = yield* isTrackedPath(input.cwd, input.filePath);
+    if (tracked && hasHead) {
+      return { diff };
+    }
+
+    return {
+      diff: yield* readUntrackedFileDiff(input.cwd, input.filePath),
+    };
+  });
+
   // -------------------------------------------------------------------------
   // Stage / unstage / discard
   // -------------------------------------------------------------------------
@@ -2361,6 +2449,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     initRepo,
     listLocalBranchNames,
     log,
+    readFileDiff,
     stageFiles,
     unstageFiles,
     discardFiles,

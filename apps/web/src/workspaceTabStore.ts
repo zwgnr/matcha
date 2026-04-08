@@ -32,6 +32,10 @@ export interface WorkspaceTab {
   diffSourceWorkspaceId?: WorkspaceId;
   /** Turn ID whose diff to display. Undefined means full conversation ("against main"). */
   diffTurnId?: TurnId;
+  /** Git-backed diff source kind for source-control tabs. */
+  diffGitSource?: "workingTree" | "commit";
+  /** Commit hash for source-control commit diffs. */
+  diffCommitHash?: string;
   /** Checkpoint turn count range start — only for diff tabs. */
   diffFromTurnCount?: number;
   /** Checkpoint turn count range end — only for diff tabs. */
@@ -88,9 +92,11 @@ export function nextTerminalTabLabel(tabs: WorkspaceTab[]): string {
 
 export function makeDiffTab(input: {
   diffSourceWorkspaceId: WorkspaceId;
-  diffTurnId: TurnId | null;
-  diffFromTurnCount: number;
-  diffToTurnCount: number;
+  diffTurnId?: TurnId | null;
+  diffGitSource?: "workingTree" | "commit";
+  diffCommitHash?: string;
+  diffFromTurnCount?: number;
+  diffToTurnCount?: number;
   diffFilePath: string;
   label: string;
 }): WorkspaceTab {
@@ -99,12 +105,22 @@ export function makeDiffTab(input: {
     kind: "diff",
     label: input.label,
     diffSourceWorkspaceId: input.diffSourceWorkspaceId,
-    diffFromTurnCount: input.diffFromTurnCount,
-    diffToTurnCount: input.diffToTurnCount,
     diffFilePath: input.diffFilePath,
   };
-  if (input.diffTurnId !== null) {
+  if (input.diffTurnId !== undefined && input.diffTurnId !== null) {
     tab.diffTurnId = input.diffTurnId;
+  }
+  if (input.diffGitSource) {
+    tab.diffGitSource = input.diffGitSource;
+  }
+  if (input.diffCommitHash) {
+    tab.diffCommitHash = input.diffCommitHash;
+  }
+  if (input.diffFromTurnCount !== undefined) {
+    tab.diffFromTurnCount = input.diffFromTurnCount;
+  }
+  if (input.diffToTurnCount !== undefined) {
+    tab.diffToTurnCount = input.diffToTurnCount;
   }
   return tab;
 }
@@ -227,12 +243,14 @@ interface WorkspaceTabStoreState {
   findRootWorkspaceId: (workspaceId: WorkspaceId) => WorkspaceId | null;
   findGroupedWorkspaceIds: (rootWorkspaceId: WorkspaceId) => WorkspaceId[];
   /** Find a diff tab matching the given source workspace, turn, and file path. */
-  findDiffTab: (
-    rootWorkspaceId: WorkspaceId,
-    diffSourceWorkspaceId: WorkspaceId,
-    diffTurnId: TurnId | undefined,
-    diffFilePath: string,
-  ) => WorkspaceTab | undefined;
+  findDiffTab: (input: {
+    rootWorkspaceId: WorkspaceId;
+    diffSourceWorkspaceId: WorkspaceId;
+    diffFilePath: string;
+    diffTurnId?: TurnId | undefined;
+    diffGitSource?: "workingTree" | "commit" | undefined;
+    diffCommitHash?: string | undefined;
+  }) => WorkspaceTab | undefined;
 }
 
 function createTabStateStorage() {
@@ -390,13 +408,22 @@ export const useWorkspaceTabStore = create<WorkspaceTabStoreState>()(
           .map(([workspaceId]) => workspaceId as WorkspaceId);
       },
 
-      findDiffTab: (rootWorkspaceId, diffSourceWorkspaceId, diffTurnId, diffFilePath) => {
+      findDiffTab: ({
+        rootWorkspaceId,
+        diffSourceWorkspaceId,
+        diffTurnId,
+        diffFilePath,
+        diffGitSource,
+        diffCommitHash,
+      }) => {
         const current = get().tabStateByRootWorkspaceId[rootWorkspaceId];
         return current?.tabs.find(
           (t) =>
             t.kind === "diff" &&
             t.diffSourceWorkspaceId === diffSourceWorkspaceId &&
             t.diffTurnId === diffTurnId &&
+            t.diffGitSource === diffGitSource &&
+            t.diffCommitHash === diffCommitHash &&
             t.diffFilePath === diffFilePath,
         );
       },

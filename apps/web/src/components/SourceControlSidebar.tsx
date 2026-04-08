@@ -43,7 +43,6 @@ import { DiffStatLabel, hasNonZeroStat } from "./chat/DiffStatLabel";
 import { ChangedFilesTree } from "./chat/ChangedFilesTree";
 import { summarizeTurnDiffStats } from "../lib/turnDiffTree";
 import { makeDiffTab, useWorkspaceTabStore } from "../workspaceTabStore";
-import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { Skeleton } from "./ui/skeleton";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
@@ -53,6 +52,7 @@ import { VscodeEntryIcon } from "./chat/VscodeEntryIcon";
 import { toastManager, type WorkspaceToastData } from "./ui/toast";
 import { randomUUID } from "~/lib/utils";
 import { ensureNativeApi } from "~/nativeApi";
+import { resolveWorkingChanges } from "./SourceControlSidebar.logic";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -81,21 +81,6 @@ function formatRelativeTime(isoDate: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function enrichFilesWithTurnStats(
-  files: ReadonlyArray<{ path: string; insertions: number; deletions: number }>,
-  turnStatByPath: Map<string, { additions: number; deletions: number }>,
-): TurnDiffFileChange[] {
-  return files.map((f) => {
-    const hasZeroStats = f.insertions === 0 && f.deletions === 0;
-    const turnStat = hasZeroStats ? turnStatByPath.get(f.path) : undefined;
-    return {
-      path: f.path,
-      additions: turnStat ? turnStat.additions : f.insertions,
-      deletions: turnStat ? turnStat.deletions : f.deletions,
-    };
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -198,38 +183,12 @@ function SourceControlSidebarInner() {
   // -----------------------------------------------------------------------
   // Turn diff / file data
   // -----------------------------------------------------------------------
-  const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
-    useTurnDiffSummaries(activeWorkspace);
-
-  const turnDiffFiles: TurnDiffFileChange[] = useMemo(
-    () => turnDiffSummaries.flatMap((s) => s.files),
-    [turnDiffSummaries],
-  );
-
-  const turnDiffStatByPath = useMemo(() => {
-    const map = new Map<string, { additions: number; deletions: number }>();
-    for (const file of turnDiffFiles) {
-      const existing = map.get(file.path);
-      if (existing) {
-        existing.additions += file.additions ?? 0;
-        existing.deletions += file.deletions ?? 0;
-      } else {
-        map.set(file.path, { additions: file.additions ?? 0, deletions: file.deletions ?? 0 });
-      }
-    }
-    return map;
-  }, [turnDiffFiles]);
-
   const workingTreeFiles: TurnDiffFileChange[] = useMemo(
-    () => enrichFilesWithTurnStats(gitStatus?.workingTree?.files ?? [], turnDiffStatByPath),
-    [gitStatus, turnDiffStatByPath],
+    () => resolveWorkingChanges(gitStatus),
+    [gitStatus],
   );
 
-  // Working changes = git working tree files, falling back to turn diffs
-  const workingChanges: TurnDiffFileChange[] = useMemo(
-    () => (workingTreeFiles.length > 0 ? workingTreeFiles : turnDiffFiles),
-    [workingTreeFiles, turnDiffFiles],
-  );
+  const workingChanges: TurnDiffFileChange[] = useMemo(() => workingTreeFiles, [workingTreeFiles]);
   const workingChangesStat = useMemo(
     () => summarizeTurnDiffStats(workingChanges),
     [workingChanges],
@@ -246,15 +205,6 @@ function SourceControlSidebarInner() {
     }
     return map;
   }, [commits]);
-
-  const conversationCheckpointTurnCount = useMemo(() => {
-    const turnCounts = turnDiffSummaries
-      .map((s) => s.checkpointTurnCount ?? inferredCheckpointTurnCountByTurnId[s.turnId])
-      .filter((v): v is number => typeof v === "number");
-    if (turnCounts.length === 0) return undefined;
-    const latest = Math.max(...turnCounts);
-    return latest > 0 ? latest : undefined;
-  }, [inferredCheckpointTurnCountByTurnId, turnDiffSummaries]);
 
   // -----------------------------------------------------------------------
   // Section expand/collapse
@@ -278,14 +228,21 @@ function SourceControlSidebarInner() {
   const findDiffTab = useWorkspaceTabStore((s) => s.findDiffTab);
 
   const openDiffFileTab = useCallback(
-    (turnId: TurnId | null, filePath: string, fromTurnCount: number, toTurnCount: number) => {
+    (input: {
+      filePath: string;
+      diffTurnId?: TurnId | null;
+      diffGitSource?: "workingTree" | "commit";
+      diffCommitHash?: string;
+    }) => {
       if (!activeWorkspaceId || !rootWorkspaceId) return;
-      const existing = findDiffTab(
+      const existing = findDiffTab({
         rootWorkspaceId,
-        activeWorkspaceId,
-        turnId ?? undefined,
-        filePath,
-      );
+        diffSourceWorkspaceId: activeWorkspaceId,
+        diffTurnId: input.diffTurnId ?? undefined,
+        diffGitSource: input.diffGitSource,
+        diffCommitHash: input.diffCommitHash,
+        diffFilePath: input.filePath,
+      });
       if (existing) {
         setActiveTab(rootWorkspaceId, existing.id);
         return;
@@ -294,11 +251,11 @@ function SourceControlSidebarInner() {
         rootWorkspaceId,
         makeDiffTab({
           diffSourceWorkspaceId: activeWorkspaceId,
-          diffTurnId: turnId,
-          diffFromTurnCount: fromTurnCount,
-          diffToTurnCount: toTurnCount,
-          diffFilePath: filePath,
-          label: fileNameFromPath(filePath),
+          ...(input.diffTurnId !== undefined ? { diffTurnId: input.diffTurnId } : {}),
+          ...(input.diffGitSource ? { diffGitSource: input.diffGitSource } : {}),
+          ...(input.diffCommitHash ? { diffCommitHash: input.diffCommitHash } : {}),
+          diffFilePath: input.filePath,
+          label: fileNameFromPath(input.filePath),
         }),
       );
     },
@@ -306,11 +263,22 @@ function SourceControlSidebarInner() {
   );
 
   const onOpenFile = useCallback(
-    (_turnId: TurnId, filePath?: string) => {
-      if (!filePath || conversationCheckpointTurnCount === undefined) return;
-      openDiffFileTab(null, filePath, 0, conversationCheckpointTurnCount);
+    (turnId: TurnId, filePath?: string) => {
+      if (!filePath) return;
+      if (turnId === ("__working__" as TurnId)) {
+        openDiffFileTab({
+          filePath,
+          diffGitSource: "workingTree",
+        });
+        return;
+      }
+      openDiffFileTab({
+        filePath,
+        diffGitSource: "commit",
+        diffCommitHash: turnId,
+      });
     },
-    [conversationCheckpointTurnCount, openDiffFileTab],
+    [openDiffFileTab],
   );
 
   // -----------------------------------------------------------------------

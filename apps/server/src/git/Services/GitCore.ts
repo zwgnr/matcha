@@ -20,6 +20,8 @@ import type {
   GitListBranchesResult,
   GitLogInput,
   GitLogResult,
+  GitReadFileDiffInput,
+  GitReadFileDiffResult,
   GitPullResult,
   GitRemoveWorktreeInput,
   GitStageFilesInput,
@@ -309,6 +311,13 @@ export interface GitCoreShape {
    * Return commit log for the current branch relative to its base branch.
    */
   readonly log: (input: GitLogInput) => Effect.Effect<GitLogResult, GitCommandError>;
+
+  /**
+   * Read a single-file git diff from the live working tree or a commit.
+   */
+  readonly readFileDiff: (
+    input: GitReadFileDiffInput,
+  ) => Effect.Effect<GitReadFileDiffResult, GitCommandError>;
 
   /**
    * Stage files. If paths omitted, stages all changes.

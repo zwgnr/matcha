@@ -12,6 +12,7 @@ import { type TurnId, type WorkspaceId } from "@matcha/contracts";
 import { Columns2Icon, Rows3Icon, TextWrapIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { gitFileDiffQueryOptions } from "~/lib/gitReactQuery";
 import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
 import { buildPatchCacheKey, resolveDiffThemeName } from "../lib/diffRendering";
 import { openInPreferredEditor } from "../editorPreferences";
@@ -111,6 +112,8 @@ function resolveFileDiffPath(fileDiff: FileDiffMetadata): string {
 export interface DiffFileTabProps {
   workspaceId: WorkspaceId;
   turnId: TurnId | undefined;
+  diffGitSource?: "workingTree" | "commit" | undefined;
+  diffCommitHash?: string | undefined;
   fromTurnCount: number;
   toTurnCount: number;
   filePath: string;
@@ -120,6 +123,8 @@ export interface DiffFileTabProps {
 export default function DiffFileTab({
   workspaceId,
   turnId,
+  diffGitSource,
+  diffCommitHash,
   fromTurnCount,
   toTurnCount,
   filePath,
@@ -139,6 +144,12 @@ export default function DiffFileTab({
   const activeCwd = activeWorkspace?.worktreePath ?? activeProject?.cwd;
 
   const cacheScope = turnId ? `turn:${turnId}` : `conversation:diff-tab`;
+  const gitDiffSource =
+    diffGitSource === "commit" && diffCommitHash
+      ? ({ source: "commit", commitHash: diffCommitHash } as const)
+      : diffGitSource === "workingTree"
+        ? ({ source: "workingTree" } as const)
+        : null;
 
   const checkpointDiffQuery = useQuery(
     checkpointDiffQueryOptions({
@@ -149,15 +160,27 @@ export default function DiffFileTab({
       enabled: true,
     }),
   );
+  const gitDiffQuery = useQuery(
+    gitFileDiffQueryOptions({
+      cwd: activeCwd ?? null,
+      filePath,
+      diffSource: gitDiffSource,
+    }),
+  );
 
-  const patch = checkpointDiffQuery.data?.diff;
-  const isLoading = checkpointDiffQuery.isLoading;
+  const patch = gitDiffSource ? gitDiffQuery.data?.diff : checkpointDiffQuery.data?.diff;
+  const isLoading = gitDiffSource ? gitDiffQuery.isLoading : checkpointDiffQuery.isLoading;
+  const activeError = gitDiffSource ? gitDiffQuery.error : checkpointDiffQuery.error;
   const errorMessage =
-    checkpointDiffQuery.error instanceof Error
-      ? checkpointDiffQuery.error.message
-      : checkpointDiffQuery.error
-        ? "Failed to load checkpoint diff."
-        : null;
+    activeError instanceof Error
+      ? activeError.message
+      : gitDiffSource
+        ? gitDiffQuery.error
+          ? "Failed to load git diff."
+          : null
+        : checkpointDiffQuery.error
+          ? "Failed to load checkpoint diff."
+          : null;
 
   // Parse and extract the target file
   const targetFileDiff = useMemo(() => {
@@ -171,12 +194,7 @@ export default function DiffFileTab({
         buildPatchCacheKey(normalizedPatch, `diff-tab:${resolvedTheme}`),
       );
       const allFiles = parsedPatches.flatMap((p) => p.files);
-      return (
-        allFiles.find((f) => {
-          const path = resolveFileDiffPath(f);
-          return path === filePath;
-        }) ?? null
-      );
+      return allFiles.find((f) => resolveFileDiffPath(f) === filePath) ?? allFiles[0] ?? null;
     } catch {
       return null;
     }

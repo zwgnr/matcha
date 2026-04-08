@@ -76,6 +76,7 @@ export interface WsRpcClient {
     readonly checkout: RpcUnaryMethod<typeof WS_METHODS.gitCheckout>;
     readonly init: RpcUnaryMethod<typeof WS_METHODS.gitInit>;
     readonly log: RpcUnaryMethod<typeof WS_METHODS.gitLog>;
+    readonly readFileDiff: RpcUnaryMethod<typeof WS_METHODS.gitReadFileDiff>;
     readonly stageFiles: RpcUnaryMethod<typeof WS_METHODS.gitStageFiles>;
     readonly unstageFiles: RpcUnaryMethod<typeof WS_METHODS.gitUnstageFiles>;
     readonly discardFiles: RpcUnaryMethod<typeof WS_METHODS.gitDiscardFiles>;
@@ -189,6 +190,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       checkout: (input) => transport.request((client) => client[WS_METHODS.gitCheckout](input)),
       init: (input) => transport.request((client) => client[WS_METHODS.gitInit](input)),
       log: (input) => transport.request((client) => client[WS_METHODS.gitLog](input)),
+      readFileDiff: (input) =>
+        transport.request((client) => client[WS_METHODS.gitReadFileDiff](input)),
       stageFiles: (input) => transport.request((client) => client[WS_METHODS.gitStageFiles](input)),
       unstageFiles: (input) =>
         transport.request((client) => client[WS_METHODS.gitUnstageFiles](input)),

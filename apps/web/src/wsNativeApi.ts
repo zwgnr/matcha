@@ -73,6 +73,7 @@ export function createWsNativeApi(): NativeApi {
       checkout: rpcClient.git.checkout,
       init: rpcClient.git.init,
       log: rpcClient.git.log,
+      readFileDiff: rpcClient.git.readFileDiff,
       stageFiles: rpcClient.git.stageFiles,
       unstageFiles: rpcClient.git.unstageFiles,
       discardFiles: rpcClient.git.discardFiles,

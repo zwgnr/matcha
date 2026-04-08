@@ -104,6 +104,10 @@ export function gitBranchSearchInfiniteQueryOptions(input: {
 const GIT_LOG_STALE_TIME_MS = 10_000;
 const GIT_LOG_REFETCH_INTERVAL_MS = 30_000;
 
+export type GitFileDiffSource =
+  | { source: "workingTree" }
+  | { source: "commit"; commitHash: string };
+
 export function gitLogQueryOptions(cwd: string | null) {
   return queryOptions({
     queryKey: gitQueryKeys.log(cwd),
@@ -117,6 +121,46 @@ export function gitLogQueryOptions(cwd: string | null) {
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
     refetchInterval: GIT_LOG_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function gitFileDiffQueryOptions(input: {
+  cwd: string | null;
+  filePath: string | null;
+  diffSource: GitFileDiffSource | null;
+}) {
+  return queryOptions({
+    queryKey: [
+      "git",
+      "file-diff",
+      input.cwd,
+      input.filePath,
+      input.diffSource?.source ?? null,
+      input.diffSource?.source === "commit" ? input.diffSource.commitHash : null,
+    ] as const,
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd || !input.filePath || !input.diffSource) {
+        throw new Error("Git diff is unavailable.");
+      }
+      if (input.diffSource.source === "commit") {
+        return api.git.readFileDiff({
+          cwd: input.cwd,
+          filePath: input.filePath,
+          source: "commit",
+          commitHash: input.diffSource.commitHash,
+        });
+      }
+      return api.git.readFileDiff({
+        cwd: input.cwd,
+        filePath: input.filePath,
+        source: "workingTree",
+      });
+    },
+    enabled: input.cwd !== null && input.filePath !== null && input.diffSource !== null,
+    staleTime: 1_000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
 }
 

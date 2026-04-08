@@ -483,15 +483,23 @@ interface PersistentWorkspaceTerminalDrawerProps {
   visible: boolean;
   mode?: "drawer" | "inline";
   launchContext: PersistentTerminalLaunchContext | null;
+  pendingInputByTerminalId: Record<string, PendingTerminalInput>;
   focusRequestId: number;
   splitShortcutLabel: string | undefined;
   newShortcutLabel: string | undefined;
   closeShortcutLabel: string | undefined;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
+  onPendingTerminalInputHandled: (terminalId: string) => void;
   /** Called when the user requests a new terminal (creates a new tab in inline/tab mode). */
   onNewTerminalTab?: (() => void) | undefined;
   /** Called when the user closes the terminal (closes the tab in inline/tab mode). */
   onCloseTerminalTab?: (() => void) | undefined;
+}
+
+interface PendingTerminalInput {
+  id: string;
+  data: string;
+  onSettled?: ((error?: Error) => void) | undefined;
 }
 
 function PersistentWorkspaceTerminalDrawer({
@@ -500,11 +508,13 @@ function PersistentWorkspaceTerminalDrawer({
   visible,
   mode = "drawer",
   launchContext,
+  pendingInputByTerminalId,
   focusRequestId,
   splitShortcutLabel,
   newShortcutLabel,
   closeShortcutLabel,
   onAddTerminalContext,
+  onPendingTerminalInputHandled,
   onNewTerminalTab,
   onCloseTerminalTab,
 }: PersistentWorkspaceTerminalDrawerProps) {
@@ -675,6 +685,7 @@ function PersistentWorkspaceTerminalDrawer({
         activeTerminalId={scopedActiveTerminalId}
         terminalGroups={scopedTerminalGroups}
         activeTerminalGroupId={scopedActiveTerminalGroupId}
+        pendingInputByTerminalId={pendingInputByTerminalId}
         focusRequestId={focusRequestId + localFocusRequestId + (visible ? 1 : 0)}
         onSplitTerminal={splitTerminal}
         onNewTerminal={handleNewTerminal}
@@ -685,6 +696,7 @@ function PersistentWorkspaceTerminalDrawer({
         onCloseTerminal={closeTerminal}
         onHeightChange={setTerminalHeight}
         onAddTerminalContext={handleAddTerminalContext}
+        onPendingTerminalInputHandled={onPendingTerminalInputHandled}
       />
     </div>
   );
@@ -802,6 +814,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const [terminalLaunchContext, setTerminalLaunchContext] = useState<TerminalLaunchContext | null>(
     null,
   );
+  const [pendingTerminalInputById, setPendingTerminalInputById] = useState<
+    Record<string, PendingTerminalInput>
+  >({});
   const [attachmentPreviewHandoffByMessageId, setAttachmentPreviewHandoffByMessageId] = useState<
     Record<string, string[]>
   >({});
@@ -860,11 +875,34 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const storeEnsureTerminal = useTerminalStateStore((s) => s.ensureTerminal);
   const storeCloseTerminal = useTerminalStateStore((s) => s.closeTerminal);
   const storeServerTerminalLaunchContext = useTerminalStateStore(
-    (s) => s.terminalLaunchContextByWorkspaceId[workspaceId] ?? null,
+    (s) => s.terminalLaunchContextByWorkspaceId[rootWorkspaceId] ?? null,
   );
 
   const storeClearTerminalLaunchContext = useTerminalStateStore(
     (s) => s.clearTerminalLaunchContext,
+  );
+
+  const clearPendingTerminalInput = useCallback((terminalId: string) => {
+    setPendingTerminalInputById((current) => {
+      if (!current[terminalId]) {
+        return current;
+      }
+      const { [terminalId]: _removed, ...rest } = current;
+      return rest;
+    });
+  }, []);
+
+  const queuePendingTerminalInput = useCallback(
+    (terminalId: string, input: Omit<PendingTerminalInput, "id">) => {
+      setPendingTerminalInputById((current) => ({
+        ...current,
+        [terminalId]: {
+          id: randomUUID(),
+          ...input,
+        },
+      }));
+    },
+    [],
   );
 
   const setPrompt = useCallback(
@@ -982,6 +1020,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const currentWorkspaceProviderTab = activeWorkspaceId
     ? findTabByWorkspaceId(rootWorkspaceId, activeWorkspaceId)
     : undefined;
+  const terminalWorkspaceId = rootWorkspaceId;
   const isWorkspaceRootWorkspace = activeWorkspaceId === rootWorkspaceId;
   const isWorkspaceDraftWorkspace = isLocalDraftWorkspace && isWorkspaceRootWorkspace;
   const isProviderTabActive = activeTab?.kind === "provider";
@@ -1025,17 +1064,26 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     }
 
     dismissedProviderWorkspaceIdsByWorkspaceRef.current[rootWorkspaceId]?.delete(activeWorkspaceId);
-    if (lastSyncedProviderTabWorkspaceIdRef.current !== activeWorkspaceId) {
+    const shouldSyncProviderTabSelection =
+      activeTab?.kind === "provider" ||
+      activeTab === undefined ||
+      tabState.activeTabId.length === 0;
+    if (
+      shouldSyncProviderTabSelection &&
+      lastSyncedProviderTabWorkspaceIdRef.current !== activeWorkspaceId
+    ) {
       setActiveTab(rootWorkspaceId, existingProviderTab.id);
     }
     lastSyncedProviderTabWorkspaceIdRef.current = activeWorkspaceId;
   }, [
     activeWorkspace,
     activeWorkspaceId,
+    activeTab,
     addTab,
     findTabByWorkspaceId,
     isWorkspaceDraftWorkspace,
     setActiveTab,
+    tabState.activeTabId,
     rootWorkspaceId,
   ]);
 
@@ -1045,10 +1093,8 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       const tid = terminalId ?? `terminal-${randomUUID()}`;
       const label = nextTerminalTabLabel(tabState?.tabs ?? []);
       const tab = makeTerminalTab(tid, label);
-      if (activeWorkspaceId) {
-        storeEnsureTerminal(activeWorkspaceId, tid, { open: true, active: false });
-      }
-      addTab(rootWorkspaceId, tab);
+      storeEnsureTerminal(terminalWorkspaceId, tid, { open: true, active: false });
+      addTab(terminalWorkspaceId, tab);
       if (routeWorkspaceId !== rootWorkspaceId) {
         void navigate({ to: "/$workspaceId", params: { workspaceId: rootWorkspaceId } });
       }
@@ -1056,12 +1102,12 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       return tab;
     },
     [
-      activeWorkspaceId,
       addTab,
       navigate,
       routeWorkspaceId,
       storeEnsureTerminal,
       tabState?.tabs,
+      terminalWorkspaceId,
       rootWorkspaceId,
     ],
   );
@@ -1116,18 +1162,19 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           dismissedProviderWorkspaceIds;
       }
       // Clean up terminal session when closing a terminal tab.
-      if (closedTab?.kind === "terminal" && closedTab.terminalId && activeWorkspaceId) {
+      if (closedTab?.kind === "terminal" && closedTab.terminalId) {
         const api = readNativeApi();
+        clearPendingTerminalInput(closedTab.terminalId);
         if (api && "close" in api.terminal && typeof api.terminal.close === "function") {
           void api.terminal
             .close({
-              workspaceId: activeWorkspaceId,
+              workspaceId: terminalWorkspaceId,
               terminalId: closedTab.terminalId,
               deleteHistory: true,
             })
             .catch(() => undefined);
         }
-        storeCloseTerminal(activeWorkspaceId, closedTab.terminalId);
+        storeCloseTerminal(terminalWorkspaceId, closedTab.terminalId);
       }
       removeTab(rootWorkspaceId, tabId);
       // If we closed the active tab, navigate to the next active tab's workspace.
@@ -1138,12 +1185,13 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       }
     },
     [
-      activeWorkspaceId,
+      clearPendingTerminalInput,
       navigate,
       removeTab,
       routeWorkspaceId,
       storeCloseTerminal,
       tabState,
+      terminalWorkspaceId,
       rootWorkspaceId,
     ],
   );
@@ -1832,7 +1880,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
   const activeWorkspaceWorktreePath = activeWorkspace?.worktreePath ?? null;
   const activeWorkspaceRoot = activeWorkspaceWorktreePath ?? activeProjectCwd ?? undefined;
   const activeTerminalLaunchContext =
-    terminalLaunchContext?.workspaceId === activeWorkspaceId
+    terminalLaunchContext?.workspaceId === terminalWorkspaceId
       ? terminalLaunchContext
       : (storeServerTerminalLaunchContext ?? null);
   // Default true while loading to avoid toolbar flicker.
@@ -1966,29 +2014,30 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     [activeWorkspace, composerCursor, composerTerminalContexts, insertComposerDraftTerminalContext],
   );
   const splitTerminal = useCallback(() => {
-    if (!activeWorkspaceId || hasReachedSplitLimit) return;
+    if (hasReachedSplitLimit) return;
     const terminalId = `terminal-${randomUUID()}`;
-    storeSplitTerminal(activeWorkspaceId, terminalId);
+    storeSplitTerminal(terminalWorkspaceId, terminalId);
     setTerminalFocusRequestId((value) => value + 1);
-  }, [activeWorkspaceId, hasReachedSplitLimit, storeSplitTerminal]);
+  }, [hasReachedSplitLimit, storeSplitTerminal, terminalWorkspaceId]);
   const closeTerminal = useCallback(
     (terminalId: string) => {
       const api = readNativeApi();
-      if (!activeWorkspaceId || !api) return;
+      if (!api) return;
       if ("close" in api.terminal && typeof api.terminal.close === "function") {
         void api.terminal
-          .close({ workspaceId: activeWorkspaceId, terminalId, deleteHistory: true })
+          .close({ workspaceId: terminalWorkspaceId, terminalId, deleteHistory: true })
           .catch(() =>
             api.terminal
-              .write({ workspaceId: activeWorkspaceId, terminalId, data: "exit\n" })
+              .write({ workspaceId: terminalWorkspaceId, terminalId, data: "exit\n" })
               .catch(() => undefined),
           );
       } else {
         void api.terminal
-          .write({ workspaceId: activeWorkspaceId, terminalId, data: "exit\n" })
+          .write({ workspaceId: terminalWorkspaceId, terminalId, data: "exit\n" })
           .catch(() => undefined);
       }
-      storeCloseTerminal(activeWorkspaceId, terminalId);
+      clearPendingTerminalInput(terminalId);
+      storeCloseTerminal(terminalWorkspaceId, terminalId);
       // Also close the tab that owns this terminal.
       const terminalTab = findTerminalTabByTerminalId(rootWorkspaceId, terminalId);
       if (terminalTab) {
@@ -1996,12 +2045,64 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       }
     },
     [
-      activeWorkspaceId,
+      clearPendingTerminalInput,
       findTerminalTabByTerminalId,
       removeTab,
       storeCloseTerminal,
+      terminalWorkspaceId,
       rootWorkspaceId,
     ],
+  );
+
+  const launchTerminalCommand = useCallback(
+    async (input: {
+      terminalId: string;
+      cwd: string;
+      worktreePath: string | null;
+      runtimeEnv: Record<string, string>;
+      command: string;
+      deferUntilMounted: boolean;
+      onSettled?: ((error?: Error) => void) | undefined;
+      fallbackError: string;
+    }) => {
+      const api = readNativeApi();
+      if (!api) {
+        input.onSettled?.(new Error(input.fallbackError));
+        return;
+      }
+
+      const data = `${input.command}\r`;
+      if (input.deferUntilMounted) {
+        queuePendingTerminalInput(input.terminalId, {
+          data,
+          onSettled: input.onSettled,
+        });
+        return;
+      }
+
+      const openTerminalInput: TerminalOpenInput = {
+        workspaceId: terminalWorkspaceId,
+        terminalId: input.terminalId,
+        cwd: input.cwd,
+        ...(input.worktreePath !== null ? { worktreePath: input.worktreePath } : {}),
+        env: input.runtimeEnv,
+        cols: SCRIPT_TERMINAL_COLS,
+        rows: SCRIPT_TERMINAL_ROWS,
+      };
+
+      try {
+        await api.terminal.open(openTerminalInput);
+        await api.terminal.write({
+          workspaceId: terminalWorkspaceId,
+          terminalId: input.terminalId,
+          data,
+        });
+        input.onSettled?.();
+      } catch (error) {
+        input.onSettled?.(error instanceof Error ? error : new Error(input.fallbackError));
+      }
+    },
+    [queuePendingTerminalInput, terminalWorkspaceId],
   );
   const runProjectScript = useCallback(
     async (
@@ -2014,8 +2115,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         rememberAsLastInvoked?: boolean;
       },
     ) => {
-      const api = readNativeApi();
-      if (!api || !activeWorkspaceId || !activeProject || !activeWorkspace) return;
+      if (!readNativeApi() || !activeProject || !activeWorkspace) return;
       if (options?.rememberAsLastInvoked !== false) {
         setLastInvokedScriptByProjectId((current) => {
           if (current[activeProject.id] === script.id) return current;
@@ -2044,7 +2144,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       }
 
       setTerminalLaunchContext({
-        workspaceId: activeWorkspaceId,
+        workspaceId: terminalWorkspaceId,
         cwd: targetCwd,
         worktreePath: targetWorktreePath,
       });
@@ -2057,49 +2157,37 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         worktreePath: targetWorktreePath,
         ...(options?.env ? { extraEnv: options.env } : {}),
       });
-      const openTerminalInput: TerminalOpenInput = wantsNewTerminal
-        ? {
-            workspaceId: activeWorkspaceId,
-            terminalId: targetTerminalId,
-            cwd: targetCwd,
-            ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
-            env: runtimeEnv,
-            cols: SCRIPT_TERMINAL_COLS,
-            rows: SCRIPT_TERMINAL_ROWS,
+      await launchTerminalCommand({
+        terminalId: targetTerminalId,
+        cwd: targetCwd,
+        worktreePath: targetWorktreePath,
+        runtimeEnv,
+        command: script.command,
+        deferUntilMounted: wantsNewTerminal || activeTerminalTab?.terminalId !== targetTerminalId,
+        onSettled: (error) => {
+          if (!error) {
+            return;
           }
-        : {
-            workspaceId: activeWorkspaceId,
-            terminalId: targetTerminalId,
-            cwd: targetCwd,
-            ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
-            env: runtimeEnv,
-          };
-
-      try {
-        await api.terminal.open(openTerminalInput);
-        await api.terminal.write({
-          workspaceId: activeWorkspaceId,
-          terminalId: targetTerminalId,
-          data: `${script.command}\r`,
-        });
-      } catch (error) {
-        setWorkspaceError(
-          activeWorkspaceId,
-          error instanceof Error ? error.message : `Failed to run script "${script.name}".`,
-        );
-      }
+          setWorkspaceError(
+            activeWorkspace.id,
+            error.message || `Failed to run script "${script.name}".`,
+          );
+        },
+        fallbackError: `Failed to run script "${script.name}".`,
+      });
     },
     [
       activeProject,
       activeTab,
       activeWorkspace,
-      activeWorkspaceId,
       createNewTerminalTab,
       gitCwd,
+      launchTerminalCommand,
       setActiveTab,
       setWorkspaceError,
       setLastInvokedScriptByProjectId,
       terminalState.runningTerminalIds,
+      terminalWorkspaceId,
       rootWorkspaceId,
     ],
   );
@@ -2239,15 +2327,13 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     selectRunCommand(s.commandByProjectId, activeProject?.id),
   );
   const runCommandRuntime = useRunCommandStore((s) =>
-    selectRunCommandRuntime(s.runtimeByWorkspaceId, activeWorkspaceId ?? undefined),
+    selectRunCommandRuntime(s.runtimeByWorkspaceId, terminalWorkspaceId),
   );
   const runCommandStart = useRunCommandStore((s) => s.start);
   const runCommandStop = useRunCommandStore((s) => s.stop);
 
   const startRunCommand = useCallback(async () => {
-    const api = readNativeApi();
-    if (!api || !activeWorkspaceId || !activeProject || !activeWorkspace || !runCommandCommand)
-      return;
+    if (!readNativeApi() || !activeProject || !activeWorkspace || !runCommandCommand) return;
 
     const targetCwd = gitCwd ?? activeProject.cwd;
     const targetWorktreePath = activeWorkspace.worktreePath ?? null;
@@ -2268,75 +2354,69 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     }
 
     setTerminalLaunchContext({
-      workspaceId: activeWorkspaceId,
+      workspaceId: terminalWorkspaceId,
       cwd: targetCwd,
       worktreePath: targetWorktreePath,
     });
     setTerminalFocusRequestId((value) => value + 1);
+    runCommandStart(terminalWorkspaceId, targetTerminalId);
 
     const runtimeEnv = projectScriptRuntimeEnv({
       project: { cwd: activeProject.cwd },
       worktreePath: targetWorktreePath,
     });
-    const openTerminalInput: TerminalOpenInput = {
-      workspaceId: activeWorkspaceId,
+    await launchTerminalCommand({
       terminalId: targetTerminalId,
       cwd: targetCwd,
-      ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
-      env: runtimeEnv,
-      cols: SCRIPT_TERMINAL_COLS,
-      rows: SCRIPT_TERMINAL_ROWS,
-    };
-
-    try {
-      await api.terminal.open(openTerminalInput);
-      await api.terminal.write({
-        workspaceId: activeWorkspaceId,
-        terminalId: targetTerminalId,
-        data: `${runCommandCommand}\r`,
-      });
-      runCommandStart(activeWorkspaceId, targetTerminalId);
-    } catch (error) {
-      setWorkspaceError(
-        activeWorkspaceId,
-        error instanceof Error ? error.message : "Failed to start run command.",
-      );
-    }
+      worktreePath: targetWorktreePath,
+      runtimeEnv,
+      command: runCommandCommand,
+      deferUntilMounted:
+        activeTab?.kind !== "terminal" || activeTab.terminalId !== targetTerminalId,
+      onSettled: (error) => {
+        if (error) {
+          runCommandStop(terminalWorkspaceId);
+          setWorkspaceError(activeWorkspace.id, error.message || "Failed to start run command.");
+        }
+      },
+      fallbackError: "Failed to start run command.",
+    });
   }, [
     activeProject,
+    activeTab,
     activeWorkspace,
-    activeWorkspaceId,
     createNewTerminalTab,
     findTerminalTabByTerminalId,
     gitCwd,
+    launchTerminalCommand,
     runCommandCommand,
     runCommandRuntime.terminalId,
     runCommandStart,
+    runCommandStop,
     setActiveTab,
     setWorkspaceError,
+    terminalWorkspaceId,
     rootWorkspaceId,
   ]);
 
   const stopRunCommand = useCallback(async () => {
     const api = readNativeApi();
-    if (!api || !activeWorkspaceId || !runCommandRuntime.running || !runCommandRuntime.terminalId)
-      return;
+    if (!api || !runCommandRuntime.running || !runCommandRuntime.terminalId) return;
 
     try {
       // Send Ctrl+C to kill the process
       await api.terminal.write({
-        workspaceId: activeWorkspaceId,
+        workspaceId: terminalWorkspaceId,
         terminalId: runCommandRuntime.terminalId,
         data: "\x03",
       });
-      runCommandStop(activeWorkspaceId);
     } catch (error) {
       setWorkspaceError(
-        activeWorkspaceId,
+        activeWorkspace?.id ?? terminalWorkspaceId,
         error instanceof Error ? error.message : "Failed to stop run command.",
       );
     }
-  }, [activeWorkspaceId, runCommandRuntime, runCommandStop, setWorkspaceError]);
+  }, [activeWorkspace?.id, runCommandRuntime, setWorkspaceError, terminalWorkspaceId]);
 
   const openPort = useCallback((port: number) => {
     const api = readNativeApi();
@@ -2971,24 +3051,24 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       : "local";
 
   useEffect(() => {
-    if (!activeWorkspaceId) {
+    if (!terminalWorkspaceId) {
       setTerminalLaunchContext(null);
-      storeClearTerminalLaunchContext(workspaceId);
+      storeClearTerminalLaunchContext(terminalWorkspaceId);
       return;
     }
     setTerminalLaunchContext((current) => {
       if (!current) return current;
-      if (current.workspaceId === activeWorkspaceId) return current;
+      if (current.workspaceId === terminalWorkspaceId) return current;
       return null;
     });
-  }, [activeWorkspaceId, storeClearTerminalLaunchContext, workspaceId]);
+  }, [storeClearTerminalLaunchContext, terminalWorkspaceId]);
 
   useEffect(() => {
-    if (!activeWorkspaceId || !activeProjectCwd) {
+    if (!terminalWorkspaceId || !activeProjectCwd) {
       return;
     }
     setTerminalLaunchContext((current) => {
-      if (!current || current.workspaceId !== activeWorkspaceId) {
+      if (!current || current.workspaceId !== terminalWorkspaceId) {
         return current;
       }
       const settledCwd = projectScriptCwd({
@@ -2999,20 +3079,20 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         settledCwd === current.cwd &&
         (activeWorkspaceWorktreePath ?? null) === current.worktreePath
       ) {
-        storeClearTerminalLaunchContext(activeWorkspaceId);
+        storeClearTerminalLaunchContext(terminalWorkspaceId);
         return null;
       }
       return current;
     });
   }, [
     activeProjectCwd,
-    activeWorkspaceId,
     activeWorkspaceWorktreePath,
     storeClearTerminalLaunchContext,
+    terminalWorkspaceId,
   ]);
 
   useEffect(() => {
-    if (!activeWorkspaceId || !activeProjectCwd || !storeServerTerminalLaunchContext) {
+    if (!terminalWorkspaceId || !activeProjectCwd || !storeServerTerminalLaunchContext) {
       return;
     }
     const settledCwd = projectScriptCwd({
@@ -3023,14 +3103,14 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       settledCwd === storeServerTerminalLaunchContext.cwd &&
       (activeWorkspaceWorktreePath ?? null) === storeServerTerminalLaunchContext.worktreePath
     ) {
-      storeClearTerminalLaunchContext(activeWorkspaceId);
+      storeClearTerminalLaunchContext(terminalWorkspaceId);
     }
   }, [
     activeProjectCwd,
-    activeWorkspaceId,
     activeWorkspaceWorktreePath,
     storeClearTerminalLaunchContext,
     storeServerTerminalLaunchContext,
+    terminalWorkspaceId,
   ]);
 
   useEffect(() => {
@@ -4317,7 +4397,12 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
       const toTurnCount = checkpointTurnCount;
 
       // Reuse existing tab if open
-      const existing = findDiffTab(rootWorkspaceId, activeWorkspaceId, turnId, filePath);
+      const existing = findDiffTab({
+        rootWorkspaceId,
+        diffSourceWorkspaceId: activeWorkspaceId,
+        diffTurnId: turnId,
+        diffFilePath: filePath,
+      });
       if (existing) {
         setActiveTab(rootWorkspaceId, existing.id);
         return;
@@ -4395,7 +4480,7 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           activeWorkspaceTitle={activeWorkspace.title}
           activeProjectName={activeProject?.name}
           activeProjectId={activeProject?.id}
-          activeWorkspaceId={activeWorkspaceId ?? undefined}
+          activeWorkspaceId={terminalWorkspaceId}
           isGitRepo={isGitRepo}
           openInCwd={gitCwd}
           activeProjectScripts={activeProject?.scripts}
@@ -4447,6 +4532,8 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           <DiffFileTabLazy
             workspaceId={activeTab.diffSourceWorkspaceId}
             turnId={activeTab.diffTurnId}
+            diffGitSource={activeTab.diffGitSource}
+            diffCommitHash={activeTab.diffCommitHash}
             fromTurnCount={activeTab.diffFromTurnCount ?? 0}
             toTurnCount={activeTab.diffToTurnCount ?? 0}
             filePath={activeTab.diffFilePath}
@@ -4460,11 +4547,13 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
             visible
             mode="inline"
             launchContext={activeTerminalLaunchContext ?? null}
+            pendingInputByTerminalId={pendingTerminalInputById}
             focusRequestId={terminalFocusRequestId}
             splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
             newShortcutLabel={newTerminalShortcutLabel ?? undefined}
             closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
             onAddTerminalContext={addTerminalContextToDraft}
+            onPendingTerminalInputHandled={clearPendingTerminalInput}
             onNewTerminalTab={createNewTerminalTab}
             onCloseTerminalTab={activeTab ? () => handleCloseTab(activeTab.id) : undefined}
           />
