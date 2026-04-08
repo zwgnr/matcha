@@ -3,6 +3,7 @@ import { setupProjectScript } from "@matcha/shared/projectScripts";
 import { UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { selectRunCommand, useRunCommandStore } from "~/runCommandStore";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "./ui/dialog";
+import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 
@@ -35,16 +37,24 @@ export function ProjectSettingsDialog({
 }: ProjectSettingsDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [setupCommand, setSetupCommand] = useState("");
+  const [runCommand, setRunCommand] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const storedRunCommand = useRunCommandStore((s) =>
+    selectRunCommand(s.commandByProjectId, projectId ?? undefined),
+  );
+  const setStoredRunCommand = useRunCommandStore((s) => s.setCommand);
+  const clearStoredRunCommand = useRunCommandStore((s) => s.clearCommand);
 
   useEffect(() => {
     if (!open) return;
     const existingSetup = setupProjectScript(scripts);
     setSetupCommand(existingSetup?.command ?? "");
+    setRunCommand(storedRunCommand ?? "");
     setError(null);
     setIsSaving(false);
-  }, [open, scripts]);
+  }, [open, scripts, storedRunCommand]);
 
   const handleSave = useCallback(async () => {
     if (!projectId) return;
@@ -69,6 +79,14 @@ export function ProjectSettingsDialog({
         nextScripts = otherScripts;
       }
 
+      // Persist run command
+      const trimmedRunCommand = runCommand.trim();
+      if (trimmedRunCommand) {
+        setStoredRunCommand(projectId, trimmedRunCommand);
+      } else {
+        clearStoredRunCommand(projectId);
+      }
+
       await onSave(projectId, nextScripts);
       onOpenChange(false);
     } catch (err) {
@@ -76,7 +94,16 @@ export function ProjectSettingsDialog({
     } finally {
       setIsSaving(false);
     }
-  }, [projectId, setupCommand, scripts, onSave, onOpenChange]);
+  }, [
+    projectId,
+    setupCommand,
+    runCommand,
+    scripts,
+    onSave,
+    onOpenChange,
+    setStoredRunCommand,
+    clearStoredRunCommand,
+  ]);
 
   const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -107,6 +134,27 @@ export function ProjectSettingsDialog({
           )}
         </DialogHeader>
         <DialogPanel className="space-y-5">
+          <div className="space-y-2">
+            <div>
+              <Label htmlFor="run-command">Run Command</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Long-running dev command (e.g. <code className="text-[11px]">bun dev</code>).
+                Launched from the play button in the header. Set for the entire project across all
+                workspaces.
+              </p>
+            </div>
+            <Input
+              id="run-command"
+              placeholder="bun dev"
+              value={runCommand}
+              onChange={(event) => {
+                setRunCommand(event.target.value);
+                setError(null);
+              }}
+              disabled={isSaving}
+              className="font-mono text-xs"
+            />
+          </div>
           <div className="space-y-2">
             <div>
               <Label htmlFor="setup-command">Setup</Label>

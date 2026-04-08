@@ -3,6 +3,8 @@ import {
   type ServerLifecycleWelcomePayload,
   type WorkspaceId,
 } from "@matcha/contracts";
+import { detectPorts } from "../lib/portDetection";
+import { useRunCommandStore } from "../runCommandStore";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -562,6 +564,27 @@ function EventRouter() {
         return;
       }
       applyTerminalEvent(event);
+
+      // Detect ports from terminal output for the run command feature
+      if (event.type === "output") {
+        const runCommandState = useRunCommandStore.getState();
+        const runtime = runCommandState.runtimeByWorkspaceId[event.workspaceId];
+        if (runtime?.running && runtime.terminalId === event.terminalId) {
+          const ports = detectPorts(event.data);
+          if (ports.length > 0) {
+            runCommandState.addPorts(event.workspaceId as WorkspaceId, ports);
+          }
+        }
+      }
+
+      // Clear run command state when the run terminal exits
+      if (event.type === "exited") {
+        const runCommandState = useRunCommandStore.getState();
+        const runtime = runCommandState.runtimeByWorkspaceId[event.workspaceId];
+        if (runtime?.running && runtime.terminalId === event.terminalId) {
+          runCommandState.stop(event.workspaceId as WorkspaceId);
+        }
+      }
     });
     return () => {
       disposed = true;

@@ -162,6 +162,7 @@ import {
   shouldUseCompactComposerFooter,
 } from "./composerFooterLayout";
 import { selectWorkspaceTerminalState, useTerminalStateStore } from "../terminalStateStore";
+import { selectRunCommand, selectRunCommandRuntime, useRunCommandStore } from "../runCommandStore";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./ComposerPromptEditor";
 import { PullRequestWorkspaceDialog } from "./PullRequestWorkspaceDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
@@ -2334,6 +2335,119 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
     [activeProject, persistProjectScripts],
   );
 
+  // ── Run Command ──────────────────────────────────────────────────
+
+  const runCommandCommand = useRunCommandStore((s) =>
+    selectRunCommand(s.commandByProjectId, activeProject?.id),
+  );
+  const runCommandRuntime = useRunCommandStore((s) =>
+    selectRunCommandRuntime(s.runtimeByWorkspaceId, activeWorkspaceId ?? undefined),
+  );
+  const runCommandStart = useRunCommandStore((s) => s.start);
+  const runCommandStop = useRunCommandStore((s) => s.stop);
+
+  const startRunCommand = useCallback(async () => {
+    const api = readNativeApi();
+    if (!api || !activeWorkspaceId || !activeProject || !activeWorkspace || !runCommandCommand)
+      return;
+
+    const targetCwd = gitCwd ?? activeProject.cwd;
+    const targetWorktreePath = activeWorkspace.worktreePath ?? null;
+
+    // Reuse existing run-command terminal if the tab still exists
+    const previousTerminalId = runCommandRuntime.terminalId;
+    const existingTab = previousTerminalId
+      ? findTerminalTabByTerminalId(workspaceWorkspaceId, previousTerminalId)
+      : null;
+
+    let targetTerminalId: string;
+    if (existingTab) {
+      targetTerminalId = previousTerminalId!;
+      setActiveTab(workspaceWorkspaceId, existingTab.id);
+    } else {
+      const newTab = createNewTerminalTab();
+      targetTerminalId = newTab.terminalId!;
+    }
+
+    setTerminalLaunchContext({
+      workspaceId: activeWorkspaceId,
+      cwd: targetCwd,
+      worktreePath: targetWorktreePath,
+    });
+    setTerminalFocusRequestId((value) => value + 1);
+
+    const runtimeEnv = projectScriptRuntimeEnv({
+      project: { cwd: activeProject.cwd },
+      worktreePath: targetWorktreePath,
+    });
+    const openTerminalInput: TerminalOpenInput = {
+      workspaceId: activeWorkspaceId,
+      terminalId: targetTerminalId,
+      cwd: targetCwd,
+      ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
+      env: runtimeEnv,
+      cols: SCRIPT_TERMINAL_COLS,
+      rows: SCRIPT_TERMINAL_ROWS,
+    };
+
+    try {
+      await api.terminal.open(openTerminalInput);
+      await api.terminal.write({
+        workspaceId: activeWorkspaceId,
+        terminalId: targetTerminalId,
+        data: `${runCommandCommand}\r`,
+      });
+      runCommandStart(activeWorkspaceId, targetTerminalId);
+    } catch (error) {
+      setWorkspaceError(
+        activeWorkspaceId,
+        error instanceof Error ? error.message : "Failed to start run command.",
+      );
+    }
+  }, [
+    activeProject,
+    activeWorkspace,
+    activeWorkspaceId,
+    createNewTerminalTab,
+    findTerminalTabByTerminalId,
+    gitCwd,
+    runCommandCommand,
+    runCommandRuntime.terminalId,
+    runCommandStart,
+    setActiveTab,
+    setWorkspaceError,
+    workspaceWorkspaceId,
+  ]);
+
+  const stopRunCommand = useCallback(async () => {
+    const api = readNativeApi();
+    if (!api || !activeWorkspaceId || !runCommandRuntime.running || !runCommandRuntime.terminalId)
+      return;
+
+    try {
+      // Send Ctrl+C to kill the process
+      await api.terminal.write({
+        workspaceId: activeWorkspaceId,
+        terminalId: runCommandRuntime.terminalId,
+        data: "\x03",
+      });
+      runCommandStop(activeWorkspaceId);
+    } catch (error) {
+      setWorkspaceError(
+        activeWorkspaceId,
+        error instanceof Error ? error.message : "Failed to stop run command.",
+      );
+    }
+  }, [activeWorkspaceId, runCommandRuntime, runCommandStop, setWorkspaceError]);
+
+  const openPort = useCallback((port: number) => {
+    const api = readNativeApi();
+    if (!api) return;
+    void api.shell.openExternal(`http://localhost:${port}`).catch((error) => {
+      console.error("Failed to open port URL:", error);
+    });
+  }, []);
+
   const handleRuntimeModeChange = useCallback(
     (mode: RuntimeMode) => {
       if (mode === runtimeMode) return;
@@ -4393,6 +4507,8 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
         <ChatHeader
           activeWorkspaceTitle={activeWorkspace.title}
           activeProjectName={activeProject?.name}
+          activeProjectId={activeProject?.id}
+          activeWorkspaceId={activeWorkspaceId ?? undefined}
           isGitRepo={isGitRepo}
           openInCwd={gitCwd}
           activeProjectScripts={activeProject?.scripts}
@@ -4409,6 +4525,9 @@ export default function ChatView({ workspaceId: routeWorkspaceId }: ChatViewProp
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
+          onStartRunCommand={() => void startRunCommand()}
+          onStopRunCommand={() => void stopRunCommand()}
+          onOpenPort={openPort}
           onToggleSourceControl={onToggleSourceControl}
         />
       </header>

@@ -1,13 +1,16 @@
 import {
   type EditorId,
+  type ProjectId,
   type ProjectScript,
   type ResolvedKeybindingsConfig,
+  type WorkspaceId,
 } from "@matcha/contracts";
 import { memo } from "react";
 import { DiffIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
+import { RunCommandControl } from "../RunCommandControl";
 import { SidebarTrigger } from "../ui/sidebar";
 import { Toggle } from "../ui/toggle";
 import { OpenInPicker } from "./OpenInPicker";
@@ -15,6 +18,8 @@ import { OpenInPicker } from "./OpenInPicker";
 interface ChatHeaderProps {
   activeWorkspaceTitle: string;
   activeProjectName: string | undefined;
+  activeProjectId: ProjectId | undefined;
+  activeWorkspaceId: WorkspaceId | undefined;
   isGitRepo: boolean;
   openInCwd: string | null;
   activeProjectScripts: ProjectScript[] | undefined;
@@ -27,12 +32,17 @@ interface ChatHeaderProps {
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
+  onStartRunCommand: () => void;
+  onStopRunCommand: () => void;
+  onOpenPort: (port: number) => void;
   onToggleSourceControl: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
   activeWorkspaceTitle,
   activeProjectName,
+  activeProjectId,
+  activeWorkspaceId,
   isGitRepo,
   openInCwd,
   activeProjectScripts,
@@ -45,6 +55,9 @@ export const ChatHeader = memo(function ChatHeader({
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
+  onStartRunCommand,
+  onStopRunCommand,
+  onOpenPort,
   onToggleSourceControl,
 }: ChatHeaderProps) {
   return (
@@ -69,6 +82,15 @@ export const ChatHeader = memo(function ChatHeader({
         )}
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3">
+        {activeProjectId && activeWorkspaceId && (
+          <RunCommandControl
+            projectId={activeProjectId}
+            workspaceId={activeWorkspaceId}
+            onStart={onStartRunCommand}
+            onStop={onStopRunCommand}
+            onOpenPort={onOpenPort}
+          />
+        )}
         {activeProjectScripts && (
           <ProjectScriptsControl
             scripts={activeProjectScripts}
